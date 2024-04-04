@@ -1,0 +1,19 @@
+name: ticoi
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.9,<3.12
+  - geopandas>=0.10.0
+  - numba=0.*
+  - numpy=1.*
+  - matplotlib=3.*
+  - pyproj>=3.4,<4
+  - rasterio>=1.3,<2
+  - scipy=1.*
+  - scikit-learn
+  - pip
+  - pandas
+  - xarray
+  - dask
+  - jdcal
+  - netcdf4
