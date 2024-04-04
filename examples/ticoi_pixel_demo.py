@@ -24,12 +24,13 @@ cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "te
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to stored the results
 
 ####  Point (pixel) where to carry on the computation
-i, j = -138.76916, 60.77098
+i, j = -138.18069, 60.29076
 
 # To select a specific period for the measurements, if you want to select all the dates put None, else give an inteval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
 dates_input = ['2013-01-01', '2023-01-01']
 # To select certain temporal baselines in the dataset, if you want to select all the temporal put None, else give two integers [min, max] to form an interval in days
 temp_baseline = None
+sensor = None
 # If you want confidence indicators ranging between 0 and 1, with 1 the lowest errors
 conf = False
 # Unit in m/y or m/d
@@ -53,7 +54,7 @@ detect_temporal_decorrelation = True  # Detect temporal decorrelation by setting
 option_interpol = 'spline'  # Type of interpolation : 'spline', 'nearest' or 'spline_smooth' for smoothing spline
 interpolation_bas = 30  # Temporal sampling of the velocity time series
 redundancy = 5
-
+result_quality = None
 ####  Visualization
 visual = True  # Plot some results or not
 verbose = False  # Print informations during the process or not
@@ -83,59 +84,31 @@ unit = 365 if unit == 'm/y' else 1
 
 start = time.time()
 
-cube2 = cube_data_class()
-cube2.load(cube_name_its, pick_date=dates_input,
-           proj='EPSG:4326', pick_temp_bas=temp_baseline, conf=conf, pick_sensor=sensor, buffer=[i, j, 0.05],
+cube = cube_data_class()
+cube.load(cube_name, pick_date=dates_input,
+           proj='EPSG:4326', pick_temp_bas=temp_baseline, conf=conf, pick_sensor=sensor,
            chunks={})
 print(f'Time download cube {round((time.time() - start), 4)} sec')
+print(f'Cube of dimesion (nz,nx,ny) : ({cube.nz},{cube.nx},{cube.ny}) ')
 
-obs_filt = cube2.preData_np(s_win=3, t_win=90, proj='EPSG:3413', regu=regu,
+obs_filt = cube.preData_np(s_win=3, t_win=90, proj='EPSG:3413', regu=regu,
                             delete_outliers=None, verbose=True,
                             velocity_or_displacement='disp')
-if cube_name_ige is not None:
-    cube = cube_data_class()
-    cube.load(cube_name_ige, pick_date=dates_input, pick_temp_bas=temp_baseline, proj='EPSG:4326', buffer=[i, j, 0.05],
-              verbose=True, conf=conf, chunks={'z': 20000, 'x': 125, 'y': 125})
 
-    data, mean, std = cube.Load_Data(i, j, proj='EPSG:4326', interp='linear', inversion=solver, visual=visual,
-                                     merged=[cube2], regu=regu)
+start = time.time()
+data, mean, dates_range = cube.load_pixel(i, j, proj='EPSG:4326', interp='linear', solver=solver,
+                                                 visual=visual,
+                                           regu=regu, rolling_mean=obs_filt)
 
-    cube_date1 = cube.date1_().tolist()
-    cube_date1.remove(np.min(cube_date1))
-    cube2_date1 = cube2.date1_().tolist()
-    cube2_date1.remove(np.min(cube2_date1))
-    start_date_interpol = np.min([np.min(cube2_date1), np.min(cube_date1)])
-    last_date_interpol = np.max([np.max(cube.date2_()), np.max(cube2.date2_())])
-
-else:
-    start = time.time()
-    data, mean, dates_range = cube2.load_pixel(i, j, proj='EPSG:4326', interp='linear', solver=solver,
-                                                     visual=visual,
-                                               regu=regu, rolling_mean=obs_filt)
-
-    # data,data_values, mean,t= cube2.Load_Data(i, j, proj='EPSG:4326', interp='linear', solver=solver, visual=visual,
-    #                                          regu=regu, delete_outliers=delete_outliers)
-
-    cube2_date1 = cube2.date1_().tolist()
-    cube2_date1.remove(np.min(cube2_date1))
-    start_date_interpol = np.min(cube2_date1)
-    last_date_interpol = np.max(cube2.date2_())
+cube2_date1 = cube.date1_().tolist()
+cube2_date1.remove(np.min(cube2_date1))
+start_date_interpol = np.min(cube2_date1)
+last_date_interpol = np.max(cube.date2_())
 
 date1 = None
 print(date1)
 print(f'Time download pixel {round((time.time() - start), 4)} sec')
 
-# cube = cube_data_class()
-# cube.load(cube_name_its, pick_date=dates_input, pick_temp_bas=temp_baseline, verbose=verbose, conf=conf)
-# print(f'Time download cube {round((time.time() - start), 4)} sec')
-# start = time.time()
-#
-# data, mean, std, accel = cube.Load_Data(i, j, interp='linear', solver=solver, regu=regu, delete_outliers=delete_outliers, regu_window=9, dates_only=False, visual=visual, verbose=verbose)
-# print(f'Time download pixel {round((time.time() - start), 4)} sec')
-# start = time.time()
-if verbose:
-    # print(f'Cube of dimesion (nz,nx,ny): ({cube.nz},{cube.nx},{cube.ny} ')
-    print(f'Inversion for pixel {i, j} with mode {X_mode} and a temporal sampling {interval_output}')
 
 # %% Inversion
 start = time.time()
@@ -146,9 +119,7 @@ A, result, dataf = inversion(data, i, j, dates_range=dates_range, solver=solver,
                              detect_temporal_decorrelation=detect_temporal_decorrelation,
                              linear_operator=None, result_quality=result_quality)
 print(f'Time inversion {round((time.time() - start), 4)} sec')
-# start = time.time()
-# data=np.concatenate([data_dates,data_values], axis=1)
-# data[:,:2] = data_dates.astype("datetime64[D]")
+
 if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=unit, show=True,
                          figsize=(12, 6))
 
@@ -156,8 +127,8 @@ if save: result.to_csv(f'{path_save}/ILF_result.csv')
 
 # start = time.time()
 if interpolation_bas == False: interpolation_bas = 1
-start_date_interpol = np.min(np.min(cube2.date2_()))
-last_date_interpol = np.max(np.max(cube2.date2_()))
+start_date_interpol = np.min(np.min(cube.date2_()))
+last_date_interpol = np.max(np.max(cube.date2_()))
 dataf_lp = interpolation_post(result, interpolation_bas,
                               path_save, option_interpol=option_interpol,
                               first_date_interpol=start_date_interpol, last_date_interpol=last_date_interpol,
