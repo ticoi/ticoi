@@ -23,12 +23,30 @@ import itertools
 import warnings
 import time
 import dask.array as da
+from dask.diagnostics import ProgressBar
 from ticoi.secondary_functions import Construction_dates_range_np
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, median_filter
+from scipy.signal import savgol_filter
 
 def determine_optimal_chuck_size(
         ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True
 ):
+    """
+    A function to determine the optimal chunk size for a given time series array based on its size.
+    
+    Parameters:
+    - ds: xarray Dataset containing the time series array
+    - variable_name: Name of the variable containing the time series array (default is "vx")
+    - x_dim: Name of the x dimension in the array (default is "x")
+    - y_dim: Name of the y dimension in the array (default is "y")
+    - verbose: Boolean flag to control verbosity of output (default is True)
+    
+    Returns:
+    - tc: Chunk size along the time dimension
+    - yc: Chunk size along the y dimension
+    - xc: Chunk size along the x dimension
+    """
+    
     if verbose:
         print("Dask chunk size:")
     ## set chunk size to 5 MB if single time series array < 1 MB in size
@@ -68,13 +86,16 @@ def determine_optimal_chuck_size(
 
 def numpy_ewma_vectorized(series, halflife=30):
     """
-    Calculate the exponentially weighted moving average of a data series.
+    Calculate the exponentially weighted moving average of a series using vectorized operations.
+
     Parameters:
-    data (numpy array): The input data array.
-    halflife (int): The number of periods for the exponential moving average to cover half of its weight.
+    series (np.array): The input series for which the EWMA needs to be calculated.
+    halflife (int): The halflife parameter for the EWMA calculation. Default is 30.
+
     Returns:
-    numpy array: The exponentially weighted moving average of the input data.
+    np.array: The exponentially weighted moving average of the input series.
     """
+    
     alpha = 1 - np.exp(-np.log(2) / halflife)
     alpha_rev = 1 - alpha
     n = series.shape[0]
@@ -87,58 +108,135 @@ def numpy_ewma_vectorized(series, halflife=30):
     out = offset + cumsums * scale_arr[::-1]
     return out
 
-
-def exp_smooth(series, t_obs, t_interp, t_out, halflife=90):
+def ewma_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None):
     """
-    Interpolates a 1-dimensional series using numpy's linear interpolation.
+    Calculates an exponentially weighted moving average (EWMA) of a series at specific time points.
+
     Parameters:
-        series (array-like): The 1-dimensional series to interpolate.
-        t_obs (array-like): The observed time points.
-        t_interp (array-like): The time points to interpolate to.
+    - series: the input series to be smoothed
+    - t_obs: the time points of the observed series
+    - t_interp: the time points to interpolate the series at
+    - t_out: the time points to return the smoothed series at
+    - halflife: the exponential decay factor (default is 90)
+
     Returns:
-        array-like: The interpolated values at the specified time points.
+    - The smoothed series at the specified time points
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = numpy_ewma_vectorized(series_interp, halflife=halflife)
+    series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
     return series_smooth[t_out]
 
 
-def gaussian_smooth(series, t_obs, t_interp, t_out, halflife=90):
+def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=None):
     """
-    Interpolates a 1-dimensional series using numpy's linear interpolation.
+    Perform Gaussian smoothing on a time series data.
+
     Parameters:
-        series (array-like): The 1-dimensional series to interpolate.
-        t_obs (array-like): The observed time points.
-        t_interp (array-like): The time points to interpolate to.
+    - series: The input time series data.
+    - t_obs: The time observations corresponding to the input data.
+    - t_interp: The time points for interpolation.
+    - t_out: The time points for the output.
+    - sigma: Standard deviation for Gaussian kernel (default is 3).
+    - radius: The radius for smoothing (default is 90).
+
     Returns:
-        array-like: The interpolated values at the specified time points.
+    - Smoothed time series data at the specified output time points.
+    """
+    
+    t_obs = t_obs[~np.isnan(series)]
+    series = series[~np.isnan(series)]
+    series_interp = np.interp(t_interp, t_obs, series)
+    series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
+                                                    radius=t_win)
+    return series_smooth[t_out]
+
+def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None):
+    """
+    Calculate a smoothed series using median filtering.
+
+    Parameters:
+    - series: The input series to be smoothed.
+    - t_obs: The time observations corresponding to the input series.
+    - t_interp: The time values for interpolation.
+    - t_out: The time values for the output series.
+    - size: The window size for the median filter (default is 90).
+
+    Returns:
+    - The smoothed series corresponding to the output time values t_out.
+    """
+    
+    t_obs = t_obs[~np.isnan(series)]
+    series = series[~np.isnan(series)]
+    series_interp = np.interp(t_interp, t_obs, series)
+    series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
+    return series_smooth[t_out]
+
+def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3):
+    """
+    Perform Savitzky-Golay smoothing on a time series.
+
+    Parameters:
+    - series: the input time series to be smoothed
+    - t_obs: the observed time points corresponding to the input series
+    - t_interp: the time points for interpolation
+    - t_out: the time points to extract the smoothed values for
+    - window_length: the length of the smoothing window (default is 90)
+    - order: the order of the polynomial used in the smoothing (default is 3)
+
+    Returns:
+    - The smoothed time series at the specified output time points
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = gaussian_filter1d(series_interp, halflife, axis=-1, mode='reflect', truncate=4.0,
-                                                    radius=None)
+    series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
     return series_smooth[t_out]
 
-def dask_exp_smooth(dask_array, t_obs, t_interp, t_out, halflife=90, axis=2):
+def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t_win=90, sigma=3, order=3, axis=2):
     """
-    Generate a 1-dimensional linear interpolation along the given axis for the input Dask array.
-    Cause the dask.array.apply_along_axis does not work, this function is used instead.
+    Apply smoothing to the input Dask array along the specified axis using the specified method.
+    
     Parameters:
-        dask_array (Dask Array): The input Dask array to be interpolated.
-        t_obs (array-like): 1-D array containing the observation time points.
-        t_interp (array-like): 1-D array containing the interpolation time points.
-        axis (int, optional): The axis along which to interpolate. Default is 2.
+    - dask_array: The input Dask array to be smoothed.
+    - t_obs: The array of observation times corresponding to the input dask_array.
+    - t_interp: The array of times at which to interpolate the data.
+    - t_out: The array of times at which to output the smoothed data.
+    - method: Smoothing method ("guassian", "emwa", "median", "savgol"). Default is "guassian". 
+    - t_win: The time window size for smoothing. Default is 90. 
+    - sigma: The standard deviation for Gaussian smoothing. Default is 3.
+    - order: The order of the Savitzky-Golay filter for "savgol" method. Default is 5.
+    - axis: The axis along which to apply the smoothing.
+
     Returns:
-        Dask Array: A Dask array with the interpolated values along the specified axis.
+    - A Dask array containing the smoothed data.
     """
-    return da.from_array(np.apply_along_axis(exp_smooth, axis, dask_array, t_obs=t_obs,
-                                             t_interp=t_interp, t_out=t_out, halflife=halflife))
+    # TODO : using scipy.interpolate instead of np.interp to do it for one chunk?  
+    # But it could be slow and memory intensive
+    
+    return da.from_array(np.apply_along_axis(filt_func, axis, dask_array, t_obs=t_obs,
+                                             t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order))
 
 
-def dask_exp_smooth_wrapper(dask_array, dates, t_out, halflife=90, axis=2):
+# TODO: find a more elegant way to handle the smoothing with different method
+#       now the code is a bit of complicated and hard to read (too many lines)
+#       But I can not find better way to do it currently...
+def dask_smooth_wrapper(dask_array, dates, t_out, method="gaussian", t_win=90, sigma=3, order=90, axis=2):
+    """
+    A function that wraps a Dask array to apply a smoothing function. 
+    Parameters:
+        - dask_array: Dask array to be smoothed.
+        - dates: Array of dates corresponding to the data.
+        - t_out: Output timestamps for the smoothed array.
+        - method: Method of smoothing (default is "gaussian").
+        - t_win: Window size for smoothing (default is 90).
+        - sigma: Standard deviation for Gaussian smoothing (default is 3).
+        - order: Order of the smoothing function (default is 90).
+        - axis: Axis along which smoothing is applied (default is 2).
+    Returns:
+        - Smoothed Dask array with specified parameters.
+    """
     # conversion of the mid_date of the observations into numerical values
     # it corresponds the difference between each mid_date in the minimal date, in days
     t_obs = (
@@ -147,6 +245,12 @@ def dask_exp_smooth_wrapper(dask_array, dates, t_out, halflife=90, axis=2):
         .astype("float64")
     )
 
+    if t_out.dtype == "datetime64[ns]":  #convert ns to days
+        t_out = (t_out - dates.data.min()).astype("timedelta64[D]").astype("int")
+    if t_out.min() < 0:
+        t_obs = t_obs - t_out.min() #ensure the output time points are within the range of interpolated points
+        t_out = t_out - t_out.min()
+        
     # some mid_date could be exactly the same, this will raise error latter
     # therefore we add very small values to it
     while np.unique(t_obs).size < t_obs.size:
@@ -155,17 +259,26 @@ def dask_exp_smooth_wrapper(dask_array, dates, t_out, halflife=90, axis=2):
         )  # add a small value to make it unique, in case of non-monotonic time point
     t_obs.sort()
 
-    if t_out.dtype == "datetime64[ns]":  #convert ns to days
-        t_out = (t_out - dates.data.min()).astype("timedelta64[D]").astype("int")
-
     t_interp = np.arange(
         0, int(max(t_obs.max(), t_out.max()) + 1), 1
     )  # time stamps for interpolated velocity, here every day
 
     #apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
-    ewm_smooth = dask_array.map_blocks(dask_exp_smooth, t_obs=t_obs, t_interp=t_interp, t_out=t_out, halflife=halflife,
+    # NOTE: dask can not handle if..else... inside the map_blocks function
+    if method == "gaussian":
+        filt_func = gaussian_smooth
+    elif method == "ewma":
+        filt_func = ewma_smooth
+    elif method == "median":
+        filt_func = median_smooth
+    elif method == "savgol":
+        filt_func = savgol_smooth
+    
+    da_smooth = dask_array.map_blocks(dask_smooth, filt_func=filt_func, t_obs=t_obs, t_interp=t_interp, t_out=t_out,
+                                       t_win=t_win, sigma=sigma, order=order,
                                        axis=axis, dtype=dask_array.dtype)
-    return ewm_smooth
+    
+    return da_smooth
 
 class cube_data_class:
 
@@ -685,9 +798,10 @@ class cube_data_class:
             buffer=buffer,
             proj=proj,
         )
+        # reorder the coordinates to keep the consistency
+        self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         if verbose:
             print(self.ds.author)
-
 
     # ====== = ====== CONVERT CUBES DATA TO LIST OR ARRAY ====== = ======
     def sensor_(self):
@@ -723,7 +837,7 @@ class cube_data_class:
 
     # ====== = ====== PROCESS ON PIXEL BASIS  ====== = ======
 
-    def load_pixel(self, i, j, unit=365, regu=1, solver='LSMR', interp='linear', merged=None, proj='EPSG:4326',
+    def load_pixel(self, i, j, unit=365, regu=1, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
                    visual=False, rolling_mean=None, verbose=False):
         '''
         Load data over one pixel
@@ -735,20 +849,20 @@ class cube_data_class:
         :param interp: string, 'linear' or 'nearest'
         :param merged: None, or cube_data_class : cube_object to merge with self : the pd dataframe will contain values from self and merged
         :param proj: string EPSG of i,j projection
-        :param velocity_or_displacement: string, 'disp' or 'vel' : if 'disp' return displacements, if 'vel' return velocities
+        :param velo_or_disp: string, 'disp' or 'vel' : if 'disp' return displacements, if 'vel' return velocities
         :param visual: bool, do you want to visualize the results
         :param verbose: bool, do you want to plot some text
         :return: pd dataframe
         '''
 
-        #variables to keep
-        var_to_keep = ['date1', 'date2', 'vx', 'vy', 'errorx', 'errory', 'temporal_baseline'] if not visual else [
-            'date1', 'date2', 'vx',
-                                                                                             'vy', 'errorx',
-            'errory', 'temporal_baseline', 'sensor',
-                                                                                         'source']
+        # variables to keep
+        var_to_keep = (
+            ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
+            if not visual
+            else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
+        )
 
-        #coordinates conversion
+        # coordinates conversion
         # Conversion 165 µs ± 1.98 µs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
         if proj == 'int':
             data = self.ds.isel(x=i, y=j)[var_to_keep]
@@ -772,14 +886,6 @@ class cube_data_class:
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
         data_dates = data[['date1', 'date2']].to_array().values.T
-        if visual:
-            data_str = data[['sensor', 'source']].to_array().values.T
-            data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
-            data = [data_dates, data_values, data_str]
-        else:
-            data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
-            data = [data_dates, data_values]
-
         if rolling_mean is None and (
                 solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
             mean = np.array(
@@ -795,8 +901,17 @@ class cube_data_class:
                 ['vx_filt', 'vy_filt']]
             mean = [mean[i].values / unit for i in
                     ['vx_filt', 'vy_filt']]  # convert it to m/day
+            
+        if visual:
+            data_str = data[['sensor', 'source']].to_array().values.T
+            data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
+            data = [data_dates, data_values, data_str]
+        else:
+            data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
+            data = [data_dates, data_values]
 
-        #TODO add merge case
+        # TODO add merge case
+        # TODO move this part into the inversion, and calculate the mean, dates_range for whole cube?
 
         return data, mean, dates_range
 
@@ -820,39 +935,47 @@ class cube_data_class:
             self,
             i=None,
             j=None,
+            smooth_method="gaussian",
             s_win=3,
             t_win=90,
+            sigma=3,
+            order=3,
             unit=365,
             delete_outliers=None,
             regu=1,
             proj="EPSG:4326",
-            velocity_or_displacement="velo",
+            velo_or_disp="velo",
             verbose=False,
     ):
         """
         Preprocess data to be processed on cube
         :param i: int, x-coordinate of the considered pixel
         :param j: int, y-coordinate of the considered pixel
+        :param smooth_method: string, ("gaussian", "median", "emwa", "savgol")
         :param s_win: int, size of the spatial window
-        :param t_win: int, size of the temporal window
+        :param t_win: int, size of the temporal window, required for 
+        :param sigma: int, size of the gaussian window
+        :param order: int, order of the savgol smoothing
         :param unit: int, 365 of the unit is m/y 1 if the unit is m/d
         :param delete_outliers: None or int, if int delete all velocities which a quality indicator higher than delete_outliers
         :param regu: int or string : regularisation of the solver
         :param proj: string EPSG of i,j projection
-        :param velocity_or_displacement: string, 'disp' or 'vel' : if 'disp' return displacements, if 'vel' return velocities
+        :param velo_or_disp: string, 'disp' or 'vel' to indicate the type of the observations
         :param verbose: bool, do you want to plot some text
         :return:
         """
 
-        def loop_rolling(da_arr, mid_dates, date_range, s_win, t_win, time_axis=2,verbose=False):
+        def loop_rolling(da_arr, mid_dates, date_range, method="guassian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
             Parameters:
             - array: input dask.array data
             - dates: time labels for input array, in datetime format, should have same length as array
-            - s_win: window size for spatial average
-            - t_win: time window size
+            - s_win: window size for spatial average (default is 3)
+            - t_win: time window size for ewma smoothing (default is 90)
+            - sigma: standard deviation for gaussian filter (default is 3)
+            - radius: radius for gaussian filter (default is 90)
             - time_axis: optional parameter for time axis (default is 2)
 
             Returns:
@@ -870,12 +993,50 @@ class cube_data_class:
                 ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
                 mode="edge",
             )
-            #chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
+            # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
 
             date_out = date_range[:-1] + np.diff(date_range) // 2
 
-            ewm_smooth = dask_exp_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, halflife=t_win,
-                                                 axis=time_axis).compute()
+            """
+            # test part
+            dates = mid_dates
+            t_out = date_out
+            t_obs = ((dates.data - date_range[0]).astype("timedelta64[D]").astype("float64"))
+
+            # some mid_date could be exactly the same, this will raise error latter
+            # therefore we add very small values to it
+            while np.unique(t_obs).size < t_obs.size:
+                t_obs += np.random.uniform(
+                    low=0.01, high=0.09, size=t_obs.shape)  # add a small value to make it unique, in case of non-monotonic time point
+            t_obs.sort()
+
+            if t_out.dtype == "datetime64[ns]":  #convert ns to days
+                t_out = (t_out - date_range[0]).astype("timedelta64[D]").astype("int")
+
+            t_interp = np.arange(
+                0, int(max(t_obs.max(), t_out.max()) + 1), 1
+            ) 
+            spatial_mean1 = spatial_mean.compute()
+            series = spatial_mean1[210, 126, :]
+            gaussian_filt = gaussian_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
+            median_filt = median_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
+            savgol_filt = savgol_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
+            ewm_filt = ewma_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
+            import matplotlib.pyplot as plt
+            f, ax = plt.subplots(1, 1, figsize=(12, 6))
+            mid_date = cube['mid_date'].values
+            ax.scatter(mid_date, series, marker='_', s=15, color='gray')
+            ax.scatter(date_out, gaussian_filt, marker='v', s=15, color='blue')
+            ax.scatter(date_out, median_filt, marker='^', s=15, color='green')
+            ax.scatter(date_out, savgol_filt, marker='p', s=15, color='orange')
+            ax.scatter(date_out, ewm_filt, marker='o', s=15, color='purple')
+            ax.legend(['Observed', 'Gaussian', 'Median', 'SavGol', 'EWMA'], loc='upper left')
+            f.savefig('compasion_different_smoother.png')
+            """
+            
+            with ProgressBar():
+                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=method, 
+                                                 sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
 
@@ -904,10 +1065,19 @@ class cube_data_class:
                     )
                 )
         # reorder the coordinates to keep the consistency
-        #TODO need to put transpose in load function
-        cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
+        # TODO need to put transpose in load function
+        # DONE
+        # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
+        cube = self.ds.copy()
 
-        #TODO outlier removal, needs to complete
+        # change the meaning of the velo_or_disp to avoid confusing
+        # the rolling smooth should be carried on velocity, while we need displacement during inversion
+        if velo_or_disp == "disp":  # to provide displacement values
+            cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
+            cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
+            cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
+
+        # TODO outlier removal, needs to complete
         if delete_outliers == "median_angle" and not (
                 regu == "1coefvariable"
                 or regu == "1accelnotnull"
@@ -942,16 +1112,22 @@ class cube_data_class:
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
+                method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
+                sigma=sigma,
+                order=order,
                 time_axis=2,
             )
             vy_filtered, dates_uniq = loop_rolling(
                 cube["vy"],
                 cube["mid_date"],
                 date_range,
+                method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
+                sigma=sigma,
+                order=order,
                 time_axis=2,
             )
 
@@ -984,8 +1160,8 @@ class cube_data_class:
         else:
             obs_filt = None
 
-        # unify the observations to velocity
-        if velocity_or_displacement == "disp":  # to provide displacement values
+        # unify the observations to displacement
+        if velo_or_disp == "velo":  # to provide displacement values during inversion
             cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
             cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
             cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
@@ -1000,7 +1176,9 @@ class cube_data_class:
                 np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
             )
 
-        self.ds = cube.load()#crash memory without loading
+        self.ds = cube.load() #crash memory without loading
+
+        # TODO calculate the mean, std, dates_range here for the whole cube
         return obs_filt
 
     def align_cube(self, cube2, unit='m/y', reproj_vel=True, reproj_coord=True, interp_method='cubic_spline'):
