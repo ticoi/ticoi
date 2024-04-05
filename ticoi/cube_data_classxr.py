@@ -1035,7 +1035,7 @@ class cube_data_class:
             """
             
             with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=smooth_method,
+                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
@@ -1074,8 +1074,8 @@ class cube_data_class:
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
             cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
-            cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
-            cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
+            cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
+            cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
         # TODO outlier removal, needs to complete
         if delete_outliers == "median_angle" and not (
@@ -1112,7 +1112,7 @@ class cube_data_class:
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
-                smooth_method=smooth_method,
+                method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
@@ -1123,7 +1123,7 @@ class cube_data_class:
                 cube["vy"],
                 cube["mid_date"],
                 date_range,
-                smooth_method=smooth_method,
+                method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
