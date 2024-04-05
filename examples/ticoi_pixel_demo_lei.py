@@ -23,7 +23,7 @@ from ticoi.cube_data_classxr import cube_data_class
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 # path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to stored the results
 cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_diaplacement_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/gaussian/'  # Path where to stored the results
+path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/ewma-30/'  # Path where to stored the results
 
 ####  Point (pixel) where to carry on the computation
 i, j = 396343, 4259420
@@ -43,7 +43,8 @@ delete_outliers = None
 
 ####  Inversion
 # Variables to play with
-coef = 150  # lambda : coef of the regularisation
+smooth_method = 'gaussian' # Type of smoothing : 'gaussian', 'savgol', 'median', 'ewma'
+coef = 200  # lambda : coef of the regularisation
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
 # '1accelnotnull': minization of the difference between the acceleration of the time series and acceleration computed on a moving average
 regu = '1accelnotnull'
@@ -57,8 +58,8 @@ result_quality = ['X_contribution']
 
 ####  Interpolation
 option_interpol = 'spline'  # Type of interpolation : 'spline', 'nearest' or 'spline_smooth' for smoothing spline
-interpolation_bas = 30  # Temporal sampling of the velocity time series
-redundancy = 5
+interpolation_bas = 90  # Temporal sampling of the velocity time series
+redundancy = 30
 
 ####  Visualization
 visual = True  # Plot some results or not
@@ -96,7 +97,7 @@ cube.load(cube_name, pick_date=dates_input,
 print(f'Time download cube {round((time.time() - start), 4)} sec')
 print(f'Cube of dimesion (nz,nx,ny) : ({cube.nz},{cube.nx},{cube.ny}) ')
 
-obs_filt = cube.preData_np(smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, proj=proj, regu=regu,
+obs_filt = cube.preData_np(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, proj=proj, regu=regu,
                             delete_outliers=None, verbose=True,
                             velo_or_disp='velo')
 

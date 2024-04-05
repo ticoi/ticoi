@@ -267,7 +267,7 @@ def dask_smooth_wrapper(dask_array, dates, t_out, method="gaussian", t_win=90, s
     # NOTE: dask can not handle if..else... inside the map_blocks function
     if method == "gaussian":
         filt_func = gaussian_smooth
-    elif method == "emwa":
+    elif method == "ewma":
         filt_func = ewma_smooth
     elif method == "median":
         filt_func = median_smooth
