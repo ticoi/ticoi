@@ -965,7 +965,7 @@ class cube_data_class:
         :return:
         """
 
-        def loop_rolling(da_arr, mid_dates, date_range, method="guassian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
+        def loop_rolling(da_arr, mid_dates, date_range, method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
@@ -1035,7 +1035,7 @@ class cube_data_class:
             """
             
             with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=method, 
+                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
