@@ -43,7 +43,7 @@ delete_outliers = None
 
 ####  Inversion
 # Variables to play with
-smooth_method = 'gaussian' # Type of smoothing : 'gaussian', 'savgol', 'median', 'ewma'
+smooth_method = 'gaussian' # Type of smoothing : 'gaussian', 'savgol', 'median', 'ewma' 
 coef = 200  # lambda : coef of the regularisation
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
 # '1accelnotnull': minization of the difference between the acceleration of the time series and acceleration computed on a moving average
@@ -53,7 +53,7 @@ apriori_weight = True  # Add a weight in the first step of the inversion, True o
 solver = 'LSMR_ini'  # Solver for the inversion : 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
 detect_temporal_decorrelation = True  # Detect temporal decorrelation by setting a weight of 0 at the beginning at the first inversion to all observation with a temporal baseline larger than 200
 result_quality = ['X_contribution']
-
+# result_quality = None
 
 
 ####  Interpolation

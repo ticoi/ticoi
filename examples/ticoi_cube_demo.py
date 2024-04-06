@@ -18,14 +18,22 @@ import time
 from ticoi.cube_data_classxr import cube_data_class
 import os
 from pyproj import CRS
+from tqdm import tqdm
+import itertools
+import warnings
+
+warnings.filterwarnings("ignore")
 
 # %%
 # Selection of data
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to stored the results
+cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_diaplacement_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-demo/'  # Path where to stored the results
 
-dates_input = ['2013-01-01',
-               '2023-01-01']  # to select certain temporal baselines in the dataset, if you want to select all the temporal put None, else put ['yy1-mm1-dd1','yy2-mm2-dd2']
+
+proj = 'EPSG:32647'  # EPSG system of the coordinates given
+# To select a specific period for the measurements, if you want to select all the dates put None, else give an inteval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
+dates_input = ['2000-01-01', '2014-12-31']
+
 temp_baseline = None  # to select certain temporal baselines in the dataset
 sensor = None
 conf = False  # if you want confidence indicators ranging between 0 and 1, with 1 the lowest errors
@@ -33,13 +41,14 @@ unit = 'm/y'
 delete_outliers = None  # if None, all the data are included; if an integer, the data with a error higher than this interger are removed; if median_average, the data with a direction 45° away compared to the averaged direction are removed
 
 # Where to save the results
-name_result = 'test'  # name of the cube where to save the results
-path_save = f'../../results/ticoi_cube_demo'  # folder where to save the results
+name_result = 'cube_subset_test'  # name of the cube where to save the results
+path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-demo/'  # folder where to save the results
 
 ####  Inversion
 # Variables to play with
-coef = 150  # lambda : coef of the regularisation
-regu = 1  # Type of regularisation : 1, 2,'1accelnotnull' : 1 is Tikhonov first order, 2 is Tikhonov second order and '1accelnotnull is Tikhonov first order with an apriori on the acceleration
+smooth_method = 'gaussian' # Type of smoothing : 'gaussian', 'savgol', 'median', 'ewma' 
+coef = 200  # lambda : coef of the regularisation
+regu = '1accelnotnull'  # Type of regularisation : 1, 2,'1accelnotnull' : 1 is Tikhonov first order, 2 is Tikhonov second order and '1accelnotnull is Tikhonov first order with an apriori on the acceleration
 apriori_weight = True  # Add a weight in the first step of the inversion, True ou False
 # Varibales which can stay stable
 solver = 'LSMR_ini'  # Solver for the inversion : 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
@@ -49,11 +58,11 @@ result_quality = ['X_contribution']
 
 ####  Interpolation
 option_interpol = 'spline'  # Type of interpolation : 'spline', 'nearest' or 'spline_smooth' for smoothing spline
-interpolation_bas = 30  # Temporal sampling of the velocity time series
-redundancy = 5
+interpolation_bas = 90  # Temporal sampling of the velocity time series
+redundancy = 30
 
 # Process
-nb_cpu = 8
+nb_cpu = 40
 verbose = False
 save = True
 interpolation = True
@@ -64,17 +73,22 @@ option_visual = ['orginal_velocity_xy', 'original_magnitude', 'X_magnitude_zoom'
                  'vv_quality']  # ['orginal_velocity_xy','original_magnitude','error','vv_good_quality','vv_quality','vxvy_quality','X','X_vxvy','X_magnitude','X_magnitude_Zoom','X_filter','X_filterZoom','X_magnitude_filter','Y_contribution','Residu','Residu_magnitude']
 
 unit = 365 if unit == 'm/y' else 1
+
+if not os.path.exists(path_save):
+    os.mkdir(path_save)
+
+
 # %% Data download
 start_process = time.time()
 cube = cube_data_class()
-cube.load(cube_name, pick_date=dates_input, proj='EPSG:4326', pick_temp_bas=temp_baseline,
+cube.load(cube_name, pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline,
           pick_sensor=sensor, chunks={})
 print(f'Time download cube {round((time.time() - start_process), 4)} sec')
 
 start = time.time()
-obs_filt = cube.preData_np(s_win=3, t_win=90, proj='EPSG:3413', regu=regu,
+obs_filt = cube.preData_np(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, proj=proj, regu=regu,
                            delete_outliers=None, verbose=False,
-                           velocity_or_displacement='disp')
+                           velo_or_disp='velo')
 print(f'Time rolling_mean {round((time.time() - start), 4)} sec')
 
 cube_date1 = cube.date1_().tolist()
@@ -108,7 +122,12 @@ if save:
         source += f'The temporal spacing every {redundancy} days.'
 
 EPSG = f'EPSG:{CRS(cube.ds.proj4).to_epsg()}'
-# %% Inversion
+
+
+
+xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
+xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values))
+
 result = Parallel(n_jobs=nb_cpu, verbose=0)(
     delayed(process)(cube,
         i, j, solver, coef, apriori_weight, path_save,obs_filt=obs_filt,interpolation_load_pixel='nearest', first_date_interpol=start_date_interpol,
@@ -117,7 +136,19 @@ result = Parallel(n_jobs=nb_cpu, verbose=0)(
         detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
         delete_outliers=delete_outliers, interpolation=interpolation,linear_operator=linear_operator,
         verbose=verbose)
-    for i in cube.ds['x'].values for j in cube.ds['y'].values)
+    for i, j in xy_values_tqdm)
+
+
+# # %% Inversion
+# result = Parallel(n_jobs=nb_cpu, verbose=0)(
+#     delayed(process)(cube,
+#         i, j, solver, coef, apriori_weight, path_save,obs_filt=obs_filt,interpolation_load_pixel='nearest', first_date_interpol=start_date_interpol,
+#         last_date_interpol=last_date_interpol, conf=conf, regu=regu, interpolation_bas=interpolation_bas,
+#         option_interpol=option_interpol, redundancy=redundancy,
+#         detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
+#         delete_outliers=delete_outliers, interpolation=interpolation,linear_operator=linear_operator,
+#         verbose=verbose)
+#     for i in cube.ds['x'].values for j in cube.ds['y'].values)
 
 
 # For debuging, the version without parallelization
