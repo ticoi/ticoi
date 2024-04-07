@@ -29,7 +29,8 @@ import copy
 from ticoi.secondary_functions import Construction_A_LP,class_inversion, find_date_obs, Inversion_A_LP, Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation, reconstruct_Common_Ref, hat_matrix, \
     GCV_function
 from ticoi.secondary_functions import Construction_dates_range_np
-
+import warnings
+warnings.filterwarnings("ignore")
 
 def mu_regularisation(regu, A, dates_range, ini=None):
     """
@@ -116,6 +117,7 @@ def weight_for_inversion(weight_origine, conf, data, pos, inside_Tukey=False, ap
                 Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
             except ZeroDivisionError:
                 Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
+            # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
             Weight = TukeyBiweight(Weight, 4.685)
 
         if apriori_weight is not None:
@@ -775,8 +777,8 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
     return dataf_lp
 
 def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,interpolation_load_pixel='nearest',iteration=True, interval_output=1,
-            first_date_interpol=None,
-            last_date_interpol=None, treshold_it=0.1, conf=True, regu=1, interpolation_bas=False,
+            first_date_interpol=None, proj='EPSG:4326',
+            last_date_interpol=None, treshold_it=0.1, conf=True, flags=None, regu=1, interpolation_bas=False,
             option_interpol='spline', redundancy=False, detect_temporal_decorrelation=True, unit=365,
             result_quality=None, nb_max_iteration=10, delete_outliers=None, interpolation=True, linear_operator=None,
             visual=False, verbose=False):
@@ -820,9 +822,11 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,i
     '''
 
     #LOADING OF DATA OVER ONE PIXEL
-    data = cube.load_pixel(i, j, proj='EPSG:3413', interp=interpolation_load_pixel, solver=solver,
-                    regu=regu, rolling_mean=obs_filt)
 
+    data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver,
+                    coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
+    if flags is not None:
+        regu, coef = data[3], data[4]
     # INVERSION
     if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
     result = inversion(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,

@@ -17,3 +17,5 @@ dependencies:
   - dask
   - jdcal
   - netcdf4
+  - rioxarray
+  - tqdm

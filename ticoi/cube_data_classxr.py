@@ -837,7 +837,7 @@ class cube_data_class:
 
     # ====== = ====== PROCESS ON PIXEL BASIS  ====== = ======
 
-    def load_pixel(self, i, j, unit=365, regu=1, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
+    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
                    visual=False, rolling_mean=None, verbose=False):
         '''
         Load data over one pixel
@@ -884,7 +884,15 @@ class cube_data_class:
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-
+        if flags is not None:
+            if isinstance(regu, dict) and isinstance(coef, dict):
+                flag = np.round(flags['flags'].sel(x=i, y=j, method='nearest').values)
+                regu = regu[flag]
+                coef = coef[flag]
+                # print(f'pixel:{i} {j} , flag: {flag}, assigned with regu {regu} and coef {coef}')
+            else:
+                raise ValueError("regu must be a dict if assign_flag is True!")
+            
         data_dates = data[['date1', 'date2']].to_array().values.T
         if rolling_mean is None and (
                 solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
@@ -912,8 +920,10 @@ class cube_data_class:
 
         # TODO add merge case
         # TODO move this part into the inversion, and calculate the mean, dates_range for whole cube?
-
-        return data, mean, dates_range
+        if flags is not None:
+            return data, mean, dates_range, regu, coef
+        else:
+            return data, mean, dates_range
 
     def coord2pix(self, x, y):
         '''Convert a point in coordinates to a point in pixels'''
@@ -942,6 +952,7 @@ class cube_data_class:
             order=3,
             unit=365,
             delete_outliers=None,
+            flags=None,
             regu=1,
             proj="EPSG:4326",
             velo_or_disp="velo",
@@ -1042,6 +1053,7 @@ class cube_data_class:
 
             return ewm_smooth.compute(), np.unique(date_out)
 
+              
         if i is not None and j is not None:
             if verbose: print("Clipping dataset to individual pixel: (x, y) = ({},{})".format(i, j))
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
@@ -1078,12 +1090,20 @@ class cube_data_class:
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
         # TODO outlier removal, needs to complete
+        if flags is not None:
+            if isinstance(regu, dict):
+                regu = list(regu.values())
+            else:
+                raise ValueError("regu must be a dict if assign_flag is True!")
+        else:
+            regu = list(regu)
+        
         if delete_outliers == "median_angle" and not (
-                regu == "1coefvariable"
-                or regu == "1accelnotnull"
-                or regu == "directionxy"
-                or regu == "regu01"
-                or regu == "regu01accelnotnull"
+                "1coefvariable" in regu
+                or "1accelnotnull" in regu
+                or "directionxy" in regu
+                or "regu01" in regu
+                or "regu01accelnotnull" in regu
         ):
             cube_data = (
                 cube.rolling(x=3, y=3, center=True).mean().mean(dim="mid_date")
@@ -1103,8 +1123,7 @@ class cube_data_class:
                 & (cube["errory"] < delete_outliers)
             )
 
-        if (regu == "1accelnotnull"
-                or regu == "directionxy"
+        if ("1accelnotnull" in regu or "directionxy" in regu
         ):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
             if verbose:start = time.time()
