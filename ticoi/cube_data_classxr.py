@@ -147,6 +147,7 @@ def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=Non
     
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
+    series = median_filter(series, size=5, mode='reflect', axes=0)
     series_interp = np.interp(t_interp, t_obs, series)
     series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
                                                     radius=t_win)
@@ -1009,30 +1010,6 @@ class cube_data_class:
             date_out = date_range[:-1] + np.diff(date_range) // 2
 
             """
-            # test part
-            dates = mid_dates
-            t_out = date_out
-            t_obs = ((dates.data - date_range[0]).astype("timedelta64[D]").astype("float64"))
-
-            # some mid_date could be exactly the same, this will raise error latter
-            # therefore we add very small values to it
-            while np.unique(t_obs).size < t_obs.size:
-                t_obs += np.random.uniform(
-                    low=0.01, high=0.09, size=t_obs.shape)  # add a small value to make it unique, in case of non-monotonic time point
-            t_obs.sort()
-
-            if t_out.dtype == "datetime64[ns]":  #convert ns to days
-                t_out = (t_out - date_range[0]).astype("timedelta64[D]").astype("int")
-
-            t_interp = np.arange(
-                0, int(max(t_obs.max(), t_out.max()) + 1), 1
-            ) 
-            spatial_mean1 = spatial_mean.compute()
-            series = spatial_mean1[210, 126, :]
-            gaussian_filt = gaussian_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
-            median_filt = median_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
-            savgol_filt = savgol_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
-            ewm_filt = ewma_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
             import matplotlib.pyplot as plt
             f, ax = plt.subplots(1, 1, figsize=(12, 6))
             mid_date = cube['mid_date'].values
@@ -1052,6 +1029,80 @@ class cube_data_class:
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
 
             return ewm_smooth.compute(), np.unique(date_out)
+        
+        
+        def loop_rolling2(da_arr, mid_dates, date_range, method="guassian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2,verbose=False):
+            """
+            A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
+
+            Parameters:
+            - array: input dask.array data
+            - dates: time labels for input array, in datetime format, should have same length as array
+            - s_win: window size for spatial average (default is 3)
+            - t_win: time window size for ewma smoothing (default is 90)
+            - sigma: standard deviation for gaussian filter (default is 3)
+            - radius: radius for gaussian filter (default is 90)
+            - time_axis: optional parameter for time axis (default is 2)
+
+            Returns:
+            - dask array with exponential smoothed velocity
+            """
+
+            from dask.array.lib.stride_tricks import sliding_window_view
+
+            date_out = date_range[:-1] + np.diff(date_range) // 2
+            if verbose: start = time.time()
+            
+            if baseline is not None:
+                baseline = baseline.compute()
+                idx = np.where(baseline < 700 )
+                mid_dates = mid_dates.isel(mid_date=idx[0])
+                da_arr = da_arr.isel(mid_date=idx[0])
+            
+            with ProgressBar():
+                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, method=method, 
+                                                 sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
+
+            if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
+            
+            spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+            spatial_mean = da.pad(
+                spatial_mean,
+                ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+                mode="edge",
+            )
+            
+            # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
+            
+            # ewm_smooth1 = ewm_smooth.compute()
+            # smoothed = ewm_smooth1[145, 159, :]
+            # spatial_mean1 = spatial_mean.compute()
+            # filtered = spatial_mean1[145, 159, :]
+            # import matplotlib.pyplot as plt
+            # f, ax = plt.subplots(1, 1, figsize=(12, 6))
+            # mid_date = cube['mid_date'].values
+            # ax.scatter(mid_date, series, marker='o', s=15, color='gray')
+            # ax.scatter(date_out, smoothed, marker='v', s=15, color='blue')
+            # ax.scatter(date_out, filtered, marker='^', s=15, color='red')
+            # ax.legend(['Observed', 'rolling', 'spatial'], loc='upper left')
+            # f.savefig('comparison between original and smoothed 2.png')
+
+            """
+            import matplotlib.pyplot as plt
+            f, ax = plt.subplots(1, 1, figsize=(12, 6))
+            mid_date = cube['mid_date'].values
+            ax.scatter(mid_date, series, marker='_', s=15, color='gray')
+            ax.scatter(date_out, gaussian_filt, marker='v', s=15, color='blue')
+            ax.scatter(date_out, median_filt, marker='^', s=15, color='green')
+            ax.scatter(date_out, savgol_filt, marker='p', s=15, color='orange')
+            ax.scatter(date_out, ewm_filt, marker='o', s=15, color='purple')
+            ax.legend(['Observed', 'Gaussian', 'Median', 'SavGol', 'EWMA'], loc='upper left')
+            f.savefig('compasion_different_smoother.png')
+            """
+            
+
+
+            return spatial_mean.compute(), np.unique(date_out)
 
               
         if i is not None and j is not None:
@@ -1081,11 +1132,11 @@ class cube_data_class:
         # DONE
         # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         cube = self.ds.copy()
-
+        cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
         # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
-            cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
+            
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
@@ -1127,7 +1178,7 @@ class cube_data_class:
         ):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
             if verbose:start = time.time()
-            vx_filtered, dates_uniq = loop_rolling(
+            vx_filtered, dates_uniq = loop_rolling2(
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
@@ -1138,7 +1189,7 @@ class cube_data_class:
                 order=order,
                 time_axis=2,
             )
-            vy_filtered, dates_uniq = loop_rolling(
+            vy_filtered, dates_uniq = loop_rolling2(
                 cube["vy"],
                 cube["mid_date"],
                 date_range,

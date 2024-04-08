@@ -28,7 +28,7 @@ warnings.filterwarnings("ignore")
 # %%
 # Selection of data
 cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag/'  # Path where to stored the results
+path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-refine-rolling-median2/'  # Path where to stored the results
 
 
 proj = 'EPSG:32647'  # EPSG system of the coordinates given
@@ -42,8 +42,8 @@ unit = 'm/y'
 delete_outliers = None  # if None, all the data are included; if an integer, the data with a error higher than this interger are removed; if median_average, the data with a direction 45° away compared to the averaged direction are removed
 
 # Where to save the results
-name_result = 'cube-with-flag_subset_test'  # name of the cube where to save the results
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag/'  # folder where to save the results
+name_result = 'cube-with-flagg-refine-rolling-median2_subset_test'  # name of the cube where to save the results
+path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-refine-rolling/'  # folder where to save the results
 
 ####  Inversion
 # Variables to play with

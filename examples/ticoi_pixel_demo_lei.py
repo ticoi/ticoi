@@ -27,6 +27,7 @@ path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/ewma-30/'  # Pat
 
 ####  Point (pixel) where to carry on the computation
 i, j = 396343, 4259420
+i, j = 394372, 4258420
 proj = 'EPSG:32647'  # EPSG system of the coordinates given
 # To select a specific period for the measurements, if you want to select all the dates put None, else give an inteval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
 dates_input = ['2000-01-01', '2014-12-31']
