@@ -1076,6 +1076,27 @@ class cube_data_class:
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
+        # delete_outliers = 'median_angle'
+        # TODO outlier removal, needs to complete
+        if delete_outliers == "median_angle":#316 ms ± 15.2 ms per loop (mean ± std. dev. of 7 runs, 1 loop each
+            vx_mean = cube["vx"].mean(dim=['x','y'])
+            vy_mean = cube["vy"].mean(dim=['x','y'])
+
+            angle = (
+                            vx_mean * cube["vx"] + vy_mean * cube["vy"]
+                    ) / (
+                            np.sqrt(vx_mean ** 2 + vy_mean ** 2)
+                            * np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
+                    )
+            angle_condition = angle > np.sqrt(2) / 2
+            cube = cube.where(angle_condition.compute(), drop=True)
+            del angle, angle_condition
+        elif isinstance(delete_outliers, int):
+            cube = cube.where(
+                (cube["errorx"] < delete_outliers)
+                & (cube["errory"] < delete_outliers)
+            )
+
         if (regu == "1accelnotnull"
                 or regu == "directionxy"
         ):
@@ -1125,25 +1146,7 @@ class cube_data_class:
             obs_filt.load()
             del vx_filtered, vy_filtered
 
-            # TODO outlier removal, needs to complete
-            if delete_outliers == "median_angle":
-                vx_mean= obs_filt['vx_filt'].mean().values
-                vy_mean = obs_filt['vy_filt'].mean().values
 
-                angle = (
-                                vx_mean * cube["vx"] + vy_mean  * cube["vy"]
-                        ) / (
-                                np.sqrt(vx_mean ** 2 + vy_mean ** 2)
-                                * np.sqrt(cube["vx"] ** 2 + cube["vy"]  ** 2)
-                        )
-                angle_condition = angle > np.sqrt(2) / 2
-                cube = cube.where(angle_condition.compute(), drop=True)
-                del angle, angle_condition, cube_data
-            elif isinstance(delete_outliers, int):
-                cube = cube.where(
-                    (cube["errorx"] < delete_outliers)
-                    & (cube["errory"] < delete_outliers)
-                )
 
             if verbose:print(
                 "Calculating smoothing mean of the observations completed in {:.2f} seconds".format(
