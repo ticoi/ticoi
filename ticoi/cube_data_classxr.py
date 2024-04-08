@@ -1070,39 +1070,11 @@ class cube_data_class:
         # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         cube = self.ds.copy()
 
-        # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
-        if velo_or_disp == "disp":  # to provide displacement values
+        if velo_or_disp == "disp":  # to provide velocity values
             cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
-            velo_or_disp = 'velo'#update the flag
-
-        # TODO outlier removal, needs to complete
-        if delete_outliers == "median_angle" and not (
-                regu == "1coefvariable"
-                or regu == "1accelnotnull"
-                or regu == "directionxy"
-                or regu == "regu01"
-                or regu == "regu01accelnotnull"
-        ):
-            cube_data = (
-                cube.rolling(x=3, y=3, center=True).mean().mean(dim="mid_date")
-            )
-            angle = (
-                            cube_data["vx"] * cube["vx"] + cube_data["vy"] * cube["vy"]
-                    ) / (
-                            np.sqrt(cube_data["vx"] ** 2 + cube_data["vy"] ** 2)
-                            * np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
-                    )
-            angle_condition = angle > np.sqrt(2) / 2
-            cube = cube.where(angle_condition, drop=True)
-            del angle, angle_condition, cube_data
-        elif isinstance(delete_outliers, int):
-            cube = cube.where(
-                (cube["errorx"] < delete_outliers)
-                & (cube["errory"] < delete_outliers)
-            )
 
         if (regu == "1accelnotnull"
                 or regu == "directionxy"
@@ -1152,6 +1124,26 @@ class cube_data_class:
             )
             obs_filt.load()
             del vx_filtered, vy_filtered
+
+            # TODO outlier removal, needs to complete
+            if delete_outliers == "median_angle":
+                vx_mean= obs_filt['vx_filt'].mean().values
+                vy_mean = obs_filt['vy_filt'].mean().values
+
+                angle = (
+                                vx_mean * cube["vx"] + vy_mean  * cube["vy"]
+                        ) / (
+                                np.sqrt(vx_mean ** 2 + vy_mean ** 2)
+                                * np.sqrt(cube["vx"] ** 2 + cube["vy"]  ** 2)
+                        )
+                angle_condition = angle > np.sqrt(2) / 2
+                cube = cube.where(angle_condition.compute(), drop=True)
+                del angle, angle_condition, cube_data
+            elif isinstance(delete_outliers, int):
+                cube = cube.where(
+                    (cube["errorx"] < delete_outliers)
+                    & (cube["errory"] < delete_outliers)
+                )
 
             if verbose:print(
                 "Calculating smoothing mean of the observations completed in {:.2f} seconds".format(
