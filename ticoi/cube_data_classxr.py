@@ -1079,18 +1079,28 @@ class cube_data_class:
         # delete_outliers = 'median_angle'
         # TODO outlier removal, needs to complete
         if delete_outliers == "median_angle":#316 ms ± 15.2 ms per loop (mean ± std. dev. of 7 runs, 1 loop each
-            vx_mean = cube["vx"].mean(dim=['x','y'])
-            vy_mean = cube["vy"].mean(dim=['x','y'])
+            vx_mean = cube["vx"].mean(dim=['mid_date'])
+            vy_mean = cube["vy"].mean(dim=['mid_date'])
 
-            angle = (
-                            vx_mean * cube["vx"] + vy_mean * cube["vy"]
-                    ) / (
-                            np.sqrt(vx_mean ** 2 + vy_mean ** 2)
-                            * np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
-                    )
-            angle_condition = angle > np.sqrt(2) / 2
-            cube = cube.where(angle_condition.compute(), drop=True)
-            del angle, angle_condition
+            mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
+            cube_magnitude = np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
+    
+            # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
+            tolerance = 1e-6
+            valid_magnitudes = (cube_magnitude > tolerance).compute()
+    
+            # Calculate the dot product of mean velocity vector and individual velocity vectors
+            cube_bis = cube.where(valid_magnitudes, drop=True)
+            cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
+            dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
+    
+            # Calculate the angle condition
+            angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
+    
+            # Apply the angle condition to filter the cube
+            t = cube_bis.where(angle_condition, drop=True)
+
+            del angle, angle_condition,cube_bis
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
