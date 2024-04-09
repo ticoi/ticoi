@@ -369,7 +369,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
                 verbose=verbose,
                 regu=regu,
                 mean=mean, linear_operator=linear_operator, result_quality=result_quality, ini=None, accel=accel)
-
+            # print('nb_max_iteration',nb_max_iteration)
             # Continue to iterate until the difference between two results is lower than treshold_it or the number of iteration larger than 10
             #6 sec
             i = 2
