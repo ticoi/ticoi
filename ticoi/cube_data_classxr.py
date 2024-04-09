@@ -147,10 +147,14 @@ def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=Non
     
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
-                                                    radius=t_win)
-    return series_smooth[t_out]
+    try:
+        series = median_filter(series, size=5, mode='reflect', axes=0)
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
+                                                        radius=t_win)
+        return series_smooth[t_out]
+    except:
+        return np.zeros(len(t_out))
 
 def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None):
     """
@@ -203,7 +207,7 @@ def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t
     - t_obs: The array of observation times corresponding to the input dask_array.
     - t_interp: The array of times at which to interpolate the data.
     - t_out: The array of times at which to output the smoothed data.
-    - method: Smoothing method ("guassian", "emwa", "median", "savgol"). Default is "guassian". 
+    - method: Smoothing method ("gaussian", "emwa", "median", "savgol"). Default is "gaussian". 
     - t_win: The time window size for smoothing. Default is 90. 
     - sigma: The standard deviation for Gaussian smoothing. Default is 3.
     - order: The order of the Savitzky-Golay filter for "savgol" method. Default is 5.
@@ -837,7 +841,7 @@ class cube_data_class:
 
     # ====== = ====== PROCESS ON PIXEL BASIS  ====== = ======
 
-    def load_pixel(self, i, j, unit=365, regu=1, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
+    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
                    visual=False, rolling_mean=None, verbose=False):
         '''
         Load data over one pixel
@@ -884,7 +888,15 @@ class cube_data_class:
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-
+        if flags is not None:
+            if isinstance(regu, dict) and isinstance(coef, dict):
+                flag = np.round(flags['flags'].sel(x=i, y=j, method='nearest').values)
+                regu = regu[flag]
+                coef = coef[flag]
+                # print(f'pixel:{i} {j} , flag: {flag}, assigned with regu {regu} and coef {coef}')
+            else:
+                raise ValueError("regu must be a dict if assign_flag is True!")
+            
         data_dates = data[['date1', 'date2']].to_array().values.T
         if rolling_mean is None and (
                 solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
@@ -912,8 +924,10 @@ class cube_data_class:
 
         # TODO add merge case
         # TODO move this part into the inversion, and calculate the mean, dates_range for whole cube?
-
-        return data, mean, dates_range
+        if flags is not None:
+            return data, mean, dates_range, regu, coef
+        else:
+            return data, mean, dates_range
 
     def coord2pix(self, x, y):
         '''Convert a point in coordinates to a point in pixels'''
@@ -942,6 +956,7 @@ class cube_data_class:
             order=3,
             unit=365,
             delete_outliers=None,
+            flags=None,
             regu=1,
             proj="EPSG:4326",
             velo_or_disp="velo",
@@ -998,30 +1013,6 @@ class cube_data_class:
             date_out = date_range[:-1] + np.diff(date_range) // 2
 
             """
-            # test part
-            dates = mid_dates
-            t_out = date_out
-            t_obs = ((dates.data - date_range[0]).astype("timedelta64[D]").astype("float64"))
-
-            # some mid_date could be exactly the same, this will raise error latter
-            # therefore we add very small values to it
-            while np.unique(t_obs).size < t_obs.size:
-                t_obs += np.random.uniform(
-                    low=0.01, high=0.09, size=t_obs.shape)  # add a small value to make it unique, in case of non-monotonic time point
-            t_obs.sort()
-
-            if t_out.dtype == "datetime64[ns]":  #convert ns to days
-                t_out = (t_out - date_range[0]).astype("timedelta64[D]").astype("int")
-
-            t_interp = np.arange(
-                0, int(max(t_obs.max(), t_out.max()) + 1), 1
-            ) 
-            spatial_mean1 = spatial_mean.compute()
-            series = spatial_mean1[210, 126, :]
-            gaussian_filt = gaussian_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
-            median_filt = median_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
-            savgol_filt = savgol_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
-            ewm_filt = ewma_smooth(series, t_obs=t_obs, t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order)
             import matplotlib.pyplot as plt
             f, ax = plt.subplots(1, 1, figsize=(12, 6))
             mid_date = cube['mid_date'].values
@@ -1041,7 +1032,82 @@ class cube_data_class:
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
 
             return ewm_smooth.compute(), np.unique(date_out)
+        
+        
+        def loop_rolling2(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2,verbose=False):
+            """
+            A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
+            Parameters:
+            - array: input dask.array data
+            - dates: time labels for input array, in datetime format, should have same length as array
+            - s_win: window size for spatial average (default is 3)
+            - t_win: time window size for ewma smoothing (default is 90)
+            - sigma: standard deviation for gaussian filter (default is 3)
+            - radius: radius for gaussian filter (default is 90)
+            - time_axis: optional parameter for time axis (default is 2)
+
+            Returns:
+            - dask array with exponential smoothed velocity
+            """
+
+            from dask.array.lib.stride_tricks import sliding_window_view
+
+            date_out = date_range[:-1] + np.diff(date_range) // 2
+            if verbose: start = time.time()
+            
+            if baseline is not None:
+                baseline = baseline.compute()
+                idx = np.where(baseline < 700 )
+                mid_dates = mid_dates.isel(mid_date=idx[0])
+                da_arr = da_arr.isel(mid_date=idx[0])
+            
+            with ProgressBar():
+                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, method=smooth_method, 
+                                                 sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
+
+            if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
+            
+            spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+            spatial_mean = da.pad(
+                spatial_mean,
+                ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+                mode="edge",
+            )
+            
+            # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
+            
+            # ewm_smooth1 = ewm_smooth.compute()
+            # smoothed = ewm_smooth1[145, 159, :]
+            # spatial_mean1 = spatial_mean.compute()
+            # filtered = spatial_mean1[145, 159, :]
+            # import matplotlib.pyplot as plt
+            # f, ax = plt.subplots(1, 1, figsize=(12, 6))
+            # mid_date = cube['mid_date'].values
+            # ax.scatter(mid_date, series, marker='o', s=15, color='gray')
+            # ax.scatter(date_out, smoothed, marker='v', s=15, color='blue')
+            # ax.scatter(date_out, filtered, marker='^', s=15, color='red')
+            # ax.legend(['Observed', 'rolling', 'spatial'], loc='upper left')
+            # f.savefig('comparison between original and smoothed 2.png')
+
+            """
+            import matplotlib.pyplot as plt
+            f, ax = plt.subplots(1, 1, figsize=(12, 6))
+            mid_date = cube['mid_date'].values
+            ax.scatter(mid_date, series, marker='_', s=15, color='gray')
+            ax.scatter(date_out, gaussian_filt, marker='v', s=15, color='blue')
+            ax.scatter(date_out, median_filt, marker='^', s=15, color='green')
+            ax.scatter(date_out, savgol_filt, marker='p', s=15, color='orange')
+            ax.scatter(date_out, ewm_filt, marker='o', s=15, color='purple')
+            ax.legend(['Observed', 'Gaussian', 'Median', 'SavGol', 'EWMA'], loc='upper left')
+            f.savefig('compasion_different_smoother.png')
+            """
+            
+
+
+            return spatial_mean.compute(), np.unique(date_out)
+
+              
         if i is not None and j is not None:
             if verbose: print("Clipping dataset to individual pixel: (x, y) = ({},{})".format(i, j))
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
@@ -1069,50 +1135,65 @@ class cube_data_class:
         # DONE
         # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         cube = self.ds.copy()
-
+        cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
+        
+        # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
-        if velo_or_disp == "disp":  # to provide velocity values
-            cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
+        if velo_or_disp == "disp":  # to provide displacement values
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
         # delete_outliers = 'median_angle'
         # TODO outlier removal, needs to complete
-        if delete_outliers == "median_angle":#316 ms ± 15.2 ms per loop (mean ± std. dev. of 7 runs, 1 loop each
-            vx_mean = cube["vx"].mean(dim=['mid_date'])
-            vy_mean = cube["vy"].mean(dim=['mid_date'])
+        if flags is not None:
+            if isinstance(regu, dict):
+                regu = list(regu.values())
+            else:
+                raise ValueError("regu must be a dict if assign_flag is True!")
+        else:
+            regu = list(regu)
+        
+        if delete_outliers == "median_angle":
+            start = time.time()
+            vx_mean = cube["vx"].median(dim=['mid_date'])
+            vy_mean = cube["vy"].median(dim=['mid_date'])
 
             mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
             cube_magnitude = np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
-    
+
             # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
             tolerance = 1e-6
             valid_magnitudes = (cube_magnitude > tolerance).compute()
-    
+
             # Calculate the dot product of mean velocity vector and individual velocity vectors
-            cube_bis = cube.where(valid_magnitudes, drop=True)
+            cube_bis = cube[['vx', 'vy']].where(valid_magnitudes, drop=True)
             cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
             dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
-    
+
             # Calculate the angle condition
             angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
-    
-            # Apply the angle condition to filter the cube
-            t = cube_bis.where(angle_condition, drop=True)
 
-            del angle, angle_condition,cube_bis
+            # Apply the angle condition to filter the cube
+            # cube_bis = cube_bis.where(angle_condition, drop=True)
+            if flags is not None:
+                flag_condition = (flags == 0)
+                angle_condition = angle_condition.where(flag_condition['flags'].T, True, False).compute()
+            
+            cube[['vx', 'vy']] = cube_bis[['vx', 'vy']].where(angle_condition, drop=True)
+
+            del cube_magnitude, mean_magnitude, angle_condition, cube_bis
+            print(f'time to delete outliers: {round((time.time() - start), 1)} s')
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
                 & (cube["errory"] < delete_outliers)
             )
 
-        if (regu == "1accelnotnull"
-                or regu == "directionxy"
+        if ("1accelnotnull" in regu or "directionxy" in regu
         ):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
             if verbose:start = time.time()
-            vx_filtered, dates_uniq = loop_rolling(
+            vx_filtered, dates_uniq = loop_rolling2(
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
@@ -1123,7 +1204,7 @@ class cube_data_class:
                 order=order,
                 time_axis=2,
             )
-            vy_filtered, dates_uniq = loop_rolling(
+            vy_filtered, dates_uniq = loop_rolling2(
                 cube["vy"],
                 cube["mid_date"],
                 date_range,
@@ -1168,7 +1249,6 @@ class cube_data_class:
 
         # unify the observations to displacement
         # to provide displacement values during inversion
-        cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
         cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
         cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
