@@ -222,7 +222,7 @@ def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t
 # TODO: find a more elegant way to handle the smoothing with different method
 #       now the code is a bit of complicated and hard to read (too many lines)
 #       But I can not find better way to do it currently...
-def dask_smooth_wrapper(dask_array, dates, t_out, method="gaussian", t_win=90, sigma=3, order=90, axis=2):
+def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_win=90, sigma=3, order=90, axis=2):
     """
     A function that wraps a Dask array to apply a smoothing function. 
     Parameters:
@@ -265,13 +265,13 @@ def dask_smooth_wrapper(dask_array, dates, t_out, method="gaussian", t_win=90, s
 
     #apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
     # NOTE: dask can not handle if..else... inside the map_blocks function
-    if method == "gaussian":
+    if smooth_method == "gaussian":
         filt_func = gaussian_smooth
-    elif method == "ewma":
+    elif smooth_method == "ewma":
         filt_func = ewma_smooth
-    elif method == "median":
+    elif smooth_method == "median":
         filt_func = median_smooth
-    elif method == "savgol":
+    elif smooth_method == "savgol":
         filt_func = savgol_smooth
     
     da_smooth = dask_array.map_blocks(dask_smooth, filt_func=filt_func, t_obs=t_obs, t_interp=t_interp, t_out=t_out,
@@ -960,12 +960,12 @@ class cube_data_class:
         :param delete_outliers: None or int, if int delete all velocities which a quality indicator higher than delete_outliers
         :param regu: int or string : regularisation of the solver
         :param proj: string EPSG of i,j projection
-        :param velo_or_disp: string, 'disp' or 'vel' to indicate the type of the observations
+        :param velo_or_disp: string, 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity
         :param verbose: bool, do you want to plot some text
         :return:
         """
 
-        def loop_rolling(da_arr, mid_dates, date_range, method="guassian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
+        def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
@@ -1035,7 +1035,7 @@ class cube_data_class:
             """
             
             with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=method, 
+                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
@@ -1070,33 +1070,37 @@ class cube_data_class:
         # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         cube = self.ds.copy()
 
-        # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
-        if velo_or_disp == "disp":  # to provide displacement values
+        if velo_or_disp == "disp":  # to provide velocity values
             cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
+        # delete_outliers = 'median_angle'
         # TODO outlier removal, needs to complete
-        if delete_outliers == "median_angle" and not (
-                regu == "1coefvariable"
-                or regu == "1accelnotnull"
-                or regu == "directionxy"
-                or regu == "regu01"
-                or regu == "regu01accelnotnull"
-        ):
-            cube_data = (
-                cube.rolling(x=3, y=3, center=True).mean().mean(dim="mid_date")
-            )
-            angle = (
-                            cube_data["vx"] * cube["vx"] + cube_data["vy"] * cube["vy"]
-                    ) / (
-                            np.sqrt(cube_data["vx"] ** 2 + cube_data["vy"] ** 2)
-                            * np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
-                    )
-            angle_condition = angle > np.sqrt(2) / 2
-            cube = cube.where(angle_condition, drop=True)
-            del angle, angle_condition, cube_data
+        if delete_outliers == "median_angle":#316 ms ± 15.2 ms per loop (mean ± std. dev. of 7 runs, 1 loop each
+            vx_mean = cube["vx"].mean(dim=['mid_date'])
+            vy_mean = cube["vy"].mean(dim=['mid_date'])
+
+            mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
+            cube_magnitude = np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
+    
+            # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
+            tolerance = 1e-6
+            valid_magnitudes = (cube_magnitude > tolerance).compute()
+    
+            # Calculate the dot product of mean velocity vector and individual velocity vectors
+            cube_bis = cube.where(valid_magnitudes, drop=True)
+            cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
+            dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
+    
+            # Calculate the angle condition
+            angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
+    
+            # Apply the angle condition to filter the cube
+            t = cube_bis.where(angle_condition, drop=True)
+
+            del angle, angle_condition,cube_bis
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
@@ -1112,7 +1116,7 @@ class cube_data_class:
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
-                method=smooth_method,
+                smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
@@ -1123,7 +1127,7 @@ class cube_data_class:
                 cube["vy"],
                 cube["mid_date"],
                 date_range,
-                method=smooth_method,
+                smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
@@ -1152,6 +1156,8 @@ class cube_data_class:
             obs_filt.load()
             del vx_filtered, vy_filtered
 
+
+
             if verbose:print(
                 "Calculating smoothing mean of the observations completed in {:.2f} seconds".format(
                     time.time() - start
@@ -1161,10 +1167,10 @@ class cube_data_class:
             obs_filt = None
 
         # unify the observations to displacement
-        if velo_or_disp == "velo":  # to provide displacement values during inversion
-            cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
-            cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
-            cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
+        # to provide displacement values during inversion
+        cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
+        cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
+        cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
         if "errorx" not in cube.variables:
             cube["errorx"] = (
