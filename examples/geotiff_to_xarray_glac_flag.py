@@ -10,9 +10,9 @@ import geopandas as gpd
 
 start = time.time()
 
-dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset.nc"
+dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7.nc"
 
-file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS7_subset/"
+file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS7/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
 
@@ -138,4 +138,4 @@ if assign_flag:
                     x=(["x"], ds_combined.x.data),
                     y=(["y"], ds_combined.y.data),))
     
-    flags.to_netcdf('Hala_lake_velocity_LS7_subset_flags.nc')
+    flags.to_netcdf('Hala_lake_velocity_LS7_flags.nc')

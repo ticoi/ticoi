@@ -27,8 +27,8 @@ warnings.filterwarnings("ignore")
 
 # %%
 # Selection of data
-cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-refine-rolling-median2/'  # Path where to stored the results
+cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag_test_1/'  # Path where to stored the results
 
 
 proj = 'EPSG:32647'  # EPSG system of the coordinates given
@@ -39,17 +39,17 @@ temp_baseline = None  # to select certain temporal baselines in the dataset
 sensor = None
 conf = False  # if you want confidence indicators ranging between 0 and 1, with 1 the lowest errors
 unit = 'm/y'
-delete_outliers = None  # if None, all the data are included; if an integer, the data with a error higher than this interger are removed; if median_average, the data with a direction 45° away compared to the averaged direction are removed
+delete_outliers = 'median_angle'  # if None, all the data are included; if an integer, the data with a error higher than this interger are removed; if median_average, the data with a direction 45° away compared to the averaged direction are removed
 
 # Where to save the results
-name_result = 'cube-with-flagg-refine-rolling-median2_subset_test'  # name of the cube where to save the results
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-refine-rolling/'  # folder where to save the results
+name_result = 'cube-with-flag-flag_test_1.nc'  # name of the cube where to save the results
+path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # folder where to save the results
 
 ####  Inversion
 # Variables to play with
 smooth_method = 'gaussian' # Type of smoothing : 'gaussian', 'savgol', 'median', 'ewma' 
 assign_flag = True # if true, will apply different regularisation and different lambda according to the 'flag' variables in the input cube
-flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset_flags.nc'
+flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_flags.nc'
 coef = { 0: 100, 1: 150, 2:200}  # lambda : coef of the regularisation
 regu = {0: 1, 1: 2, 2: '1accelnotnull'}  # Type of regularisation : 1, 2'1accelnotnull'  # Type of regularisation : 1, 2,'1accelnotnull' : 1 is Tikhonov first order, 2 is Tikhonov second order and '1accelnotnull is Tikhonov first order with an apriori on the acceleration
 apriori_weight = True  # Add a weight in the first step of the inversion, True ou False
@@ -68,7 +68,7 @@ redundancy = 30
 nb_cpu = 40
 verbose = False
 save = True
-interpolation = True
+interpolation = False
 linear_operator = None
 option_visual = ['orginal_velocity_xy', 'original_magnitude', 'X_magnitude_zoom',
                  'X',
@@ -99,7 +99,7 @@ if assign_flag:
 
 start = time.time()
 obs_filt = cube.preData_np(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, 
-                           proj=proj, flags=flags, regu=regu, delete_outliers=None, verbose=False,
+                           proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=False,
                            velo_or_disp='velo')
 print(f'Time rolling_mean {round((time.time() - start), 4)} sec')
 
@@ -177,7 +177,9 @@ result = Parallel(n_jobs=nb_cpu, verbose=0)(
 print(f'Time inversion {round((time.time() - start), 4)} sec')
 
 # %% save the res
-cube.write_result_TICOI(result, source, sensor, filename=name_result,
+# cube.write_result_TICOI(result, source, sensor, filename=name_result,
+#                         savepath=path_save, result_quality=result_quality, verbose=verbose)
+cube.write_result_TICO(result, source, sensor, filename=name_result,
                         savepath=path_save, result_quality=result_quality, verbose=verbose)
 print(f'Total process {(time.time() - start_process) / 60} min')
 print('stop')

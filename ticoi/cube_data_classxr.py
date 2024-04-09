@@ -147,11 +147,14 @@ def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=Non
     
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series = median_filter(series, size=5, mode='reflect', axes=0)
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
-                                                    radius=t_win)
-    return series_smooth[t_out]
+    try:
+        series = median_filter(series, size=5, mode='reflect', axes=0)
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
+                                                        radius=t_win)
+        return series_smooth[t_out]
+    except:
+        return np.zeros(len(t_out))
 
 def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None):
     """
@@ -1060,7 +1063,7 @@ class cube_data_class:
                 da_arr = da_arr.isel(mid_date=idx[0])
             
             with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, method=method, 
+                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, method=smooth_method, 
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
@@ -1136,7 +1139,6 @@ class cube_data_class:
         # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
-            
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
@@ -1150,8 +1152,9 @@ class cube_data_class:
             regu = list(regu)
         
         if delete_outliers == "median_angle":
-            vx_mean = cube["vx"].mean(dim=['mid_date'])
-            vy_mean = cube["vy"].mean(dim=['mid_date'])
+            start = time.time()
+            vx_mean = cube["vx"].median(dim=['mid_date'])
+            vy_mean = cube["vy"].median(dim=['mid_date'])
 
             mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
             cube_magnitude = np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
@@ -1161,7 +1164,7 @@ class cube_data_class:
             valid_magnitudes = (cube_magnitude > tolerance).compute()
 
             # Calculate the dot product of mean velocity vector and individual velocity vectors
-            cube_bis = cube.where(valid_magnitudes, drop=True)
+            cube_bis = cube[['vx', 'vy']].where(valid_magnitudes, drop=True)
             cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
             dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
 
@@ -1169,9 +1172,16 @@ class cube_data_class:
             angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
 
             # Apply the angle condition to filter the cube
-            cube = cube_bis.where(angle_condition, drop=True)
+            # cube_bis = cube_bis.where(angle_condition, drop=True)
+            if flags is not None:
+                flag_condition = (flags == 0)
+                angle_condition = angle_condition.where(flag_condition['flags'].T, True, False).compute()
+            
+            
+            cube[['vx', 'vy']] = cube_bis[['vx', 'vy']].where(angle_condition, drop=True)
 
-            del angle, angle_condition,cube_bis
+            del cube_magnitude, mean_magnitude, angle_condition, cube_bis
+            print(f'time to delete outliers: {round((time.time() - start), 1)} s')
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
