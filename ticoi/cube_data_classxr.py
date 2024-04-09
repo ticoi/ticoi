@@ -204,7 +204,7 @@ def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t
     - t_obs: The array of observation times corresponding to the input dask_array.
     - t_interp: The array of times at which to interpolate the data.
     - t_out: The array of times at which to output the smoothed data.
-    - method: Smoothing method ("guassian", "emwa", "median", "savgol"). Default is "guassian". 
+    - method: Smoothing method ("gaussian", "emwa", "median", "savgol"). Default is "gaussian". 
     - t_win: The time window size for smoothing. Default is 90. 
     - sigma: The standard deviation for Gaussian smoothing. Default is 3.
     - order: The order of the Savitzky-Golay filter for "savgol" method. Default is 5.
@@ -977,7 +977,7 @@ class cube_data_class:
         :return:
         """
 
-        def loop_rolling(da_arr, mid_dates, date_range, method="guassian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
+        def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
@@ -1023,7 +1023,7 @@ class cube_data_class:
             """
             
             with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=method, 
+                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
@@ -1031,7 +1031,7 @@ class cube_data_class:
             return ewm_smooth.compute(), np.unique(date_out)
         
         
-        def loop_rolling2(da_arr, mid_dates, date_range, method="guassian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2,verbose=False):
+        def loop_rolling2(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2,verbose=False):
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
@@ -1149,25 +1149,29 @@ class cube_data_class:
         else:
             regu = list(regu)
         
-        if delete_outliers == "median_angle" and not (
-                "1coefvariable" in regu
-                or "1accelnotnull" in regu
-                or "directionxy" in regu
-                or "regu01" in regu
-                or "regu01accelnotnull" in regu
-        ):
-            cube_data = (
-                cube.rolling(x=3, y=3, center=True).mean().mean(dim="mid_date")
-            )
-            angle = (
-                            cube_data["vx"] * cube["vx"] + cube_data["vy"] * cube["vy"]
-                    ) / (
-                            np.sqrt(cube_data["vx"] ** 2 + cube_data["vy"] ** 2)
-                            * np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
-                    )
-            angle_condition = angle > np.sqrt(2) / 2
-            cube = cube.where(angle_condition, drop=True)
-            del angle, angle_condition, cube_data
+        if delete_outliers == "median_angle":
+            vx_mean = cube["vx"].mean(dim=['mid_date'])
+            vy_mean = cube["vy"].mean(dim=['mid_date'])
+
+            mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
+            cube_magnitude = np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
+
+            # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
+            tolerance = 1e-6
+            valid_magnitudes = (cube_magnitude > tolerance).compute()
+
+            # Calculate the dot product of mean velocity vector and individual velocity vectors
+            cube_bis = cube.where(valid_magnitudes, drop=True)
+            cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
+            dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
+
+            # Calculate the angle condition
+            angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
+
+            # Apply the angle condition to filter the cube
+            cube = cube_bis.where(angle_condition, drop=True)
+
+            del angle, angle_condition,cube_bis
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
@@ -1182,7 +1186,7 @@ class cube_data_class:
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
-                method=smooth_method,
+                smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
@@ -1193,7 +1197,7 @@ class cube_data_class:
                 cube["vy"],
                 cube["mid_date"],
                 date_range,
-                method=smooth_method,
+                smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
@@ -1231,10 +1235,9 @@ class cube_data_class:
             obs_filt = None
 
         # unify the observations to displacement
-        if velo_or_disp == "velo":  # to provide displacement values during inversion
-            cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
-            cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
-            cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
+        # to provide displacement values during inversion
+        cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
+        cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
         if "errorx" not in cube.variables:
             cube["errorx"] = (
