@@ -1054,6 +1054,7 @@ class cube_data_class:
 
             from dask.array.lib.stride_tricks import sliding_window_view
 
+            #Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
             if verbose: start = time.time()
             
@@ -1062,19 +1063,27 @@ class cube_data_class:
                 idx = np.where(baseline < 700 )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
-            
-            with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, method=smooth_method, 
+
+            #Apply the selected kernel in time
+            if verbose:
+                with ProgressBar():
+                    ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
+                                                 sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
+            else:
+                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
-            
-            spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
-            spatial_mean = da.pad(
-                spatial_mean,
-                ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
-                mode="edge",
-            )
+
+            #Spatial average
+            if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :#The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
+                spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+                spatial_mean = da.pad(
+                    spatial_mean,
+                    ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+                    mode="edge",
+                )
+            else:spatial_mean = ewm_smooth
             
             # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
             
@@ -1140,15 +1149,17 @@ class cube_data_class:
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
-        # delete_outliers = 'median_angle'
-        # TODO outlier removal, needs to complete
         if flags is not None:
+            flags = flags.load()
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
                 raise ValueError("regu must be a dict if assign_flag is True!")
         else:
-            regu = list(regu)
+            if isinstance(regu, int):#if regu is an integer
+                regu = list(regu)
+            elif isinstance(regu, str):#if regu is a string
+                regu = list(regu.split())
         
         if delete_outliers == "median_angle":
             start = time.time()
