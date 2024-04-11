@@ -19,3 +19,6 @@ dependencies:
   - netcdf4
   - rioxarray
   - tqdm
+  - zarr
+  - requests #to access data on the cloud
+  - aiohttp #to access data on the cloud

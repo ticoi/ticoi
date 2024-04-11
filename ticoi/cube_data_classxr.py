@@ -882,6 +882,7 @@ class cube_data_class:
                     i, j = transformer.transform(i, j)
                     if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
             # Interpolate only necessary variables and drop NaN values
+            # start = time.time()
             if interp == 'nearest':
                 data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
                     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
@@ -1053,6 +1054,7 @@ class cube_data_class:
 
             from dask.array.lib.stride_tricks import sliding_window_view
 
+            #Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
             if verbose: start = time.time()
             
@@ -1061,19 +1063,27 @@ class cube_data_class:
                 idx = np.where(baseline < 700 )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
-            
-            with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, method=smooth_method, 
+
+            #Apply the selected kernel in time
+            if verbose:
+                with ProgressBar():
+                    ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
+                                                 sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
+            else:
+                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
-            
-            spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
-            spatial_mean = da.pad(
-                spatial_mean,
-                ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
-                mode="edge",
-            )
+
+            #Spatial average
+            if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :#The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
+                spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+                spatial_mean = da.pad(
+                    spatial_mean,
+                    ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+                    mode="edge",
+                )
+            else:spatial_mean = ewm_smooth
             
             # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
             
@@ -1130,10 +1140,6 @@ class cube_data_class:
                         proj=proj, proj2=self.ds.proj4
                     )
                 )
-        # reorder the coordinates to keep the consistency
-        # TODO need to put transpose in load function
-        # DONE
-        # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         cube = self.ds.copy()
         cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
         
@@ -1143,15 +1149,17 @@ class cube_data_class:
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
             cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
 
-        # delete_outliers = 'median_angle'
-        # TODO outlier removal, needs to complete
         if flags is not None:
+            flags = flags.load()
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
                 raise ValueError("regu must be a dict if assign_flag is True!")
         else:
-            regu = list(regu)
+            if isinstance(regu, int):#if regu is an integer
+                regu = list(regu)
+            elif isinstance(regu, str):#if regu is a string
+                regu = list(regu.split())
         
         if delete_outliers == "median_angle":
             start = time.time()
@@ -1168,6 +1176,7 @@ class cube_data_class:
             # Calculate the dot product of mean velocity vector and individual velocity vectors
             cube_bis = cube[['vx', 'vy']].where(valid_magnitudes, drop=True)
             cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
+
             dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
 
             # Calculate the angle condition
@@ -1183,6 +1192,7 @@ class cube_data_class:
 
             del cube_magnitude, mean_magnitude, angle_condition, cube_bis
             print(f'time to delete outliers: {round((time.time() - start), 1)} s')
+
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
@@ -1261,8 +1271,8 @@ class cube_data_class:
                 ("mid_date", "x", "y"),
                 np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
             )
-
-        self.ds = cube.load() #crash memory without loading
+        self.ds = cube.persist() #crash memory without loading
+        #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
         # TODO calculate the mean, std, dates_range here for the whole cube
         return obs_filt
@@ -1351,6 +1361,7 @@ class cube_data_class:
                               result[i * self.ny + j]['vx'].shape[
                                   0] != 0]  # temporal size of the results which are not empty
         if len(non_null_results) == 0:
+            print('There is no results to write and/or save')
             return 'There is no results to write and/or save'
 
         if np.min(non_null_results) == np.max(non_null_results) and all(

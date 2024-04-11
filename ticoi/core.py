@@ -32,6 +32,7 @@ from ticoi.secondary_functions import Construction_dates_range_np
 import warnings
 warnings.filterwarnings("ignore")
 
+
 def mu_regularisation(regu, A, dates_range, ini=None):
     """
     Compute the Tikhonov regularisation matrix
@@ -820,9 +821,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,i
     :return dataf_list: pandas dataframe, result of the temporal inversion + interpolation at point (i, j) if inversion was successful, an empty
     pd dataframe if not
     '''
-
-    #LOADING OF DATA OVER ONE PIXEL
-
+    # LOADING OF DATA OVER ONE PIXEL
     data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver,
                     coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
     if flags is not None:
