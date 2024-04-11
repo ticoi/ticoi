@@ -1354,6 +1354,7 @@ class cube_data_class:
                               result[i * self.ny + j]['vx'].shape[
                                   0] != 0]  # temporal size of the results which are not empty
         if len(non_null_results) == 0:
+            print('There is no results to write and/or save')
             return 'There is no results to write and/or save'
 
         if np.min(non_null_results) == np.max(non_null_results) and all(
