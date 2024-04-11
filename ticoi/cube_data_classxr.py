@@ -882,6 +882,7 @@ class cube_data_class:
                     i, j = transformer.transform(i, j)
                     if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
             # Interpolate only necessary variables and drop NaN values
+            # start = time.time()
             if interp == 'nearest':
                 data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
                     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
@@ -1168,6 +1169,7 @@ class cube_data_class:
             # Calculate the dot product of mean velocity vector and individual velocity vectors
             cube_bis = cube[['vx', 'vy']].where(valid_magnitudes, drop=True)
             cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
+
             dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
 
             # Calculate the angle condition
@@ -1183,6 +1185,7 @@ class cube_data_class:
 
             del cube_magnitude, mean_magnitude, angle_condition, cube_bis
             print(f'time to delete outliers: {round((time.time() - start), 1)} s')
+
         elif isinstance(delete_outliers, int):
             cube = cube.where(
                 (cube["errorx"] < delete_outliers)
@@ -1261,8 +1264,8 @@ class cube_data_class:
                 ("mid_date", "x", "y"),
                 np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
             )
-
-        self.ds = cube.load() #crash memory without loading
+        self.ds = cube.persist() #crash memory without loading
+        #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
         # TODO calculate the mean, std, dates_range here for the whole cube
         return obs_filt
