@@ -29,12 +29,9 @@ import copy
 from ticoi.secondary_functions import Construction_A_LP,class_inversion, find_date_obs, Inversion_A_LP, Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation, reconstruct_Common_Ref, hat_matrix, \
     GCV_function
 from ticoi.secondary_functions import Construction_dates_range_np
-<<<<<<< HEAD
 import warnings
 warnings.filterwarnings("ignore")
-=======
-import sys
->>>>>>> 89b54f9 (persist)
+
 
 def mu_regularisation(regu, A, dates_range, ini=None):
     """
@@ -824,17 +821,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,i
     :return dataf_list: pandas dataframe, result of the temporal inversion + interpolation at point (i, j) if inversion was successful, an empty
     pd dataframe if not
     '''
-<<<<<<< HEAD
-
-    #LOADING OF DATA OVER ONE PIXEL
-=======
-    # print(sys.getsizeof(cube))
-    # print(isinstance(cube, np.memmap))
     # LOADING OF DATA OVER ONE PIXEL
-    data = cube.load_pixel(i, j, proj='EPSG:3413', interp=interpolation_load_pixel, solver=solver,
-                    regu=regu, rolling_mean=obs_filt)
->>>>>>> 89b54f9 (persist)
-
     data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver,
                     coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
     if flags is not None:

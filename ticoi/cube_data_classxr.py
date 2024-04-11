@@ -1131,10 +1131,6 @@ class cube_data_class:
                         proj=proj, proj2=self.ds.proj4
                     )
                 )
-        # reorder the coordinates to keep the consistency
-        # TODO need to put transpose in load function
-        # DONE
-        # cube = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         cube = self.ds.copy()
         cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
         
