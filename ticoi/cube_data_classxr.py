@@ -899,22 +899,26 @@ class cube_data_class:
                 raise ValueError("regu must be a dict if assign_flag is True!")
             
         data_dates = data[['date1', 'date2']].to_array().values.T
-        if rolling_mean is None and (
+        if (
                 solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
-            mean = np.array(
-                [data['vx'].mean(),
-                 data['vy'].mean()])
+            if rolling_mean is None :
+                mean = np.array(
+                    [data['vx'].mean(),
+                     data['vy'].mean()])
+                dates_range = None
+            else:  # 1.51 ms ± 12.6 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                # Load rolling mean for the given pixel, only on the dates available
+                dates_range = Construction_dates_range_np(
+                    data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                mean = \
+                rolling_mean.sel(mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method='nearest')[
+                    ['vx_filt', 'vy_filt']]
+                mean = [mean[i].values / unit for i in
+                        ['vx_filt', 'vy_filt']]  # convert it to m/day
+        else:
+            mean = None
             dates_range = None
-        else:  # 1.51 ms ± 12.6 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
-            # Load rolling mean for the given pixel, only on the dates available
-            dates_range = Construction_dates_range_np(
-                data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
-            mean = \
-            rolling_mean.sel(mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method='nearest')[
-                ['vx_filt', 'vy_filt']]
-            mean = [mean[i].values / unit for i in
-                    ['vx_filt', 'vy_filt']]  # convert it to m/day
-            
+
         if visual:
             data_str = data[['sensor', 'source']].to_array().values.T
             data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
@@ -1157,7 +1161,7 @@ class cube_data_class:
                 raise ValueError("regu must be a dict if assign_flag is True!")
         else:
             if isinstance(regu, int):#if regu is an integer
-                regu = list(regu)
+                regu = [regu]
             elif isinstance(regu, str):#if regu is a string
                 regu = list(regu.split())
         

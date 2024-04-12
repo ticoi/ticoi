@@ -194,7 +194,7 @@ def Construction_A_LP(dates, dates_range):
     return A
 
 
-def Inversion_A_LP(A, dates_range, v_pos, data, solver, Weight, mu, coef=1, ini=None, result_quality=False, regu=1, accel=None,
+def Inversion_A_LP(A, dates_range, v_pos, data, solver, Weight, mu, coef=1, ini=None, result_quality=None, regu=1, accel=None,
                    linear_operator=None,
                    verbose=False):
     '''

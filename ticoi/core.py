@@ -228,9 +228,9 @@ def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, res
                                                      accel=accel, linear_operator=linear_operator)
 
     else:  # no initialization
-        result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef, result_quality=visual, regu=regu, accel=accel,
+        result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef, result_quality=result_quality, regu=regu, accel=accel,
                                                  linear_operator=linear_operator)
-        result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef, result_quality=visual, regu=regu, accel=accel,
+        result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef, result_quality=result_quality, regu=regu, accel=accel,
                                                  linear_operator=linear_operator)
 
     return result_dx, result_dy, weightx, weighty, residu_normx, residu_normy
