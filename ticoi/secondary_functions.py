@@ -167,6 +167,7 @@ def Construction_dates_range_np(data):
     :param data: np.ndarray, an array where each line is (date1, date2, other elements) for which a velocity have been mesured
     :return: np.ndarray, the dates of the estimated displacement in X
     """
+
     dates = np.concatenate([data[:, 0], data[:, 1]])  # concatante date1 and date2
     dates = np.unique(dates)  # remove duplicates
     dates = np.sort(dates)  # Sort the dates
@@ -194,7 +195,7 @@ def Construction_A_LP(dates, dates_range):
     return A
 
 
-def Inversion_A_LP(A, dates_range, v_pos, data, solver, Weight, mu, coef=1, ini=None, result_quality=False, regu=1, accel=None,
+def Inversion_A_LP(A, dates_range, v_pos, data, solver, Weight, mu, coef=1, ini=None, result_quality=None, regu=1, accel=None,
                    linear_operator=None,
                    verbose=False):
     '''

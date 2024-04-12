@@ -124,8 +124,11 @@ def ewma_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
+    try:
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
+    except:#if there is only nan
+        return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 
@@ -173,8 +176,11 @@ def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=No
     
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
+    try:
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
+    except:
+        return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3):
@@ -194,8 +200,11 @@ def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3)
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
+    try:
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
+    except:
+        return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t_win=90, sigma=3, order=3, axis=2):
@@ -254,7 +263,7 @@ def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_wi
     if t_out.min() < 0:
         t_obs = t_obs - t_out.min() #ensure the output time points are within the range of interpolated points
         t_out = t_out - t_out.min()
-        
+
     # some mid_date could be exactly the same, this will raise error latter
     # therefore we add very small values to it
     while np.unique(t_obs).size < t_obs.size:
@@ -390,8 +399,8 @@ class cube_data_class:
             minconfy = np.nanmin(self.ds['vy_error'].values[:])
             maxconfy = np.nanmax(self.ds['vy_error'].values[:])
 
-        date1 = np.array([np.datetime64(date_str, 'ns') for date_str in self.ds['acquisition_date_img1'].values])
-        date2 = np.array([np.datetime64(date_str, 'ns') for date_str in self.ds['acquisition_date_img2'].values])
+        date1 = np.array([np.datetime64(date_str, 'D') for date_str in self.ds['acquisition_date_img1'].values])
+        date2 = np.array([np.datetime64(date_str, 'D') for date_str in self.ds['acquisition_date_img2'].values])
         sensor = np.core.defchararray.add(np.char.strip(self.ds['mission_img1'].values.astype(str), '�'),
                                           np.char.strip(self.ds['satellite_img1'].values.astype(str), '�')
                                           ).astype(
@@ -739,30 +748,19 @@ class cube_data_class:
             if filepath.split(".")[-1] == "nc":
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
-                    if chunks == {}:
-                        tc, yc, xc = determine_optimal_chuck_size(
-                            self.ds,
-                            variable_name="vx",
-                            x_dim="x",
-                            y_dim="y",
-                            verbose=True,
-                        )
-                        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
-                except (
-                        NotImplementedError
-                ):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                except (NotImplementedError):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                    chunks = {}
                     self.ds = xr.open_dataset(
-                        filepath, engine="netcdf4", chunks={}
-                    )  # set no chunks
-                    if chunks == {}:
-                        tc, yc, xc = determine_optimal_chuck_size(
-                            self.ds,
-                            variable_name="vx",
-                            x_dim="x",
-                            y_dim="y",
-                            verbose=True,
-                        )
-                        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
+                        filepath, engine="netcdf4", chunks=chunks)  # set no chunks
+                if chunks == {}:#rechunk with optimal chunk si
+                    tc, yc, xc = determine_optimal_chuck_size(
+                        self.ds,
+                        variable_name="vx",
+                        x_dim="x",
+                        y_dim="y",
+                        verbose=True,
+                    )
+                    self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
                 if chunks == {}:
@@ -804,6 +802,15 @@ class cube_data_class:
         )
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
+
+        # if there is chunks in time, set no chunks
+        if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
+
+        # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
+        #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
+        #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
+        #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
+
         if verbose:
             print(self.ds.author)
 
@@ -841,6 +848,87 @@ class cube_data_class:
 
     # ====== = ====== PROCESS ON PIXEL BASIS  ====== = ======
 
+    def load_pixel_for_one_dataset(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
+                                   merged=None, proj='EPSG:4326',
+                                   visual=False, rolling_mean=None, verbose=False):
+        # variables to keep
+        var_to_keep = (
+            ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
+            if not visual
+            else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
+        )
+
+        if proj == 'int':
+            data = self.ds.isel(x=i, y=j)[var_to_keep]
+        else:
+            # Convert coordinates if needed
+            if proj == 'EPSG:4326':
+                myProj = Proj(self.ds.proj4)
+                i, j = myProj(i, j)
+                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+            else:
+                if CRS(self.ds.proj4) != CRS(proj):
+                    transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
+                    i, j = transformer.transform(i, j)
+                    if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+
+            # Interpolate only necessary variables and drop NaN values
+            if interp == 'nearest':
+                data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
+                    dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
+            else:
+                data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
+                    dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+        if flags is not None:
+            if isinstance(regu, dict) and isinstance(coef, dict):
+                flag = np.round(flags['flags'].sel(x=i, y=j, method='nearest').values)
+                regu = regu[flag]
+                coef = coef[flag]
+                # print(f'pixel:{i} {j} , flag: {flag}, assigned with regu {regu} and coef {coef}')
+            else:
+                raise ValueError("regu must be a dict if assign_flag is True!")
+
+        data_dates = data[['date1', 'date2']].to_array().values.T
+        if data_dates.dtype == ('<M8[ns]'):#convert to days if needed
+            data_dates = data_dates.astype('datetime64[D]')
+
+        if (
+                solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
+            if len(rolling_mean.sizes) == 3:  # if regu == 1accelnotnul, rolling_mean have a time dimesion
+                # Load rolling mean for the given pixel, only on the dates available
+                dates_range = Construction_dates_range_np(data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                mean = \
+                    rolling_mean.sel(mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method='nearest')[
+                        ['vx_filt', 'vy_filt']]
+                mean = [mean[i].values / unit for i in
+                        ['vx_filt', 'vy_filt']]  # convert it to m/day
+            else:  # elif solver= LSMR_ini, rolling_mean is an average in time per pixel
+                mean = rolling_mean.sel(x=i, y=j, method='nearest')[
+                    ['vx', 'vy']]
+                mean = [mean[i].values / unit for i in
+                        ['vx', 'vy']]  # convert it to m/day
+                dates_range = None
+
+        else:  # if there is no apriori and no initialization
+            mean = None
+            dates_range = None
+
+        if visual:
+            data_str = data[['sensor', 'source']].to_array().values.T
+            data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
+            data = [data_dates, data_values, data_str]
+        else:
+            data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
+            data = [data_dates, data_values]
+
+        # TODO add merge case
+        # TODO move this part into the inversion, and calculate the mean, dates_range for whole cube?
+        if flags is not None:
+            return data, mean, dates_range, regu, coef
+        else:
+            return data, mean, dates_range
+
     def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
                    visual=False, rolling_mean=None, verbose=False):
         '''
@@ -859,76 +947,9 @@ class cube_data_class:
         :return: pd dataframe
         '''
 
-        # variables to keep
-        var_to_keep = (
-            ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
-            if not visual
-            else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
-        )
+        if merged is None: return self.load_pixel_for_one_dataset(i, j, unit, regu, coef, flags, solver, interp, merged, proj,
+                   visual, rolling_mean, verbose)
 
-        # coordinates conversion
-        # Conversion 165 µs ± 1.98 µs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-        if proj == 'int':
-            data = self.ds.isel(x=i, y=j)[var_to_keep]
-        else:
-            # Convert coordinates if needed
-            if proj == 'EPSG:4326':
-                myProj = Proj(self.ds.proj4)
-                i, j = myProj(i, j)
-                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
-            else:
-                if CRS(self.ds.proj4) != CRS(proj):
-                    transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
-                    i, j = transformer.transform(i, j)
-                    if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
-            # Interpolate only necessary variables and drop NaN values
-            # start = time.time()
-            if interp == 'nearest':
-                data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
-                    dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
-            else:
-                data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
-                    dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        if flags is not None:
-            if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flags['flags'].sel(x=i, y=j, method='nearest').values)
-                regu = regu[flag]
-                coef = coef[flag]
-                # print(f'pixel:{i} {j} , flag: {flag}, assigned with regu {regu} and coef {coef}')
-            else:
-                raise ValueError("regu must be a dict if assign_flag is True!")
-            
-        data_dates = data[['date1', 'date2']].to_array().values.T
-        if rolling_mean is None and (
-                solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
-            mean = np.array(
-                [data['vx'].mean(),
-                 data['vy'].mean()])
-            dates_range = None
-        else:  # 1.51 ms ± 12.6 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
-            # Load rolling mean for the given pixel, only on the dates available
-            dates_range = Construction_dates_range_np(
-                data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
-            mean = \
-            rolling_mean.sel(mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method='nearest')[
-                ['vx_filt', 'vy_filt']]
-            mean = [mean[i].values / unit for i in
-                    ['vx_filt', 'vy_filt']]  # convert it to m/day
-            
-        if visual:
-            data_str = data[['sensor', 'source']].to_array().values.T
-            data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
-            data = [data_dates, data_values, data_str]
-        else:
-            data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
-            data = [data_dates, data_values]
-
-        # TODO add merge case
-        # TODO move this part into the inversion, and calculate the mean, dates_range for whole cube?
-        if flags is not None:
-            return data, mean, dates_range, regu, coef
-        else:
-            return data, mean, dates_range
 
     def coord2pix(self, x, y):
         '''Convert a point in coordinates to a point in pixels'''
@@ -958,7 +979,7 @@ class cube_data_class:
             unit=365,
             delete_outliers=None,
             flags=None,
-            regu=1,
+            regu=1,solver='LSMR_ini',
             proj="EPSG:4326",
             velo_or_disp="velo",
             verbose=False,
@@ -1066,24 +1087,24 @@ class cube_data_class:
 
             #Apply the selected kernel in time
             if verbose:
-                with ProgressBar():
-                    ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
+                with ProgressBar():#plot a progress bar
+                    filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
             else:
-                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
+                filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
 
             #Spatial average
             if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :#The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
-                spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
                 spatial_mean = da.pad(
                     spatial_mean,
                     ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
                     mode="edge",
                 )
-            else:spatial_mean = ewm_smooth
+            else:spatial_mean = filtered_in_time
             
             # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
             
@@ -1125,7 +1146,7 @@ class cube_data_class:
             self.ds = self.ds.unify_chunks()
 
         # convert all the dimension of the cube
-        # TODO: do we need that?
+        #TODO:  do we need that?
         if CRS(self.ds.proj4) != CRS(proj):
             transformer = Transformer.from_crs(
                 CRS(proj), CRS(self.ds.proj4)
@@ -1143,7 +1164,6 @@ class cube_data_class:
         cube = self.ds.copy()
         cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
         
-        # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
@@ -1157,7 +1177,7 @@ class cube_data_class:
                 raise ValueError("regu must be a dict if assign_flag is True!")
         else:
             if isinstance(regu, int):#if regu is an integer
-                regu = list(regu)
+                regu = [regu]
             elif isinstance(regu, str):#if regu is a string
                 regu = list(regu.split())
         
@@ -1199,8 +1219,7 @@ class cube_data_class:
                 & (cube["errory"] < delete_outliers)
             )
 
-        if ("1accelnotnull" in regu or "directionxy" in regu
-        ):
+        if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
             if verbose:start = time.time()
             vx_filtered, dates_uniq = loop_rolling2(
@@ -1254,8 +1273,10 @@ class cube_data_class:
                     time.time() - start
                 )
             )
-        else:
-            obs_filt = None
+        elif solver == 'LSMR_ini': #The initialization is based on the averaged velocity over the period, for every pixel
+            obs_filt = cube[['vx','vy']].mean(dim='mid_date')
+            obs_filt.attrs['description'] = 'Averaged velocity over the period'
+            obs_filt.attrs['units'] = 'm/y'
 
         # unify the observations to displacement
         # to provide displacement values during inversion
