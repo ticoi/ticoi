@@ -124,8 +124,11 @@ def ewma_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
+    try:
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
+    except:#if there is only nan
+        return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 
@@ -173,8 +176,11 @@ def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=No
     
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
+    try:
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
+    except:
+        return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3):
@@ -194,8 +200,11 @@ def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3)
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    series_interp = np.interp(t_interp, t_obs, series)
-    series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
+    try:
+        series_interp = np.interp(t_interp, t_obs, series)
+        series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
+    except:
+        return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t_win=90, sigma=3, order=3, axis=2):
@@ -793,6 +802,7 @@ class cube_data_class:
         )
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
+        if self.ds.chunksizes['mid_date'] != self.nz: self.ds = self.ds.chunk({'mid_date': self.nz})
         if verbose:
             print(self.ds.author)
 
