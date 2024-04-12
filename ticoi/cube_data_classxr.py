@@ -752,7 +752,7 @@ class cube_data_class:
                     chunks = {}
                     self.ds = xr.open_dataset(
                         filepath, engine="netcdf4", chunks=chunks)  # set no chunks
-                if chunks == {}:
+                if chunks == {}:#rechunk with optimal chunk si
                     tc, yc, xc = determine_optimal_chuck_size(
                         self.ds,
                         variable_name="vx",
@@ -802,7 +802,7 @@ class cube_data_class:
         )
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-        if self.ds.chunksizes['mid_date'] != self.nz: self.ds = self.ds.chunk({'mid_date': self.nz})
+        if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})#if there is chunks in time
         if verbose:
             print(self.ds.author)
 
@@ -900,21 +900,23 @@ class cube_data_class:
         data_dates = data[['date1', 'date2']].to_array().values.T
         if (
                 solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
-            if rolling_mean is None :
-                mean = np.array(
-                    [data['vx'].mean(),
-                     data['vy'].mean()])
-                dates_range = None
-            else:  # 1.51 ms ± 12.6 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+            if len(rolling_mean.sizes) == 3 : #if regu == 1accelnotnul, rolling_mean have a time dimesion
                 # Load rolling mean for the given pixel, only on the dates available
                 dates_range = Construction_dates_range_np(
                     data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
                 mean = \
                 rolling_mean.sel(mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method='nearest')[
                     ['vx_filt', 'vy_filt']]
-                mean = [mean[i].values / unit for i in
-                        ['vx_filt', 'vy_filt']]  # convert it to m/day
-        else:
+            else:  # elif solver= LSMR_ini, rolling_mean is an average in time per pixel
+                mean = rolling_mean.sel(x=i, y=j, method='nearest')[
+                    ['vx', 'vy']]
+                dates_range = None
+
+            mean = [mean[i].values / unit for i in
+                        ['vx', 'vy']]  # convert it to m/day
+
+
+        else: #if there is no apriori and no initialization
             mean = None
             dates_range = None
 
@@ -1255,22 +1257,10 @@ class cube_data_class:
                     time.time() - start
                 )
             )
-        elif solver == 'LSMR_ini': #The initialization is based on the averaged velocity over the period
-            # cube_mean = cube{}
-            if np.min([da_arr['x'].size, da_arr[
-                'y'].size]) > s_win:  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
-                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=(0, 1)),
-                                          axis=(-1, -2))
-                spatial_mean = da.pad(
-                    spatial_mean,
-                    ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
-                    mode="edge",
-                )
-            else:
-                spatial_mean = filtered_in_time
-
-
-            obs_filt = None
+        elif solver == 'LSMR_ini': #The initialization is based on the averaged velocity over the period, for every pixel
+            obs_filt = cube[['vx','vy']].mean(dim='mid_date')
+            obs_filt.attrs['description'] = 'Averaged velocity over the period'
+            obs_filt.attrs['units'] = 'm/y'
 
         # unify the observations to displacement
         # to provide displacement values during inversion

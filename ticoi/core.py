@@ -320,7 +320,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         if regu == '1accelnotnull':
             accel = [np.diff(mean[0]), np.diff(mean[1])] #compute acceleration based on the moving average, computing using a given kernel
             mean_ini = [np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, 'D')) for i in
-                        range(len(mean))]#compute what should the displacement in X according to moving average, computing using a given kernel
+                        range(len(mean))]#compute what should be the displacement in X according to the moving average, computing using a given kernel
 
         elif mean is not None and solver == 'LSMR_ini':  # initilization is set according the average of the whole time series
             mean_ini = [np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, 'D') / unit) for i in
@@ -993,8 +993,8 @@ def visualisation(data, result, option_visual, path_save, interval_output=1, int
         if 'X' in option_visual:
             fig1, ax1 = plt.subplots(2, 1, figsize=figsize)
             ax1[0].set_title('Results of velocity x and y')
-            ymin = result['result_vx'].min() - 50
-            ymax = result['result_vx'].max() + 50
+            ymin = np.nanmin(result['result_vx']) - 50
+            ymax = np.nanmin(result['result_vx']) + 50
             ax1[0].set_ylim(ymin, ymax)
             ax1[0].plot(date_cori, dataf['vx'], linestyle='', marker='o', markersize=3,
                         color='orange', label=f'Velocity observations [{unit}]', alpha=0.7)  # Display the vx components
