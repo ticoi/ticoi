@@ -739,30 +739,19 @@ class cube_data_class:
             if filepath.split(".")[-1] == "nc":
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
-                    if chunks == {}:
-                        tc, yc, xc = determine_optimal_chuck_size(
-                            self.ds,
-                            variable_name="vx",
-                            x_dim="x",
-                            y_dim="y",
-                            verbose=True,
-                        )
-                        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
-                except (
-                        NotImplementedError
-                ):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                except (NotImplementedError):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                    chunks = {}
                     self.ds = xr.open_dataset(
-                        filepath, engine="netcdf4", chunks={}
-                    )  # set no chunks
-                    if chunks == {}:
-                        tc, yc, xc = determine_optimal_chuck_size(
-                            self.ds,
-                            variable_name="vx",
-                            x_dim="x",
-                            y_dim="y",
-                            verbose=True,
-                        )
-                        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
+                        filepath, engine="netcdf4", chunks=chunks)  # set no chunks
+                if chunks == {}:
+                    tc, yc, xc = determine_optimal_chuck_size(
+                        self.ds,
+                        variable_name="vx",
+                        x_dim="x",
+                        y_dim="y",
+                        verbose=True,
+                    )
+                    self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
                 if chunks == {}:
@@ -962,7 +951,7 @@ class cube_data_class:
             unit=365,
             delete_outliers=None,
             flags=None,
-            regu=1,
+            regu=1,solver='LSMR_ini',
             proj="EPSG:4326",
             velo_or_disp="velo",
             verbose=False,
@@ -1070,24 +1059,24 @@ class cube_data_class:
 
             #Apply the selected kernel in time
             if verbose:
-                with ProgressBar():
-                    ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
+                with ProgressBar():#plot a progress bar
+                    filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
             else:
-                ewm_smooth = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
+                filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
 
             #Spatial average
             if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :#The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
-                spatial_mean = da.nanmean(sliding_window_view(ewm_smooth, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
                 spatial_mean = da.pad(
                     spatial_mean,
                     ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
                     mode="edge",
                 )
-            else:spatial_mean = ewm_smooth
+            else:spatial_mean = filtered_in_time
             
             # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
             
@@ -1129,7 +1118,7 @@ class cube_data_class:
             self.ds = self.ds.unify_chunks()
 
         # convert all the dimension of the cube
-        # TODO: do we need that?
+        #TODO:  do we need that?
         if CRS(self.ds.proj4) != CRS(proj):
             transformer = Transformer.from_crs(
                 CRS(proj), CRS(self.ds.proj4)
@@ -1147,7 +1136,6 @@ class cube_data_class:
         cube = self.ds.copy()
         cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
         
-        # change the meaning of the velo_or_disp to avoid confusing
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
@@ -1203,8 +1191,7 @@ class cube_data_class:
                 & (cube["errory"] < delete_outliers)
             )
 
-        if ("1accelnotnull" in regu or "directionxy" in regu
-        ):
+        if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
             if verbose:start = time.time()
             vx_filtered, dates_uniq = loop_rolling2(
@@ -1258,7 +1245,21 @@ class cube_data_class:
                     time.time() - start
                 )
             )
-        else:
+        elif solver == 'LSMR_ini': #The initialization is based on the averaged velocity over the period
+            # cube_mean = cube{}
+            if np.min([da_arr['x'].size, da_arr[
+                'y'].size]) > s_win:  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
+                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=(0, 1)),
+                                          axis=(-1, -2))
+                spatial_mean = da.pad(
+                    spatial_mean,
+                    ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+                    mode="edge",
+                )
+            else:
+                spatial_mean = filtered_in_time
+
+
             obs_filt = None
 
         # unify the observations to displacement
