@@ -28,7 +28,7 @@ from ticoi.secondary_functions import Construction_dates_range_np
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 
-def determine_optimal_chuck_size(
+def determine_optimal_chunk_size(
         ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True
 ):
     """
@@ -351,7 +351,7 @@ class cube_data_class:
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
             self.ds = self.ds.sel(x=slice(np.min([i1, i2]), np.max([i1, i2])),
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
-        del i1, i2, j1, j2, buffer
+            del i1, i2, j1, j2, buffer
 
     # ====== = ====== LOAD DATASET ====== = ======
     def load_itslive(self, filepath, conf=False, pick_date=None, subset=None,
@@ -595,7 +595,6 @@ class cube_data_class:
         # Spatial subset
         if subset is not None:  # crop according to 4 coordinates
             self.subset(proj, subset)
-
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
@@ -737,10 +736,23 @@ class cube_data_class:
         :param pick_temp_bas: a list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param buffer: a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in pixels)
         :param proj: str, projection of the buffer or subset which is given, e.g. EPSG:4326
-        :param chunks: dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
+        :param chunks: dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
+                       chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
+                       chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
         :param verbose: bool, display some text
         :return: cube_data_class object where cube_data_class.ds is an xarray.DataArray
         """
+        
+        time_dim_name = {
+            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
+            "J. Mouginot, R.Millan, A.Derkacheva": 'z',
+            "J. Mouginot, R.Millan, A.Derkacheva_aligned": 'mid_date',
+            "L. Charrier, L. Guo": 'mid_date',
+            "L. Charrier": 'mid_date',
+            "E. Ducasse": 'time',
+            "S. Leinss, L. Charrier": 'mid_date'
+        }
+        
         self.__init__()
         with dask.config.set(
                 **{"array.slicing.split_large_chunks": False}
@@ -752,15 +764,19 @@ class cube_data_class:
                     chunks = {}
                     self.ds = xr.open_dataset(
                         filepath, engine="netcdf4", chunks=chunks)  # set no chunks
-                if chunks == {}:#rechunk with optimal chunk si
-                    tc, yc, xc = determine_optimal_chuck_size(
+                    
+                if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
+                    self.ds.attrs["author"] = self.ds.attrs.pop("Author")
+                    
+                if chunks == {}: # rechunk with optimal chunk size
+                    tc, yc, xc = determine_optimal_chunk_size(
                         self.ds,
                         variable_name="vx",
                         x_dim="x",
                         y_dim="y",
                         verbose=True,
                     )
-                    self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
+                    self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
                 if chunks == {}:
@@ -776,10 +792,6 @@ class cube_data_class:
 
         if verbose:
             print("file open")
-        if (
-                "Author" in self.ds.attrs
-        ):  # uniformization of the attribute Author to author
-            self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
         dico_load = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
@@ -849,8 +861,7 @@ class cube_data_class:
     # ====== = ====== PROCESS ON PIXEL BASIS  ====== = ======
 
     def load_pixel_for_one_dataset(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
-                                   merged=None, proj='EPSG:4326',
-                                   visual=False, rolling_mean=None, verbose=False):
+                                   merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
         # variables to keep
         var_to_keep = (
             ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
@@ -893,8 +904,7 @@ class cube_data_class:
         if data_dates.dtype == ('<M8[ns]'):#convert to days if needed
             data_dates = data_dates.astype('datetime64[D]')
 
-        if (
-                solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy'):
+        if solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy':
             if len(rolling_mean.sizes) == 3:  # if regu == 1accelnotnul, rolling_mean have a time dimesion
                 # Load rolling mean for the given pixel, only on the dates available
                 dates_range = Construction_dates_range_np(data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -904,10 +914,8 @@ class cube_data_class:
                 mean = [mean[i].values / unit for i in
                         ['vx_filt', 'vy_filt']]  # convert it to m/day
             else:  # elif solver= LSMR_ini, rolling_mean is an average in time per pixel
-                mean = rolling_mean.sel(x=i, y=j, method='nearest')[
-                    ['vx', 'vy']]
-                mean = [mean[i].values / unit for i in
-                        ['vx', 'vy']]  # convert it to m/day
+                mean = rolling_mean.sel(x=i, y=j, method='nearest')[['vx', 'vy']]
+                mean = [mean[i].values / unit for i in ['vx', 'vy']]  # convert it to m/day
                 dates_range = None
 
         else:  # if there is no apriori and no initialization
@@ -942,9 +950,9 @@ class cube_data_class:
         :param merged: None, or cube_data_class : cube_object to merge with self : the pd dataframe will contain values from self and merged
         :param proj: string EPSG of i,j projection
         :param velo_or_disp: string, 'disp' or 'vel' : if 'disp' return displacements, if 'vel' return velocities
-        :param visual: bool, do you want to visualize the results
-        :param verbose: bool, do you want to plot some text
-        :return: pd dataframe
+        :param visual: bool, do you want to visualize the results ?
+        :param verbose: bool, do you want to plot some information along the computation ?
+        :return: 
         '''
 
         if merged is None: return self.load_pixel_for_one_dataset(i, j, unit, regu, coef, flags, solver, interp, merged, proj,
@@ -982,6 +990,7 @@ class cube_data_class:
             regu=1,solver='LSMR_ini',
             proj="EPSG:4326",
             velo_or_disp="velo",
+            merged=None,
             verbose=False,
     ):
         """
@@ -998,6 +1007,7 @@ class cube_data_class:
         :param regu: int or string : regularisation of the solver
         :param proj: string EPSG of i,j projection
         :param velo_or_disp: string, 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity
+        :param merged: list, cubes to merge to the current data cube
         :param verbose: bool, do you want to plot some text
         :return:
         """
@@ -1134,8 +1144,6 @@ class cube_data_class:
             f.savefig('compasion_different_smoother.png')
             """
             
-
-
             return spatial_mean.compute(), np.unique(date_out)
 
               
@@ -1146,7 +1154,7 @@ class cube_data_class:
             self.ds = self.ds.unify_chunks()
 
         # convert all the dimension of the cube
-        #TODO:  do we need that?
+        # TODO:  do we need that?
         if CRS(self.ds.proj4) != CRS(proj):
             transformer = Transformer.from_crs(
                 CRS(proj), CRS(self.ds.proj4)
@@ -1298,66 +1306,77 @@ class cube_data_class:
         # TODO calculate the mean, std, dates_range here for the whole cube
         return obs_filt
 
-    def align_cube(self, cube2, unit='m/y', reproj_vel=True, reproj_coord=True, interp_method='cubic_spline'):
+    def align_cube(self, cube, reproj_vel=True, reproj_coord=True, interp_method='nearest'):
         """
-         Reproject a cube2 to match the resolution, projection, and region of self, using a bilinear interpolation
-        :param cube2: cube_data_classxr, cube2 to align to self
-        :param unit: string, 'm/y' or 'm/d'
+         Reproject cube to match the resolution, projection, and region of self
+         
+        :param cube: cube_data_classxr, cube to align to self
         :param reproj_vel: bool, if the velocity have to be reprojected -> it will modify their value
-        :return: cube_data_classxr, cube2 aligned to self
+        :param reproj_coord: bool, if the coordinates have to be interpolated (using interp_method)
+        :param interp_method: interpolation method used to reproject cube
+        
+        :return cube: cube projected to self
         """
 
-        if unit == 'm/y':
-            conversion = 365
-        elif unit == 'm/d':
-            conversion = 1
-        else:
-            raise NameError('Please enter unit as m/d or m/y')
+        # if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
+        #     grid = np.meshgrid(cube2.ds['x'], cube2.ds['y'])
+        #     temp = cube2.temp_base_()
+        #     endx = np.array([(np.ma.masked_invalid(cube2.ds['vx'][z]) * temp[z] / conversion) + grid[0] for z in
+        #                      range(
+        #                          cube2.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in x
+        #     endy = np.array(
+        #         [(np.ma.masked_invalid(cube2.ds['vy'][z]) * temp[z] / conversion) + grid[1] for z in
+        #          range(
+        #              cube2.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in y
 
-        if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
-            grid = np.meshgrid(cube2.ds['x'], cube2.ds['y'])
-            temp = cube2.temp_base_()
-            endx = np.array([(np.ma.masked_invalid(cube2.ds['vx'][z]) * temp[z] / conversion) + grid[0] for z in
-                             range(
-                                 cube2.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in x
-            endy = np.array(
-                [(np.ma.masked_invalid(cube2.ds['vy'][z]) * temp[z] / conversion) + grid[1] for z in
-                 range(
-                     cube2.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in y
+        #     # reprojection of the final coordinate of each pixel displaced by the corresponding velocity vector
+        #     transformer = Transformer.from_crs(cube2.ds.proj4, self.ds.proj4)
+        #     t = np.array([transformer.transform(endx[z], endy[z]) for z in range(cube2.nz)])
+        #     del endx, endy
 
-            # reprojection of the final coordinate of each pixel displaced by the corresponding velocity vector
-            transformer = Transformer.from_crs(cube2.ds.proj4, self.ds.proj4)
-            t = np.array([transformer.transform(endx[z], endy[z]) for z in range(cube2.nz)])
-            del endx, endy
-
-            # Computation of the difference between final and oringinal coordinates in the new system
-            grid = transformer.transform(grid[0], grid[1])
-            vx = np.array([(grid[0] - t[z, 0, :, :]) / temp[z] * conversion for z in
-                           range(cube2.nz)])  # positive toward the West
-            vy = np.array([(t[z, 1, :, :] - grid[1]) / temp[z] * conversion for z in
-                           range(cube2.nz)])  # positive toward the North
-            cube2.ds['vx'] = xr.DataArray(vx.astype('float32'), dims=['mid_date', 'y', 'x'],
-                                          coords={'mid_date': cube2.ds.mid_date, 'y': cube2.ds.y, 'x': cube2.ds.x})
-            cube2.ds['vx'].encoding = {'vx': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
-            cube2.ds['vy'] = xr.DataArray(vy.astype('float32'), dims=['mid_date', 'y', 'x'],
-                                          coords={'mid_date': cube2.ds.mid_date, 'y': cube2.ds.y, 'x': cube2.ds.x})
-            cube2.ds['vy'].encoding = {'vy': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
-            del vx, vy
+        #     # Computation of the difference between final and oringinal coordinates in the new system
+        #     grid = transformer.transform(grid[0], grid[1])
+        #     vx = np.array([(grid[0] - t[z, 0, :, :]) / temp[z] * conversion for z in
+        #                    range(cube2.nz)])  # positive toward the West
+        #     vy = np.array([(t[z, 1, :, :] - grid[1]) / temp[z] * conversion for z in
+        #                    range(cube2.nz)])  # positive toward the North
+        #     cube2.ds['vx'] = xr.DataArray(vx.astype('float32'), dims=['mid_date', 'y', 'x'],
+        #                                   coords={'mid_date': cube2.ds.mid_date, 'y': cube2.ds.y, 'x': cube2.ds.x})
+        #     cube2.ds['vx'].encoding = {'vx': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
+        #     cube2.ds['vy'] = xr.DataArray(vy.astype('float32'), dims=['mid_date', 'y', 'x'],
+        #                                   coords={'mid_date': cube2.ds.mid_date, 'y': cube2.ds.y, 'x': cube2.ds.x})
+        #     cube2.ds['vy'].encoding = {'vy': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
+        #     del vx, vy  
+        
+        # if reproj_coord:
+        #     # Convert the system of coordinate and ajust the spatial resolution of self to match the resolution, projection, and region of cube
+        #     cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
+        #     self.ds = self.ds.rio.write_crs(self.ds.proj4)
+        #     if interp_method == 'nearest':
+        #         cube.ds = self.ds.rio.reproject_match(cube.ds, resampling=rasterio.enums.Resampling.nearest)
+        #     # Update of cube_data_classxr attributes
+        #     self.ds = self.ds.assign_attrs({'proj4': cube.ds.proj4})
+        #     # cube2.ds = cube2.ds.rio.write_crs(cube2.proj4, inplace=True)
+        #     self.nx = self.ds.dims['x']
+        #     self.ny = self.ds.dims['y']
+            
         if reproj_coord:
             # Convert the system of coordinate and ajust the spatial resolution of the cube2 to match the resolution, projection, and region of self, using a bilinear interpolation
-            cube2.ds = cube2.ds.rio.write_crs(cube2.ds.proj4)
+            cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
             self.ds = self.ds.rio.write_crs(self.ds.proj4)
-            cube2.ds = cube2.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.average)
+            cube.ds = cube.ds.transpose('mid_date', 'y', 'x')
+            if interp_method == 'nearest':
+                cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
             # Update of cube_data_classxr attributes
-            cube2.ds = cube2.ds.assign_attrs({'proj4': self.ds.proj4})
+            cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})
             # cube2.ds = cube2.ds.rio.write_crs(cube2.proj4, inplace=True)
-            cube2.nx = cube2.ds.dims['x']
-            cube2.ny = cube2.ds.dims['y']
-            cube2.ds = cube2.ds.transpose('mid_date', 'y', 'x')
-            cube2.ds = cube2.ds.assign_coords({"x": self.ds.x, "y": cube2.ds.y})
-        cube2.ds = cube2.ds.assign_attrs({'author': f'{cube2.ds.author}_aligned'})
-
-        return cube2
+            cube.nx = cube.ds.dims['x']
+            cube.ny = cube.ds.dims['y']
+            cube.ds = cube.ds.assign_coords({"x": self.ds.x, "y": cube.ds.y})
+            
+        cube.ds = cube.ds.assign_attrs({'author': f'{cube.ds.author}_aligned'})
+        
+        return cube
 
     def write_result_TICOI(self, result, source, sensor, filename='Time_series', savepath=None, result_quality=None,
                            verbose=False):
