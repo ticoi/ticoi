@@ -15,38 +15,41 @@ import numpy as np
 from ticoi.core import inversion, visualisation, interpolation_post
 from ticoi.cube_data_classxr import cube_data_class
 
+
 # %%========================================================================= #
 #                                    PARAMETERS                               #
 # =========================================================================%% #
 
 ####  Selection of data
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to stored the results
-
-####  Point (pixel) where to carry on the computation
-i, j = -138.18069, 60.29076
-
-# To select a specific period for the measurements, if you want to select all the dates put None, else give an inteval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
-dates_input = ['2013-01-01', '2023-01-01']
-# To select certain temporal baselines in the dataset, if you want to select all the temporal put None, else give two integers [min, max] to form an interval in days
+# Paths to the data cubes
+# cube_names = [f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc']
+# path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to store the results
+cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc', # Sentinel-2 cube
+              'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
+path_save = 'nathan/Tests_MB/useless/'
+i, j = 334571.3,5082898.8 # Point (pixel) where to carry on the computation
+proj = 'EPSG:32632' # Projection of the given coordinates
+buffer_size = 500 # Size of the buffer to be loaded around the pixel
+# To select a specific period for the measurements, if you want to select all the dates put None, 
+# else give an inteval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
+dates_input = ['2015-01-01', '2023-01-01']
+# To select certain temporal baselines in the dataset, if you want to select all the temporal baselines put None, 
+# else give two integers [min, max] to form an interval in days
 temp_baseline = None
-sensor = None
-# If you want confidence indicators ranging between 0 and 1, with 1 the lowest errors
-conf = False
-# Unit in m/y or m/d
-unit = 'm/y'
+sensor = None # Select a specific sensor 
+conf = False # If you want confidence indicators ranging between 0 and 1, with 1 the lowest errors
+unit = 'm/y' # Unit in m/y or m/d
 # If None, all the data are included ; if an integer, the data with an error higher than this integer are removed ;
 # if 'median_average', the data with a direction 45° away compared to the averaged direction are removed
 delete_outliers = None
+load_interp = 'nearest' # Interpolation used to select which data to use when the pixel is not exactly a pixel of the dataset
 
 ####  Inversion
-# Variables to play with
-coef = 100  # lambda : coef of the regularisation
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
 # '1accelnotnull': minization of the difference between the acceleration of the time series and acceleration computed on a moving average
 regu = '1accelnotnull'
+coef = 100  # lambda : coef of the regularisation
 apriori_weight = True  # Add a weight in the first step of the inversion, True ou False
-# Varibales which can stay stable for the moment
 solver = 'LSMR_ini'  # Solver for the inversion : 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
 detect_temporal_decorrelation = True  # Detect temporal decorrelation by setting a weight of 0 at the beginning at the first inversion to all observation with a temporal baseline larger than 200
 
@@ -55,13 +58,13 @@ option_interpol = 'spline'  # Type of interpolation : 'spline', 'nearest' or 'sp
 interpolation_bas = 30  # Temporal sampling of the velocity time series
 redundancy = 5
 result_quality = None
+
 ####  Visualization
 visual = True  # Plot some results or not
 verbose = False  # Print informations during the process or not
 save = True  # Save the results or not
 vmax = [0, 150]  # vmin and vmax of the legend
 visual_inversion = False  # Visualize the different iterations of the inversion
-
 # Visualisation options
 option_visual = ['original_velocity_xy', 'original_magnitude',
                  'X_magnitude_zoom', 'X_magnitude', 'X_zoom', 'X',
@@ -76,29 +79,41 @@ if not os.path.exists(path_save):
 
 unit = 365 if unit == 'm/y' else 1
 
+
 # %% ======================================================================== #
-#                    DATA DOWNLOAD (ITS_LIVE AND IGE)                         #
+#                                DATA DOWNLOAD                                #
 # =========================================================================%% #
 
-# %% Data download ITS_LIVE and IGE
-
-start = time.time()
+start = [time.time()]
 
 cube = cube_data_class()
-cube.load(cube_name, pick_date=dates_input,
-           proj='EPSG:4326', pick_temp_bas=temp_baseline, conf=conf, pick_sensor=sensor,
-           chunks={})
-print(f'Time download cube {round((time.time() - start), 4)} sec')
-print(f'Cube of dimesion (nz,nx,ny) : ({cube.nz},{cube.nx},{cube.ny}) ')
+cube.load(cube_names[0], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
+          buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
 
-obs_filt = cube.preData_np(s_win=3, t_win=90, proj='EPSG:3413', regu=regu,
-                            delete_outliers=None, verbose=True,
-                            velocity_or_displacement='disp')
+# Several cubes have to be merged together
+if len(cube_names) > 1:
+    merged = []
+    for n in range(1, len(cube_names)):
+        merged.append(cube_data_class())
+        merged[n-1].load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
+                         buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
+        merged[n-1] = cube.align_cube(merged[n-1], reproj_vel=False, reproj_coord=True, interp_method='nearest')
+        cube.merge_cube(merged[n-1])
+else:
+    merged = None
+    
+merged = None
 
-start = time.time()
-data, mean, dates_range = cube.load_pixel(i, j, proj='EPSG:4326', interp='linear', solver=solver,
-                                                 visual=visual,
-                                           regu=regu, rolling_mean=obs_filt)
+stop = [time.time()]
+print(f'[ticoi_pixel_demo] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[ticoi_pixel_demo] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
+
+start.append(time.time())
+
+obs_filt = cube.preData_np(s_win=3, t_win=90, unit=unit, proj=proj, regu=regu, delete_outliers=delete_outliers, 
+                           velo_or_disp='velo', verbose=verbose)
+data, mean, dates_range = cube.load_pixel(i, j, proj=proj, interp=load_interp, solver=solver, regu=regu, 
+                                          rolling_mean=obs_filt, merged=merged, visual=visual, verbose=verbose)
 
 cube2_date1 = cube.date1_().tolist()
 cube2_date1.remove(np.min(cube2_date1))
@@ -106,26 +121,36 @@ start_date_interpol = np.min(cube2_date1)
 last_date_interpol = np.max(cube.date2_())
 
 date1 = None
-print(date1)
-print(f'Time download pixel {round((time.time() - start), 4)} sec')
+
+stop.append(time.time())
+print(f'[ticoi_pixel_demo] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
 
 
-# %% Inversion
-start = time.time()
+# %% ======================================================================== #
+#                                 INVERSION                                   #
+# =========================================================================%% #
+
+start.append(time.time())
 A, result, dataf = inversion(data, i, j, dates_range=dates_range, solver=solver, coef=coef, weight=apriori_weight,
                              visual=visual,
                              verbose=verbose, unit=unit,
                              conf=conf, regu=regu, mean=mean, visual_inversion=visual_inversion,
                              detect_temporal_decorrelation=detect_temporal_decorrelation,
                              linear_operator=None, result_quality=result_quality)
-print(f'Time inversion {round((time.time() - start), 4)} sec')
 
-if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=unit, show=True,
-                         figsize=(12, 6))
+stop.append(time.time())
+print(f'[ticoi_pixel_demo] Inversion took {round((stop[2] - start[2]), 4)} s')
 
+if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=unit, show=True, figsize=(12, 6))
 if save: result.to_csv(f'{path_save}/ILF_result.csv')
 
-# start = time.time()
+
+# %% ======================================================================== #
+#                              INTERPOLATION                                  #
+# =========================================================================%% #
+
+start.append(time.time())
+
 if interpolation_bas == False: interpolation_bas = 1
 start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))
@@ -135,8 +160,10 @@ dataf_lp = interpolation_post(result, interpolation_bas,
                               visual=visual, data=dataf, unit=unit, redundancy=redundancy,
                               result_quality=result_quality,
                               verbose=verbose, vmax=vmax)
-if save: dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
-# print(f'Time interpolation {round((time.time() - start) / 60, 4)} min')
 
-end = time.time()
-print(f'{(end - start)} s')
+stop.append(time.time())
+print(f'[ticoi_pixel_demo] Interpolation took {round((stop[3] - start[3]), 4)} s')
+
+if save: dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
+
+print(f'[ticoi_pixel_demo] Overall processing took {round((stop[3] - start[0]), 4)} s')

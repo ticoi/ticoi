@@ -28,23 +28,22 @@ from ticoi.secondary_functions import Construction_dates_range_np
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 
-def determine_optimal_chunk_size(
-        ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True
-):
+def determine_optimal_chunk_size(ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True):
+    
     """
     A function to determine the optimal chunk size for a given time series array based on its size.
     
-    Parameters:
-    - ds: xarray Dataset containing the time series array
-    - variable_name: Name of the variable containing the time series array (default is "vx")
-    - x_dim: Name of the x dimension in the array (default is "x")
-    - y_dim: Name of the y dimension in the array (default is "y")
-    - verbose: Boolean flag to control verbosity of output (default is True)
+    Parameters:\n
+    :param ds: xarray Dataset containing the time series array
+    :param variable_name: Name of the variable containing the time series array (default is "vx")
+    :param x_dim: Name of the x dimension in the array (default is "x")
+    :param y_dim: Name of the y dimension in the array (default is "y")
+    :param verbose: Boolean flag to control verbosity of output (default is True)
     
-    Returns:
-    - tc: Chunk size along the time dimension
-    - yc: Chunk size along the y dimension
-    - xc: Chunk size along the x dimension
+    Returns:\n
+    :return tc: Chunk size along the time dimension
+    :return yc: Chunk size along the y dimension
+    :return xc: Chunk size along the x dimension
     """
     
     if verbose:
@@ -84,16 +83,22 @@ def determine_optimal_chunk_size(
         )
     return tc, yc, xc
 
+
+# %% ======================================================================== #
+#                             TEMPORAL SMOOTHING                              #
+# =========================================================================%% #
+
 def numpy_ewma_vectorized(series, halflife=30):
+    
     """
     Calculate the exponentially weighted moving average of a series using vectorized operations.
 
-    Parameters:
-    series (np.array): The input series for which the EWMA needs to be calculated.
-    halflife (int): The halflife parameter for the EWMA calculation. Default is 30.
+    Parameters:\n
+    :param series: Input series for which the EWMA needs to be calculated
+    :param halflife: Halflife parameter for the EWMA calculation (default is 30)
 
-    Returns:
-    np.array: The exponentially weighted moving average of the input series.
+    Returns:\n
+    :return: The exponentially weighted moving average of the input series
     """
     
     alpha = 1 - np.exp(-np.log(2) / halflife)
@@ -108,44 +113,50 @@ def numpy_ewma_vectorized(series, halflife=30):
     out = offset + cumsums * scale_arr[::-1]
     return out
 
+
 def ewma_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None):
+    
     """
     Calculates an exponentially weighted moving average (EWMA) of a series at specific time points.
 
-    Parameters:
-    - series: the input series to be smoothed
-    - t_obs: the time points of the observed series
-    - t_interp: the time points to interpolate the series at
-    - t_out: the time points to return the smoothed series at
-    - halflife: the exponential decay factor (default is 90)
+    Parameters:\n
+    :param series: Input series to be smoothed
+    :param t_obs: Time points of the observed series
+    :param t_interp: Time points to interpolate the series at
+    :param t_out: Time points to return the smoothed series at
+    :param t_win: Smoothing window size (default is 90)
+    :param halflife: Exponential decay factor (default is 90)
 
-    Returns:
-    - The smoothed series at the specified time points
+    Returns:\n
+    :return: The smoothed series at the specified time points
     """
+    
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
         series_interp = np.interp(t_interp, t_obs, series)
         series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
-    except:#if there is only nan
+    except: # If there is only nan
         return np.zeros(len(t_out))
     return series_smooth[t_out]
 
 
-def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=None):
+def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=3):
+    
     """
     Perform Gaussian smoothing on a time series data.
 
-    Parameters:
-    - series: The input time series data.
-    - t_obs: The time observations corresponding to the input data.
-    - t_interp: The time points for interpolation.
-    - t_out: The time points for the output.
-    - sigma: Standard deviation for Gaussian kernel (default is 3).
-    - radius: The radius for smoothing (default is 90).
+    Parameters:\n
+    :param series: Input time series data
+    :param t_obs: Time observations corresponding to the input data
+    :param t_interp: Time points for interpolation
+    :param t_out: Time points for the output
+    :param t_win: Smoothing window size (default is 90)
+    :param sigma: Standard deviation for Gaussian kernel (default is 3)
+    :param order: Order of the smoothing function (default is 3)
 
-    Returns:
-    - Smoothed time series data at the specified output time points.
+    Returns:\n
+    :return:The smoothed time series data at the specified output time points
     """
     
     t_obs = t_obs[~np.isnan(series)]
@@ -159,19 +170,21 @@ def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=Non
     except:
         return np.zeros(len(t_out))
 
+
 def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None):
+    
     """
     Calculate a smoothed series using median filtering.
 
-    Parameters:
-    - series: The input series to be smoothed.
-    - t_obs: The time observations corresponding to the input series.
-    - t_interp: The time values for interpolation.
-    - t_out: The time values for the output series.
-    - size: The window size for the median filter (default is 90).
-
-    Returns:
-    - The smoothed series corresponding to the output time values t_out.
+    Parameters:\n
+    :param series: The input series to be smoothed
+    :param t_obs: The time observations corresponding to the input series
+    :param t_interp: The time values for interpolation
+    :param t_out: The time values for the output series
+    :param t_win: Smoothing window size (default is 90)
+    
+    Returns:\n
+    :return:The smoothed series corresponding to the output time values t_out
     """
     
     t_obs = t_obs[~np.isnan(series)]
@@ -181,23 +194,27 @@ def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=No
         series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
     except:
         return np.zeros(len(t_out))
+    
     return series_smooth[t_out]
 
+
 def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3):
+    
     """
     Perform Savitzky-Golay smoothing on a time series.
 
-    Parameters:
-    - series: the input time series to be smoothed
-    - t_obs: the observed time points corresponding to the input series
-    - t_interp: the time points for interpolation
-    - t_out: the time points to extract the smoothed values for
-    - window_length: the length of the smoothing window (default is 90)
-    - order: the order of the polynomial used in the smoothing (default is 3)
+    Parameters:\n
+    :param series: Input time series to be smoothed
+    :param t_obs: Observed time points corresponding to the input series
+    :param t_interp: Time points for interpolation
+    :param t_out: Time points to extract the smoothed values for
+    :param t_win: Smoothing window size (default is 90)
+    :param order: Order of the polynomial used in the smoothing (default is 3)
 
-    Returns:
-    - The smoothed time series at the specified output time points
+    Returns:\n
+    :return: The smoothed time series at the specified output time points
     """
+    
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
@@ -207,24 +224,27 @@ def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3)
         return np.zeros(len(t_out))
     return series_smooth[t_out]
 
+
 def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t_win=90, sigma=3, order=3, axis=2):
+    
     """
     Apply smoothing to the input Dask array along the specified axis using the specified method.
     
-    Parameters:
-    - dask_array: The input Dask array to be smoothed.
-    - t_obs: The array of observation times corresponding to the input dask_array.
-    - t_interp: The array of times at which to interpolate the data.
-    - t_out: The array of times at which to output the smoothed data.
-    - method: Smoothing method ("gaussian", "emwa", "median", "savgol"). Default is "gaussian". 
-    - t_win: The time window size for smoothing. Default is 90. 
-    - sigma: The standard deviation for Gaussian smoothing. Default is 3.
-    - order: The order of the Savitzky-Golay filter for "savgol" method. Default is 5.
-    - axis: The axis along which to apply the smoothing.
+    Parameters:\n
+    :param dask_array: Input Dask array to be smoothed.
+    :param t_obs: Array of observation times corresponding to the input dask_array.
+    :param t_interp: Array of times at which to interpolate the data.
+    :param t_out: Array of times at which to output the smoothed data.
+    :param method: Smoothing method to be used ("gaussian", "emwa", "median", "savgol") (default is "gaussian")
+    :param t_win: Smoothing window size (default is 90) 
+    :param sigma: Standard deviation for Gaussian smoothing (default is 3)
+    :param order : Order of the smoothing function (default is 3)
+    :param axis: Axis along which to apply the smoothing.
 
-    Returns:
-    - A Dask array containing the smoothed data.
+    Returns:\n
+    :return: A Dask array containing the smoothed data.
     """
+    
     # TODO : using scipy.interpolate instead of np.interp to do it for one chunk?  
     # But it could be slow and memory intensive
     
@@ -235,63 +255,70 @@ def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t
 # TODO: find a more elegant way to handle the smoothing with different method
 #       now the code is a bit of complicated and hard to read (too many lines)
 #       But I can not find better way to do it currently...
-def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_win=90, sigma=3, order=90, axis=2):
+def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_win=90, sigma=3, order=3, axis=2):
+    
     """
     A function that wraps a Dask array to apply a smoothing function. 
-    Parameters:
-        - dask_array: Dask array to be smoothed.
-        - dates: Array of dates corresponding to the data.
-        - t_out: Output timestamps for the smoothed array.
-        - method: Method of smoothing (default is "gaussian").
-        - t_win: Window size for smoothing (default is 90).
-        - sigma: Standard deviation for Gaussian smoothing (default is 3).
-        - order: Order of the smoothing function (default is 90).
-        - axis: Axis along which smoothing is applied (default is 2).
-    Returns:
-        - Smoothed Dask array with specified parameters.
+    
+    Parameters:\n
+    :param dask_array: Dask array to be smoothed
+    :param dates: Array of the central dates of the data
+    :param t_out: Output timestamps for the smoothed array
+    :param smooth_method: Smoothing method to be used ("gaussian", "emwa", "median", "savgol") (default is "gaussian")
+    :param t_win: Smoothing window size (default is 90)
+    :param sigma: Standard deviation for Gaussian smoothing (default is 3)
+    :param order: Order of the smoothing function (default is 3)
+    :param axis: Axis along which smoothing is applied (default is 2)
+        
+    Returns:\n
+    :return: Smoothed dask array with specified parameters.
     """
-    # conversion of the mid_date of the observations into numerical values
-    # it corresponds the difference between each mid_date in the minimal date, in days
+    
+    # Conversion of the mid_date of the observations into numerical values
+    # It corresponds to the difference between each mid_date and the minimal date, in days
     t_obs = (
         (dates.data - dates.data.min())
         .astype("timedelta64[D]")
         .astype("float64")
     )
 
-    if t_out.dtype == "datetime64[ns]":  #convert ns to days
+    if t_out.dtype == "datetime64[ns]":  # Convert ns to days
         t_out = (t_out - dates.data.min()).astype("timedelta64[D]").astype("int")
     if t_out.min() < 0:
-        t_obs = t_obs - t_out.min() #ensure the output time points are within the range of interpolated points
+        t_obs = t_obs - t_out.min() # Ensure the output time points are within the range of interpolated points
         t_out = t_out - t_out.min()
 
-    # some mid_date could be exactly the same, this will raise error latter
-    # therefore we add very small values to it
+    # Some mid_date could be exactly the same, this will raise error latter
+    # Therefore we add very small values to it
     while np.unique(t_obs).size < t_obs.size:
         t_obs += np.random.uniform(
             low=0.01, high=0.09, size=t_obs.shape
-        )  # add a small value to make it unique, in case of non-monotonic time point
+        )  # Add a small value to make it unique, in case of non-monotonic time point
     t_obs.sort()
 
     t_interp = np.arange(
         0, int(max(t_obs.max(), t_out.max()) + 1), 1
-    )  # time stamps for interpolated velocity, here every day
-
-    #apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
-    # NOTE: dask can not handle if..else... inside the map_blocks function
-    if smooth_method == "gaussian":
-        filt_func = gaussian_smooth
-    elif smooth_method == "ewma":
-        filt_func = ewma_smooth
-    elif smooth_method == "median":
-        filt_func = median_smooth
-    elif smooth_method == "savgol":
-        filt_func = savgol_smooth
+    )  # Time stamps for interpolated velocity, here every day
     
-    da_smooth = dask_array.map_blocks(dask_smooth, filt_func=filt_func, t_obs=t_obs, t_interp=t_interp, t_out=t_out,
-                                       t_win=t_win, sigma=sigma, order=order,
-                                       axis=axis, dtype=dask_array.dtype)
+    # Apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
+    # NOTE: dask can not handle if..else... inside the map_blocks function
+    filt_func = {
+        'gaussian': gaussian_smooth,
+        'ewma': ewma_smooth,
+        'median': median_smooth,
+        'savgol': savgol_smooth
+    }
+    
+    da_smooth = dask_array.map_blocks(dask_smooth, filt_func=filt_func[smooth_method], t_obs=t_obs, 
+                                      t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, 
+                                      order=order, axis=axis, dtype=dask_array.dtype)
     
     return da_smooth
+
+
+# %% ======================================================================== #
+#                              CUBE DATA CLASS                                #
+# =========================================================================%% #
 
 class cube_data_class:
 
@@ -304,13 +331,17 @@ class cube_data_class:
         self.author = ''
         self.ds = xr.Dataset({})
 
+
     def subset(self, proj, subset):
+        
         """
-        Crop according to 4 coordinates
+        Directly crop the dataset according to 4 coordinates.
+        
+        Parameters:\n
         :param proj: EPSG system of the coordinates given in subset
-        :param subset: list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
-        :return: nothing, crop self.ds without the need of returning it
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
         """
+        
         if CRS(self.ds.proj4) != CRS(proj):
             transformer = Transformer.from_crs(CRS(proj),
                                                CRS(self.ds.proj4))  # convert the coordinates from proj to self.ds.proj4
@@ -325,16 +356,19 @@ class cube_data_class:
             self.ds = self.ds.sel(x=slice(np.min([subset[0], subset[1]]), np.max([subset[0], subset[1]])),
                                   y=slice(np.max([subset[2], subset[3]]), np.min([subset[2], subset[3]])))
 
+
     def buffer(self, proj, buffer):
+        
         """
-        Crop the dataset around a given pixel, according to a given buffer
+        Directly crop the dataset around a given pixel, according to a given buffer
+        
+        Parameters:\n
         :param proj: EPSG system of the coordinates given in subset
-        :param buffer:  a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in m)
-        :return: nothing, crop self.ds without the need of returning it
+        :param buffer:  A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
         """
-        if CRS(self.ds.proj4) != CRS(proj):
-            transformer = Transformer.from_crs(CRS(proj),
-                                               CRS(self.ds.proj4))  # convert the coordinates from proj to self.ds.proj4
+        
+        if CRS(self.ds.proj4) != CRS(proj): # Convert the coordinates from proj to self.ds.proj4
+            transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
             i1, j1 = transformer.transform(buffer[1] + buffer[2],
                                            buffer[0] - buffer[2])
             i2, j2 = transformer.transform(buffer[1] - buffer[2],
@@ -345,7 +379,7 @@ class cube_data_class:
                                            buffer[0] - buffer[2])
             self.ds = self.ds.sel(x=slice(np.min([i1, i2, i3, i4]), np.max([i1, i2, i3, i4])),
                                   y=slice(np.max([j1, j2, j3, j4]), np.min([j1, j2, j3, j4])))
-            del i3, i4, j3, j4
+            del i3, i4, j3, j4   
         else:
             i1, j1 = buffer[0] - buffer[2], buffer[1] + buffer[2]
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
@@ -353,38 +387,42 @@ class cube_data_class:
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
 
-    # ====== = ====== LOAD DATASET ====== = ======
-    def load_itslive(self, filepath, conf=False, pick_date=None, subset=None,
-                     pick_sensor=None, pick_temp_bas=None, buffer=None,
-                     verbose=False, proj='EPSG:4326'):  # {{{
+
+    # %% ==================================================================== #
+    #                         CUBE LOADING METHODS                            #
+    # =====================================================================%% #
+
+    def load_itslive(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
+                     pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+        
         """
-        Load a cube dataset written by ITS_LIVE
-        :param filepath: str or None, filepath of the dataset, if None the code will search which
-        :param conf: True or False, if True convert the error in confidence between 0 and 1
-        :param pick_date: a list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param subset: a list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
-        :param pick_sensor: a list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: a list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param buffer: a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in pixels)
-        :param proj: str, projection of the buffer or subset which is given, e.g. EPSG:4326
-        :param verbose: bool, display some text
-        :return: cube_data_class object where cube_data_class.ds is an xarray.DataArray
+        Load a cube dataset written by ITS_LIVE.
+        
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
+        
         if verbose:
             print(filepath)
 
-        self.filedir = os.path.dirname(filepath)  # path were is stored the netcdf file
-        self.filename = os.path.basename(filepath)  # name of the netcdf file
+        self.filedir = os.path.dirname(filepath)  # Path were is stored the netcdf file
+        self.filename = os.path.basename(filepath)  # Name of the netcdf file
         self.ds = self.ds.assign_attrs({'proj4': self.ds['mapping'].proj4text})
         self.author = self.ds.author.split(', a NASA')[0]
         self.source = self.ds.url
 
-        if subset is not None:  # crop according to 4 coordinates
+        if subset is not None:  # Crop according to 4 coordinates
             self.subset(proj, subset)
-
-        elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
+        elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
-
         if pick_date is not None:
             self.ds = self.ds.where(((self.ds['acquisition_date_img1'] >= np.datetime64(pick_date[0])) & (
                     self.ds['acquisition_date_img2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
@@ -401,17 +439,17 @@ class cube_data_class:
 
         date1 = np.array([np.datetime64(date_str, 'D') for date_str in self.ds['acquisition_date_img1'].values])
         date2 = np.array([np.datetime64(date_str, 'D') for date_str in self.ds['acquisition_date_img2'].values])
+        # np.char.strip is used to remove the null character ('�') from each elemen and np.core.defchararray.add to concatenate array of different types
         sensor = np.core.defchararray.add(np.char.strip(self.ds['mission_img1'].values.astype(str), '�'),
                                           np.char.strip(self.ds['satellite_img1'].values.astype(str), '�')
-                                          ).astype(
-            'U10')  # np.char.strip is used to remove the null character ('�') from each elemen and np.core.defchararray.add to concatenate array of different types
+                                          ).astype('U10')
         sensor[sensor == 'L7'] = 'Landsat-7'
         sensor[sensor == 'L8'] = 'Landsat-8'
         sensor[sensor == 'L9'] = 'Landsat-9'
         sensor[np.isin(sensor, ['S1A', 'S1B'])] = 'Sentinel-1'
         sensor[np.isin(sensor, ['S2A', 'S2B'])] = 'Sentinel-2'
 
-        if conf:  # normalize the error between 0 and 1, and convert error in confidence
+        if conf:  # Normalize the error between 0 and 1, and convert error in confidence
             errorx = 1 - (self.ds['vx_error'].values - minconfx) / (maxconfx - minconfx)
             errory = 1 - (self.ds['vy_error'].values - minconfy) / (maxconfy - minconfy)
         else:
@@ -431,11 +469,9 @@ class cube_data_class:
         self.ds = self.ds.unify_chunks()
         self.ds['date1'] = xr.DataArray(date1, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
         self.ds = self.ds.unify_chunks()
-        self.ds['date2'] = xr.DataArray(date2, dims='mid_date').chunk(
-            chunks=self.ds.chunks['mid_date'])
+        self.ds['date2'] = xr.DataArray(date2, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
         self.ds = self.ds.unify_chunks()
-        self.ds['source'] = xr.DataArray(['ITS_LIVE'] * self.nz, dims='mid_date').chunk(
-            chunks=self.ds.chunks['mid_date'])
+        self.ds['source'] = xr.DataArray(['ITS_LIVE'] * self.nz, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
         self.ds = self.ds.unify_chunks()
         self.ds['errorx'] = xr.DataArray(
             errorx,
@@ -456,22 +492,24 @@ class cube_data_class:
             self.ds = self.ds.where(((pick_temp_bas[0] < temp) & (temp < pick_temp_bas[1])).compute(), drop=True)
             del temp
         self.ds = self.ds.unify_chunks()
+        
 
-    def load_millan(self, filepath, conf=False, pick_date=None, subset=None,
-                    pick_sensor=None, pick_temp_bas=None, buffer=None,
-                    verbose=False, proj='EPSG:4326'):
+    def load_millan(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
+                    pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+        
         """
         Load a cube dataset written by R. Millan et al.
-        :param filepath: str or None, filepath of the dataset, if None the code will search which
-        :param conf: True or False, if True convert the error in confidence between 0 and 1
-        :param pick_date: a list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param subset: a list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
-        :param pick_sensor: a list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: a list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param buffer: a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in pixels)
-        :param proj: str, projection of the buffer or subset which is given, e.g. EPSG:4326
-        :param verbose: bool, display some text
-        :return: cube_data_class object where cube_data_class.ds is an xarray.DataArray
+
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -566,21 +604,22 @@ class cube_data_class:
                         ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
         self.ds = self.ds.unify_chunks()
 
-    def load_ducasse(self, filepath, conf=False, pick_date=None, subset=None,
-                     pick_sensor=None, pick_temp_bas=None, buffer=None,
-                     verbose=False, proj='EPSG:4326'):
+    def load_ducasse(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
+                     pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+        
         """
         Load a cube dataset written by E. Ducasse et al.
-        :param filepath: str or None, filepath of the dataset, if None the code will search which
-        :param conf: True or False, if True convert the error in confidence between 0 and 1
-        :param pick_date: a list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param subset: a list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
-        :param pick_sensor: a list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: a list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param buffer: a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in pixels)
-        :param proj: str, projection of the buffer or subset which is given, e.g. EPSG:4326
-        :param verbose: bool, display some text
-        :return: cube_data_class object where cube_data_class.ds is an xarray.DataArray
+        
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -628,7 +667,7 @@ class cube_data_class:
         self.ds = self.ds.transpose('mid_date', 'y', 'x')
 
         # Store the variable in xarray dataset
-        self.ds['sensor'] = xr.DataArray(['Pleiades'] * len(self.ds['mid_date']), dims='mid_date').chunk(
+        self.ds['sensor'] = xr.DataArray(['Pleiades'] * self.nz, dims='mid_date').chunk(
             chunks=self.ds.chunks['mid_date'])
         self.ds['source'] = xr.DataArray(['IGE'] * self.nz, dims='mid_date').chunk(
             chunks=self.ds.chunks['mid_date'])
@@ -641,22 +680,30 @@ class cube_data_class:
             self.ds = self.ds.sel(
                 mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
                         ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
+            
+        # Set errors equal to one (no information on the error here)
+        self.ds['errorx'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
+            chunks=self.ds.chunks['mid_date'])
+        self.ds['errory'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
+            chunks=self.ds.chunks['mid_date'])
 
-    def load_charrier(self, filepath, conf=False, pick_date=None, subset=None,
-                      pick_sensor=None, pick_temp_bas=None, buffer=None,
-                      verbose=False, proj='EPSG:4326'):
+
+    def load_charrier(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
+                    pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+        
         """
         Load a cube dataset written by L.Charrier et al.
-        :param filepath: str or None, filepath of the dataset, if None the code will search which
-        :param conf: True or False, if True convert the error in confidence between 0 and 1
-        :param pick_date: a list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param subset: a list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
-        :param pick_sensor: a list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: a list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param buffer: a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in pixels)
-        :param proj: str, projection of the buffer or subset which is given, e.g. EPSG:4326
-        :param verbose: bool, display some text
-        :return: cube_data_class object where cube_data_class.ds is an xarray.DataArray
+
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -722,25 +769,26 @@ class cube_data_class:
         if 'sensor' not in self.ds.variables:
             self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
                 chunks=self.ds.chunks['mid_date'])
-
-    def load(self, filepath=None, conf=False, pick_date=None, subset=None,
-             pick_sensor=None, pick_temp_bas=None, buffer=None, proj=None, chunks={},
-             verbose=True):
-        """
-        Load a cube dataset which could be in format netcdf or zarr
-        :param filepath: str or None, filepath of the dataset, if None the code will search which
-        :param conf: True or False, if True convert the error in confidence between 0 and 1
-        :param pick_date: a list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param subset: a list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
-        :param pick_sensor: a list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: a list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param buffer: a list of 3 float, the first is the longitude, the second the latitude of the central point, the last is the buffer around which the subset will be performed (in pixels)
-        :param proj: str, projection of the buffer or subset which is given, e.g. EPSG:4326
-        :param chunks: dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
+    
+    def load(self, filepath, chunks={}, conf=False, subset=None, buffer=None, pick_date=None, 
+             pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+        
+        """        
+        Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
+        
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
                        chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
                        chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
-        :param verbose: bool, display some text
-        :return: cube_data_class object where cube_data_class.ds is an xarray.DataArray
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
         
         time_dim_name = {
@@ -826,7 +874,11 @@ class cube_data_class:
         if verbose:
             print(self.ds.author)
 
-    # ====== = ====== CONVERT CUBES DATA TO LIST OR ARRAY ====== = ======
+
+    # %% ==================================================================== #
+    #                                 ACCESSORS                               #
+    # =====================================================================%% #
+    
     def sensor_(self):
         return self.ds['sensor'].values.tolist()
 
@@ -858,7 +910,10 @@ class cube_data_class:
     def vv_(self):
         return np.sqrt(self.ds['vx'] ** 2 + self.ds['vy'] ** 2)
 
-    # ====== = ====== PROCESS ON PIXEL BASIS  ====== = ======
+
+    # %% ==================================================================== #
+    #                         PIXEL LOADING METHODS                           #
+    # =====================================================================%% #
 
     def load_pixel_for_one_dataset(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
                                    merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
@@ -885,8 +940,12 @@ class cube_data_class:
 
             # Interpolate only necessary variables and drop NaN values
             if interp == 'nearest':
-                data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
-                    dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
+                # data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
+                #     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
+                data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep]
+                print(data.sizes)
+                data = data.dropna(dim='mid_date')
+                print(data.sizes)
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
@@ -922,6 +981,7 @@ class cube_data_class:
             mean = None
             dates_range = None
 
+        # data_values is composed of vx, vy, errorx, errory, temporal baseline
         if visual:
             data_str = data[['sensor', 'source']].to_array().values.T
             data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
@@ -940,7 +1000,8 @@ class cube_data_class:
     def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
                    visual=False, rolling_mean=None, verbose=False):
         '''
-        Load data over one pixel
+        Load data over one pixel.
+        
         :param i: int, x coordinate
         :param j: int, y coordinate
         :param unit: int, 365 in the unit is 'm/y' and 1 if the unit is 'm/d'
@@ -960,7 +1021,9 @@ class cube_data_class:
 
 
     def coord2pix(self, x, y):
+        
         '''Convert a point in coordinates to a point in pixels'''
+        
         try:
             i = int(np.where(np.round(self.ds['x']).astype('int') == round(x))[0])
             j = int(np.where(np.round(self.ds['y']).astype('int') == round(y))[0])
@@ -973,131 +1036,128 @@ class cube_data_class:
                     self.ds['y'][1] - self.ds['y'][0]))  # y et j varient en sens inverse
         return i, j
 
-    # ====== = ====== PROCESS ON CUBE ====== = ======
 
-    def preData_np(
-            self,
-            i=None,
-            j=None,
-            smooth_method="gaussian",
-            s_win=3,
-            t_win=90,
-            sigma=3,
-            order=3,
-            unit=365,
-            delete_outliers=None,
-            flags=None,
-            regu=1,solver='LSMR_ini',
-            proj="EPSG:4326",
-            velo_or_disp="velo",
-            merged=None,
-            verbose=False,
-    ):
+    # %% ==================================================================== #
+    #                             CUBE PROCESSING                             #
+    # =====================================================================%% #
+
+    def preData_np(self, i=None, j=None, smooth_method="gaussian", s_win=3, t_win=90, sigma=3,
+                   order=3, unit=365, delete_outliers=None, flags=None, regu=1, solver='LSMR_ini',
+                   proj="EPSG:4326", velo_or_disp="velo", verbose=False):
+        
         """
-        Preprocess data to be processed on cube
-        :param i: int, x-coordinate of the considered pixel
-        :param j: int, y-coordinate of the considered pixel
-        :param smooth_method: string, ("gaussian", "median", "emwa", "savgol")
-        :param s_win: int, size of the spatial window
-        :param t_win: int, size of the temporal window, required for 
-        :param sigma: int, size of the gaussian window
-        :param order: int, order of the savgol smoothing
-        :param unit: int, 365 of the unit is m/y 1 if the unit is m/d
-        :param delete_outliers: None or int, if int delete all velocities which a quality indicator higher than delete_outliers
-        :param regu: int or string : regularisation of the solver
-        :param proj: string EPSG of i,j projection
-        :param velo_or_disp: string, 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity
-        :param merged: list, cubes to merge to the current data cube
-        :param verbose: bool, do you want to plot some text
+        Preprocess data to be processed on cube.
+        
+        Parameters:\n
+        :param i (int or None): x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
+        :param j (int or None): y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
+        :param smooth_method (string): Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
+        :param s_win (int): Size of the spatial window (default is 3)
+        :param t_win (int): Time window size for 'ewma' smoothing (default is 90)
+        :param sigma (int): Standard deviation for 'gaussian' filter (default is 3)
+        :param order (int): Order of the smoothing function (default is 3)
+        :param unit (int): 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
+        :param delete_outliers (int or None): If int delete all velocities which a quality indicator higher than delete_outliers (defau)
+        :param regu (int or string): Regularisation of the solver (default is 1)
+        :param proj (string): EPSG of i,j projection (default is 'EPSG:4326')
+        :param velo_or_disp (string): 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
+        :param verbose (bool): Print informations throughout the process (default is False)
+        
+        Returns:\n
         :return:
         """
 
-        def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
+        # def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
+        #     """
+        #     A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
+
+        #     Parameters:
+        #     - array: input dask.array data
+        #     - dates: time labels for input array, in datetime format, should have same length as array
+        #     - s_win: window size for spatial average (default is 3)
+        #     - t_win: time window size for ewma smoothing (default is 90)
+        #     - sigma: standard deviation for gaussian filter (default is 3)
+        #     - radius: radius for gaussian filter (default is 90)
+        #     - time_axis: optional parameter for time axis (default is 2)
+
+        #     Returns:
+        #     - dask array with exponential smoothed velocity
+        #     """
+
+        #     from dask.array.lib.stride_tricks import sliding_window_view
+
+        #     # calculate the mean of the velocity over the spatial window
+        #     if verbose: start = time.time()
+        #     # chunk size : ((10, 2), (20, 4), (61366,))
+        #     spatial_mean = da.nanmean(sliding_window_view(da_arr.data, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+        #     spatial_mean = da.pad(
+        #         spatial_mean,
+        #         ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+        #         mode="edge",
+        #     )
+        #     # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
+
+        #     date_out = date_range[:-1] + np.diff(date_range) // 2
+
+        #     """
+        #     import matplotlib.pyplot as plt
+        #     f, ax = plt.subplots(1, 1, figsize=(12, 6))
+        #     mid_date = cube['mid_date'].values
+        #     ax.scatter(mid_date, series, marker='_', s=15, color='gray')
+        #     ax.scatter(date_out, gaussian_filt, marker='v', s=15, color='blue')
+        #     ax.scatter(date_out, median_filt, marker='^', s=15, color='green')
+        #     ax.scatter(date_out, savgol_filt, marker='p', s=15, color='orange')
+        #     ax.scatter(date_out, ewm_filt, marker='o', s=15, color='purple')
+        #     ax.legend(['Observed', 'Gaussian', 'Median', 'SavGol', 'EWMA'], loc='upper left')
+        #     f.savefig('compasion_different_smoother.png')
+        #     """
+            
+        #     with ProgressBar():
+        #         ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, smooth_method=smooth_method,
+        #                                          sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
+
+        #     if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
+
+        #     return ewm_smooth.compute(), np.unique(date_out)
+        
+        
+        def loop_rolling2(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2, verbose=False):
+            
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
-            Parameters:
-            - array: input dask.array data
-            - dates: time labels for input array, in datetime format, should have same length as array
-            - s_win: window size for spatial average (default is 3)
-            - t_win: time window size for ewma smoothing (default is 90)
-            - sigma: standard deviation for gaussian filter (default is 3)
-            - radius: radius for gaussian filter (default is 90)
-            - time_axis: optional parameter for time axis (default is 2)
+            Parameters:\n
+            :param da_array: Input dask.array data
+            :param mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
+            :param date_range: 
+            :param smooth_method: Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
+            :param s_win: Window size for spatial average (default is 3)
+            :param t_win: Time window size for 'ewma' smoothing (default is 90)
+            :param sigma: Standard deviation for 'gaussian' filter (default is 3)
+            :param order: Order of the smoothing function (default is 3)
+            :param baseline:
+            :param time_axis: Optional parameter for time axis (default is 2)
+            :param verbose: Print informations throughout the process (default is False)
 
-            Returns:
-            - dask array with exponential smoothed velocity
+            Returns:\n
+            :return: Dask array with exponential smoothed velocity
             """
 
             from dask.array.lib.stride_tricks import sliding_window_view
 
-            # calculate the mean of the velocity over the spatial window
-            if verbose: start = time.time()
-            # chunk size : ((10, 2), (20, 4), (61366,))
-            spatial_mean = da.nanmean(sliding_window_view(da_arr.data, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
-            spatial_mean = da.pad(
-                spatial_mean,
-                ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
-                mode="edge",
-            )
-            # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
-
-            date_out = date_range[:-1] + np.diff(date_range) // 2
-
-            """
-            import matplotlib.pyplot as plt
-            f, ax = plt.subplots(1, 1, figsize=(12, 6))
-            mid_date = cube['mid_date'].values
-            ax.scatter(mid_date, series, marker='_', s=15, color='gray')
-            ax.scatter(date_out, gaussian_filt, marker='v', s=15, color='blue')
-            ax.scatter(date_out, median_filt, marker='^', s=15, color='green')
-            ax.scatter(date_out, savgol_filt, marker='p', s=15, color='orange')
-            ax.scatter(date_out, ewm_filt, marker='o', s=15, color='purple')
-            ax.legend(['Observed', 'Gaussian', 'Median', 'SavGol', 'EWMA'], loc='upper left')
-            f.savefig('compasion_different_smoother.png')
-            """
-            
-            with ProgressBar():
-                ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, smooth_method=smooth_method,
-                                                 sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
-
-            if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
-
-            return ewm_smooth.compute(), np.unique(date_out)
-        
-        
-        def loop_rolling2(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2,verbose=False):
-            """
-            A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
-
-            Parameters:
-            - array: input dask.array data
-            - dates: time labels for input array, in datetime format, should have same length as array
-            - s_win: window size for spatial average (default is 3)
-            - t_win: time window size for ewma smoothing (default is 90)
-            - sigma: standard deviation for gaussian filter (default is 3)
-            - radius: radius for gaussian filter (default is 90)
-            - time_axis: optional parameter for time axis (default is 2)
-
-            Returns:
-            - dask array with exponential smoothed velocity
-            """
-
-            from dask.array.lib.stride_tricks import sliding_window_view
-
-            #Compute the dates of the estimated displacements time series
+            # Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
             if verbose: start = time.time()
-            
+                
             if baseline is not None:
                 baseline = baseline.compute()
                 idx = np.where(baseline < 700 )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
-            #Apply the selected kernel in time
+            # Apply the selected kernel in time
             if verbose:
-                with ProgressBar():#plot a progress bar
+                with ProgressBar(): # Plot a progress bar
                     filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                  sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
             else:
@@ -1106,15 +1166,15 @@ class cube_data_class:
 
             if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
 
-            #Spatial average
-            if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :#The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
+            # Spatial average
+            if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :# The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
                 spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
                 spatial_mean = da.pad(
                     spatial_mean,
                     ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
                     mode="edge",
                 )
-            else:spatial_mean = filtered_in_time
+            else: spatial_mean = filtered_in_time
             
             # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
             
@@ -1145,7 +1205,6 @@ class cube_data_class:
             """
             
             return spatial_mean.compute(), np.unique(date_out)
-
               
         if i is not None and j is not None:
             if verbose: print("Clipping dataset to individual pixel: (x, y) = ({},{})".format(i, j))
@@ -1229,7 +1288,7 @@ class cube_data_class:
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
-            if verbose:start = time.time()
+            if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling2(
                 cube["vx"],
                 cube["mid_date"],
@@ -1306,47 +1365,52 @@ class cube_data_class:
         # TODO calculate the mean, std, dates_range here for the whole cube
         return obs_filt
 
-    def align_cube(self, cube, reproj_vel=True, reproj_coord=True, interp_method='nearest'):
-        """
-         Reproject cube to match the resolution, projection, and region of self
-         
-        :param cube: cube_data_classxr, cube to align to self
-        :param reproj_vel: bool, if the velocity have to be reprojected -> it will modify their value
-        :param reproj_coord: bool, if the coordinates have to be interpolated (using interp_method)
-        :param interp_method: interpolation method used to reproject cube
+
+    def align_cube(self, cube, unit=365, reproj_vel=True, reproj_coord=True, interp_method='nearest'):
         
-        :return cube: cube projected to self
+        """
+        Reproject cube to match the resolution, projection, and region of self.
+        
+        Parameters:\n
+        :param cube (cube_data_classxr): Cube to align to self
+        :param unit (int): Unit of the velocities (365 for m/y, 1 for m/d) (default is 365)
+        :param reproj_vel (bool): Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
+        :param reproj_coord (bool): Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
+        :param interp_method (string): Interpolation method used to reproject cube (default is 'nearest')
+        
+        Returns:\n
+        :return: Cube projected to self
         """
 
-        # if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
-        #     grid = np.meshgrid(cube2.ds['x'], cube2.ds['y'])
-        #     temp = cube2.temp_base_()
-        #     endx = np.array([(np.ma.masked_invalid(cube2.ds['vx'][z]) * temp[z] / conversion) + grid[0] for z in
-        #                      range(
-        #                          cube2.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in x
-        #     endy = np.array(
-        #         [(np.ma.masked_invalid(cube2.ds['vy'][z]) * temp[z] / conversion) + grid[1] for z in
-        #          range(
-        #              cube2.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in y
+        if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
+            grid = np.meshgrid(cube.ds['x'], cube.ds['y'])
+            temp = cube.temp_base_()
+            endx = np.array([(np.ma.masked_invalid(cube.ds['vx'][z]) * temp[z] / unit) + grid[0] for z in
+                              range(
+                                  cube.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in x
+            endy = np.array(
+                [(np.ma.masked_invalid(cube.ds['vy'][z]) * temp[z] / unit) + grid[1] for z in
+                  range(
+                      cube.nz)])  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in y
 
-        #     # reprojection of the final coordinate of each pixel displaced by the corresponding velocity vector
-        #     transformer = Transformer.from_crs(cube2.ds.proj4, self.ds.proj4)
-        #     t = np.array([transformer.transform(endx[z], endy[z]) for z in range(cube2.nz)])
-        #     del endx, endy
+            # reprojection of the final coordinate of each pixel displaced by the corresponding velocity vector
+            transformer = Transformer.from_crs(cube.ds.proj4, self.ds.proj4)
+            t = np.array([transformer.transform(endx[z], endy[z]) for z in range(cube.nz)])
+            del endx, endy
 
-        #     # Computation of the difference between final and oringinal coordinates in the new system
-        #     grid = transformer.transform(grid[0], grid[1])
-        #     vx = np.array([(grid[0] - t[z, 0, :, :]) / temp[z] * conversion for z in
-        #                    range(cube2.nz)])  # positive toward the West
-        #     vy = np.array([(t[z, 1, :, :] - grid[1]) / temp[z] * conversion for z in
-        #                    range(cube2.nz)])  # positive toward the North
-        #     cube2.ds['vx'] = xr.DataArray(vx.astype('float32'), dims=['mid_date', 'y', 'x'],
-        #                                   coords={'mid_date': cube2.ds.mid_date, 'y': cube2.ds.y, 'x': cube2.ds.x})
-        #     cube2.ds['vx'].encoding = {'vx': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
-        #     cube2.ds['vy'] = xr.DataArray(vy.astype('float32'), dims=['mid_date', 'y', 'x'],
-        #                                   coords={'mid_date': cube2.ds.mid_date, 'y': cube2.ds.y, 'x': cube2.ds.x})
-        #     cube2.ds['vy'].encoding = {'vy': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
-        #     del vx, vy  
+            # Computation of the difference between final and oringinal coordinates in the new system
+            grid = transformer.transform(grid[0], grid[1])
+            vx = np.array([(grid[0] - t[z, 0, :, :]) / temp[z] * unit for z in
+                            range(cube.nz)])  # positive toward the West
+            vy = np.array([(t[z, 1, :, :] - grid[1]) / temp[z] * unit for z in
+                            range(cube.nz)])  # positive toward the North
+            cube.ds['vx'] = xr.DataArray(vx.astype('float32'), dims=['mid_date', 'y', 'x'],
+                                          coords={'mid_date': cube.ds.mid_date, 'y': cube.ds.y, 'x': cube.ds.x})
+            cube.ds['vx'].encoding = {'vx': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
+            cube.ds['vy'] = xr.DataArray(vy.astype('float32'), dims=['mid_date', 'y', 'x'],
+                                          coords={'mid_date': cube.ds.mid_date, 'y': cube.ds.y, 'x': cube.ds.x})
+            cube.ds['vy'].encoding = {'vy': {'dtype': 'float32', 'scale_factor': 0.1, 'units': 'm/y'}}
+            del vx, vy  
         
         # if reproj_coord:
         #     # Convert the system of coordinate and ajust the spatial resolution of self to match the resolution, projection, and region of cube
@@ -1374,9 +1438,16 @@ class cube_data_class:
             cube.ny = cube.ds.dims['y']
             cube.ds = cube.ds.assign_coords({"x": self.ds.x, "y": cube.ds.y})
             
-        cube.ds = cube.ds.assign_attrs({'author': f'{cube.ds.author}_aligned'})
+        cube.ds = cube.ds.assign_attrs({'author': f'{cube.ds.author} aligned'})
         
         return cube
+
+
+    def merge_cube(self, cube):
+        self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
+        self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
+        self.nz = self.ds['mid_date'].size
+        
 
     def write_result_TICOI(self, result, source, sensor, filename='Time_series', savepath=None, result_quality=None,
                            verbose=False):
