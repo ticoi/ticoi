@@ -24,9 +24,10 @@ import scipy.sparse as sp
 import pandas as pd
 from scipy import stats
 from scipy import interpolate
-from ticoi.secondary_functions import Construction_A_LP, class_inversion, find_date_obs, Inversion_A_LP, \
-    Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation, reconstruct_Common_Ref
-from ticoi.secondary_functions import Construction_dates_range_np
+from ticoi.inversion_functions import Construction_A_LP, class_inversion, find_date_obs, Inversion_A_LP, \
+    Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation
+from ticoi.other_functions import reconstruct_Common_Ref
+from ticoi.inversion_functions import Construction_dates_range_np
 import warnings
 
 warnings.filterwarnings("ignore")
