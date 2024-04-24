@@ -23,13 +23,12 @@ import sklearn.metrics as sm
 import scipy.sparse as sp
 import pandas as pd
 from scipy import stats
-from matplotlib import colors
 from scipy import interpolate
-import copy
-from ticoi.secondary_functions import Construction_A_LP,class_inversion, find_date_obs, Inversion_A_LP, Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation, reconstruct_Common_Ref, hat_matrix, \
-    GCV_function
+from ticoi.secondary_functions import Construction_A_LP, class_inversion, find_date_obs, Inversion_A_LP, \
+    Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation, reconstruct_Common_Ref
 from ticoi.secondary_functions import Construction_dates_range_np
 import warnings
+
 warnings.filterwarnings("ignore")
 
 
@@ -194,7 +193,7 @@ def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, res
         return result_dx, result_dy, weightx, weighty, None, None
 
     if regu == 'directionxy':
-        if mode == 'LSMR_ini' :
+        if mode == 'LSMR_ini':
             result_dx, result_dy, residu_normx, residu_normy = Inversion_A_LPxydir(A, dates_range, 0, data, mode,
                                                                                    np.concatenate([weightx, weighty]),
                                                                                    mu, coef=coef,
@@ -228,9 +227,11 @@ def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, res
                                                      accel=accel, linear_operator=linear_operator)
 
     else:  # no initialization
-        result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef, result_quality=result_quality, regu=regu, accel=accel,
+        result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef,
+                                                 result_quality=result_quality, regu=regu, accel=accel,
                                                  linear_operator=linear_operator)
-        result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef, result_quality=result_quality, regu=regu, accel=accel,
+        result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef,
+                                                 result_quality=result_quality, regu=regu, accel=accel,
                                                  linear_operator=linear_operator)
 
     return result_dx, result_dy, weightx, weighty, residu_normx, residu_normy
@@ -276,7 +277,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
 
     if data[0].size:  # If there are available data on this pixel
 
-        #Split the data, which one dtype per array
+        # Split the data, which one dtype per array
         if len(data) == 3:
             data_dates, data_values, data_str = data
         else:
@@ -291,10 +292,11 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
                                   dates_range)  # 1.93 ms ± 219 µs per loop (mean ± std. dev. of 7 runs, 1 loop each)
         else:  # use a linear operator to solve the inversion
             linear_operator = class_inversion()
-            linear_operator.load(find_date_obs(data_dates[:, :2], dates_range), dates_range, coef) #load parameter of the linear operator
+            linear_operator.load(find_date_obs(data_dates[:, :2], dates_range), dates_range,
+                                 coef)  # load parameter of the linear operator
             A = sp.linalg.LinearOperator((data_values.shape[0], len(dates_range) - 1),
                                          matvec=linear_operator.matvec,
-                                         rmatvec=linear_operator.rmatvec) #build A
+                                         rmatvec=linear_operator.rmatvec)  # build A
             mu = None
 
         # Set a weight of 0, for large temporal baseline in the first inversion
@@ -307,7 +309,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         if not visual: data_values = np.delete(data_values, [2, 3],
                                                1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
-        #493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+        # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
         if not linear_operator:
             if regu == 'directionxy':
                 # Constrain according to the vectorial product, the magnitude of the vector corresponds to mean2, the magnitude of a rolling mean
@@ -318,9 +320,11 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         #### Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
         if regu == '1accelnotnull':
-            accel = [np.diff(mean[0]), np.diff(mean[1])] #compute acceleration based on the moving average, computing using a given kernel
+            accel = [np.diff(mean[0]), np.diff(
+                mean[1])]  # compute acceleration based on the moving average, computing using a given kernel
             mean_ini = [np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, 'D')) for i in
-                        range(len(mean))]#compute what should be the displacement in X according to the moving average, computing using a given kernel
+                        range(
+                            len(mean))]  # compute what should be the displacement in X according to the moving average, computing using a given kernel
 
         elif mean is not None and solver == 'LSMR_ini':  # initilization is set according the average of the whole time series
             mean_ini = [np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, 'D') / unit) for i in
@@ -330,9 +334,8 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
             mean_ini = None
             accel = None
 
-
         #### Inversion
-        #87.5 ms ± 668 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
+        # 87.5 ms ± 668 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
         if regu == 'directionxy':
             result_dx, result_dy, residu_normx, residu_normy = Inversion_A_LPxydir(A, dates_range, 0, data_values,
                                                                                    solver,
@@ -357,7 +360,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
             # coef = coef * 1000
 
         # Second Iteration
-        #1.11 s ± 17.5 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+        # 1.11 s ± 17.5 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
         if iteration:
             result_dx_i, result_dy_i, weight_2x, weight_2y, residu_normx, residu_normy = inversion_iteration(
                 data_values, A,
@@ -372,7 +375,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
                 mean=mean, linear_operator=linear_operator, result_quality=result_quality, ini=None, accel=accel)
             # print('nb_max_iteration',nb_max_iteration)
             # Continue to iterate until the difference between two results is lower than treshold_it or the number of iteration larger than 10
-            #6 sec
+            # 6 sec
             i = 2
             while (np.mean(abs(result_dx_i - result_dx)) > treshold_it or np.mean(
                     abs(result_dy_i - result_dy)) > treshold_it) and i < nb_max_iteration:
@@ -409,7 +412,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
             result_dy_i = result_dy
             result_dx_i = result_dx
 
-        if np.isnan(result_dx_i).all():#no results
+        if np.isnan(result_dx_i).all():  # no results
             return None, None, None
 
         # compute the number of observations which have contributed to each estimated displacement
@@ -419,8 +422,8 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         else:
             X_countx = X_county = np.ones(result_dx_i.shape[0])
 
-        #propagate the error
-        #TODO terminate propgation of errors
+        # propagate the error
+        # TODO terminate propgation of errors
         if result_quality is not None and 'Error_propagation' in result_quality:
             def Prop_weight(weight, Residu):
                 W = np.diag(weight_ix.astype('float32'))
@@ -476,7 +479,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         if verbose: print(f'NO DATA TO INVERSE AT POINT {i, j}')
         return None, None, None
 
-    #pandas dataframe with the saved results
+    # pandas dataframe with the saved results
     result = pd.DataFrame({
         'date1': dates_range[:-1],
         'date2': dates_range[1:],
@@ -485,12 +488,12 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         'X_countx': X_countx,
         'X_county': X_county
     })
-    if residu_normx is not None: #add the norm of the residual
+    if residu_normx is not None:  # add the norm of the residual
         NormR = np.zeros(result.shape[0])
         NormR[:4] = np.hstack([residu_normx, residu_normy])
         result['NormR'] = NormR
         del NormR
-    if result_quality is not None:#add the error propagation
+    if result_quality is not None:  # add the error propagation
         if 'Error_propagation' in result_quality:
             result['Error_x'] = prop_wieght_diagx
             result['Error_y'] = prop_wieght_diagy
@@ -777,7 +780,9 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
 
     return dataf_lp
 
-def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,interpolation_load_pixel='nearest',iteration=True, interval_output=1,
+
+def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, interpolation_load_pixel='nearest',
+            iteration=True, interval_output=1,
             first_date_interpol=None, proj='EPSG:4326',
             last_date_interpol=None, treshold_it=0.1, conf=True, flags=None, regu=1, interpolation_bas=False,
             option_interpol='spline', redundancy=False, detect_temporal_decorrelation=True, unit=365,
@@ -823,7 +828,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,i
     '''
     # LOADING OF DATA OVER ONE PIXEL
     data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver,
-                    coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
+                           coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
     if flags is not None:
         regu, coef = data[3], data[4]
     # INVERSION
@@ -833,8 +838,8 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None,i
                        verbose=verbose, unit=unit,
                        conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=treshold_it,
                        detect_temporal_decorrelation=detect_temporal_decorrelation,
-                       linear_operator=linear_operator, result_quality=result_quality, nb_max_iteration=nb_max_iteration)
-
+                       linear_operator=linear_operator, result_quality=result_quality,
+                       nb_max_iteration=nb_max_iteration)
 
     if not interpolation: return result
 
