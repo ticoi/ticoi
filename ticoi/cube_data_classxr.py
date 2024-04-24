@@ -28,23 +28,22 @@ from ticoi.secondary_functions import Construction_dates_range_np
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 
-def determine_optimal_chunk_size(
-        ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True
-):
+def determine_optimal_chunk_size(ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True):
+    
     """
     A function to determine the optimal chunk size for a given time series array based on its size.
     
-    Parameters:
-    - ds: xarray Dataset containing the time series array
-    - variable_name: Name of the variable containing the time series array (default is "vx")
-    - x_dim: Name of the x dimension in the array (default is "x")
-    - y_dim: Name of the y dimension in the array (default is "y")
-    - verbose: Boolean flag to control verbosity of output (default is True)
+    Parameters:\n
+    :param ds: xarray Dataset containing the time series array
+    :param variable_name: Name of the variable containing the time series array (default is "vx")
+    :param x_dim: Name of the x dimension in the array (default is "x")
+    :param y_dim: Name of the y dimension in the array (default is "y")
+    :param verbose: Boolean flag to control verbosity of output (default is True)
     
-    Returns:
-    - tc: Chunk size along the time dimension
-    - yc: Chunk size along the y dimension
-    - xc: Chunk size along the x dimension
+    Returns:\n
+    :return tc: Chunk size along the time dimension
+    :return yc: Chunk size along the y dimension
+    :return xc: Chunk size along the x dimension
     """
     
     if verbose:
@@ -94,12 +93,12 @@ def numpy_ewma_vectorized(series, halflife=30):
     """
     Calculate the exponentially weighted moving average of a series using vectorized operations.
 
-    Parameters:
-        - series: Input series for which the EWMA needs to be calculated
-        - halflife: Halflife parameter for the EWMA calculation (default is 30)
+    Parameters:\n
+    :param series: Input series for which the EWMA needs to be calculated
+    :param halflife: Halflife parameter for the EWMA calculation (default is 30)
 
-    Returns:
-        - The exponentially weighted moving average of the input series
+    Returns:\n
+    :return: The exponentially weighted moving average of the input series
     """
     
     alpha = 1 - np.exp(-np.log(2) / halflife)
@@ -120,16 +119,16 @@ def ewma_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=None
     """
     Calculates an exponentially weighted moving average (EWMA) of a series at specific time points.
 
-    Parameters:
-        - series: Input series to be smoothed
-        - t_obs: Time points of the observed series
-        - t_interp: Time points to interpolate the series at
-        - t_out: Time points to return the smoothed series at
-        - t_win: Smoothing window size (default is 90)
-        - halflife: Exponential decay factor (default is 90)
+    Parameters:\n
+    :param series: Input series to be smoothed
+    :param t_obs: Time points of the observed series
+    :param t_interp: Time points to interpolate the series at
+    :param t_out: Time points to return the smoothed series at
+    :param t_win: Smoothing window size (default is 90)
+    :param halflife: Exponential decay factor (default is 90)
 
-    Returns:
-        - The smoothed series at the specified time points
+    Returns:\n
+    :return: The smoothed series at the specified time points
     """
     
     t_obs = t_obs[~np.isnan(series)]
@@ -147,17 +146,17 @@ def gaussian_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=3, order=3):
     """
     Perform Gaussian smoothing on a time series data.
 
-    Parameters:
-        - series: Input time series data
-        - t_obs: Time observations corresponding to the input data
-        - t_interp: Time points for interpolation
-        - t_out: Time points for the output
-        - t_win: Smoothing window size (default is 90)
-        - sigma: Standard deviation for Gaussian kernel (default is 3)
-        - order: Order of the smoothing function (default is 3)
+    Parameters:\n
+    :param series: Input time series data
+    :param t_obs: Time observations corresponding to the input data
+    :param t_interp: Time points for interpolation
+    :param t_out: Time points for the output
+    :param t_win: Smoothing window size (default is 90)
+    :param sigma: Standard deviation for Gaussian kernel (default is 3)
+    :param order: Order of the smoothing function (default is 3)
 
-    Returns:
-        - The smoothed time series data at the specified output time points
+    Returns:\n
+    :return:The smoothed time series data at the specified output time points
     """
     
     t_obs = t_obs[~np.isnan(series)]
@@ -177,15 +176,15 @@ def median_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=No
     """
     Calculate a smoothed series using median filtering.
 
-    Parameters:
-        - series: The input series to be smoothed
-        - t_obs: The time observations corresponding to the input series
-        - t_interp: The time values for interpolation
-        - t_out: The time values for the output series
-        - t_win: Smoothing window size (default is 90)
+    Parameters:\n
+    :param series: The input series to be smoothed
+    :param t_obs: The time observations corresponding to the input series
+    :param t_interp: The time values for interpolation
+    :param t_out: The time values for the output series
+    :param t_win: Smoothing window size (default is 90)
     
-    Returns:
-        - The smoothed series corresponding to the output time values t_out
+    Returns:\n
+    :return:The smoothed series corresponding to the output time values t_out
     """
     
     t_obs = t_obs[~np.isnan(series)]
@@ -204,16 +203,16 @@ def savgol_smooth(series, t_obs, t_interp, t_out, t_win=90, sigma=None, order=3)
     """
     Perform Savitzky-Golay smoothing on a time series.
 
-    Parameters:
-        - series: Input time series to be smoothed
-        - t_obs: Observed time points corresponding to the input series
-        - t_interp: Time points for interpolation
-        - t_out: Time points to extract the smoothed values for
-        - t_win: Smoothing window size (default is 90)
-        - order: Order of the polynomial used in the smoothing (default is 3)
+    Parameters:\n
+    :param series: Input time series to be smoothed
+    :param t_obs: Observed time points corresponding to the input series
+    :param t_interp: Time points for interpolation
+    :param t_out: Time points to extract the smoothed values for
+    :param t_win: Smoothing window size (default is 90)
+    :param order: Order of the polynomial used in the smoothing (default is 3)
 
-    Returns:
-        - The smoothed time series at the specified output time points
+    Returns:\n
+    :return: The smoothed time series at the specified output time points
     """
     
     t_obs = t_obs[~np.isnan(series)]
@@ -231,19 +230,19 @@ def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t
     """
     Apply smoothing to the input Dask array along the specified axis using the specified method.
     
-    Parameters:
-        - dask_array: Input Dask array to be smoothed.
-        - t_obs: Array of observation times corresponding to the input dask_array.
-        - t_interp: Array of times at which to interpolate the data.
-        - t_out: Array of times at which to output the smoothed data.
-        - method: Smoothing method to be used ("gaussian", "emwa", "median", "savgol") (default is "gaussian")
-        - t_win: Smoothing window size (default is 90) 
-        - sigma: Standard deviation for Gaussian smoothing (default is 3)
-        - order : Order of the smoothing function (default is 3)
-        - axis: Axis along which to apply the smoothing.
+    Parameters:\n
+    :param dask_array: Input Dask array to be smoothed.
+    :param t_obs: Array of observation times corresponding to the input dask_array.
+    :param t_interp: Array of times at which to interpolate the data.
+    :param t_out: Array of times at which to output the smoothed data.
+    :param method: Smoothing method to be used ("gaussian", "emwa", "median", "savgol") (default is "gaussian")
+    :param t_win: Smoothing window size (default is 90) 
+    :param sigma: Standard deviation for Gaussian smoothing (default is 3)
+    :param order : Order of the smoothing function (default is 3)
+    :param axis: Axis along which to apply the smoothing.
 
-    Returns:
-        - A Dask array containing the smoothed data.
+    Returns:\n
+    :return: A Dask array containing the smoothed data.
     """
     
     # TODO : using scipy.interpolate instead of np.interp to do it for one chunk?  
@@ -261,18 +260,18 @@ def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_wi
     """
     A function that wraps a Dask array to apply a smoothing function. 
     
-    Parameters:
-        - dask_array: Dask array to be smoothed
-        - dates: Array of the central dates of the data
-        - t_out: Output timestamps for the smoothed array
-        - smooth_method: Smoothing method to be used ("gaussian", "emwa", "median", "savgol") (default is "gaussian")
-        - t_win: Smoothing window size (default is 90)
-        - sigma: Standard deviation for Gaussian smoothing (default is 3)
-        - order: Order of the smoothing function (default is 3)
-        - axis: Axis along which smoothing is applied (default is 2)
+    Parameters:\n
+    :param dask_array: Dask array to be smoothed
+    :param dates: Array of the central dates of the data
+    :param t_out: Output timestamps for the smoothed array
+    :param smooth_method: Smoothing method to be used ("gaussian", "emwa", "median", "savgol") (default is "gaussian")
+    :param t_win: Smoothing window size (default is 90)
+    :param sigma: Standard deviation for Gaussian smoothing (default is 3)
+    :param order: Order of the smoothing function (default is 3)
+    :param axis: Axis along which smoothing is applied (default is 2)
         
-    Returns:
-        - Smoothed dask array with specified parameters.
+    Returns:\n
+    :return: Smoothed dask array with specified parameters.
     """
     
     # Conversion of the mid_date of the observations into numerical values
@@ -338,9 +337,9 @@ class cube_data_class:
         """
         Directly crop the dataset according to 4 coordinates.
         
-        Parameters :
-            - proj: EPSG system of the coordinates given in subset
-            - subset: A list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
+        Parameters:\n
+        :param proj: EPSG system of the coordinates given in subset
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
         """
         
         if CRS(self.ds.proj4) != CRS(proj):
@@ -363,9 +362,9 @@ class cube_data_class:
         """
         Directly crop the dataset around a given pixel, according to a given buffer
         
-        Parameters :
-            - proj: EPSG system of the coordinates given in subset
-            - buffer:  A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
+        Parameters:\n
+        :param proj: EPSG system of the coordinates given in subset
+        :param buffer:  A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
         """
         
         if CRS(self.ds.proj4) != CRS(proj): # Convert the coordinates from proj to self.ds.proj4
@@ -399,16 +398,16 @@ class cube_data_class:
         """
         Load a cube dataset written by ITS_LIVE.
         
-        Parameters:
-            - filepath (str): Filepath of the dataset
-            - conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-            - subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-            - buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-            - pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-            - pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-            - pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-            - proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-            - verbose (bool): Print informations throughout the process (default is False)
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
         
         if verbose:
@@ -501,16 +500,16 @@ class cube_data_class:
         """
         Load a cube dataset written by R. Millan et al.
 
-        Parameters:
-            - filepath (str): Filepath of the dataset
-            - conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-            - subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-            - buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-            - pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-            - pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-            - pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-            - proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-            - verbose (bool): Print informations throughout the process (default is False)
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -611,16 +610,16 @@ class cube_data_class:
         """
         Load a cube dataset written by E. Ducasse et al.
         
-        Parameters:
-            - filepath (str): Filepath of the dataset
-            - conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-            - subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-            - buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-            - pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-            - pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-            - pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-            - proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-            - verbose (bool): Print informations throughout the process (default is False)
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -695,16 +694,16 @@ class cube_data_class:
         """
         Load a cube dataset written by L.Charrier et al.
 
-        Parameters:
-            - filepath (str): Filepath of the dataset
-            - conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-            - subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-            - buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-            - pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-            - pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-            - pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-            - proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-            - verbose (bool): Print informations throughout the process (default is False)
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -777,19 +776,19 @@ class cube_data_class:
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
-        Parameters:
-            - filepath (str): Filepath of the dataset
-            - chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
-                      chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
-                      chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
-            - conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-            - subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-            - buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-            - pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-            - pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-            - pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-            - proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-            - verbose (bool): Print informations throughout the process (default is False)
+        Parameters:\n
+        :param filepath (str): Filepath of the dataset
+        :param chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
+                       chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
+                       chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
+        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose (bool): Print informations throughout the process (default is False)
         """
         
         time_dim_name = {
@@ -917,7 +916,7 @@ class cube_data_class:
     # =====================================================================%% #
 
     def load_pixel_for_one_dataset(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
-                                   merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False, velo_or_disp='velo'):
+                                   merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
         # variables to keep
         var_to_keep = (
             ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
@@ -981,11 +980,6 @@ class cube_data_class:
         else:  # if there is no apriori and no initialization
             mean = None
             dates_range = None
-            
-        # the rolling smooth should be carried on velocity, while we need displacement during inversion
-        if velo_or_disp == "disp":  # to provide displacement values
-            data["vx"] = data["vx"] * data["temporal_baseline"] / unit
-            data["vy"] = data["vy"] * data["temporal_baseline"] / unit
 
         # data_values is composed of vx, vy, errorx, errory, temporal baseline
         if visual:
@@ -1004,9 +998,10 @@ class cube_data_class:
             return data, mean, dates_range
 
     def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
-                   visual=False, rolling_mean=None, verbose=False, velo_or_disp='disp'):
+                   visual=False, rolling_mean=None, verbose=False):
         '''
-        Load data over one pixel
+        Load data over one pixel.
+        
         :param i: int, x coordinate
         :param j: int, y coordinate
         :param unit: int, 365 in the unit is 'm/y' and 1 if the unit is 'm/d'
@@ -1053,23 +1048,23 @@ class cube_data_class:
         """
         Preprocess data to be processed on cube.
         
-        Parameters:
-            - i (int or None): x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
-            - j (int or None): y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
-            - smooth_method (string): Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
-            - s_win (int): Size of the spatial window (default is 3)
-            - t_win (int): Time window size for 'ewma' smoothing (default is 90)
-            - sigma (int): Standard deviation for 'gaussian' filter (default is 3)
-            - order (int): Order of the smoothing function (default is 3)
-            - unit (int): 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
-            - delete_outliers (int or None): If int delete all velocities which a quality indicator higher than delete_outliers (default is None)
-            - regu (int or string): Regularisation of the solver (default is 1)
-            - proj (string): EPSG of i,j projection (default is 'EPSG:4326')
-            - velo_or_disp (string): 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
-            - verbose (bool): Print informations throughout the process (default is False)
+        Parameters:\n
+        :param i (int or None): x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
+        :param j (int or None): y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
+        :param smooth_method (string): Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
+        :param s_win (int): Size of the spatial window (default is 3)
+        :param t_win (int): Time window size for 'ewma' smoothing (default is 90)
+        :param sigma (int): Standard deviation for 'gaussian' filter (default is 3)
+        :param order (int): Order of the smoothing function (default is 3)
+        :param unit (int): 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
+        :param delete_outliers (int or None): If int delete all velocities which a quality indicator higher than delete_outliers (defau)
+        :param regu (int or string): Regularisation of the solver (default is 1)
+        :param proj (string): EPSG of i,j projection (default is 'EPSG:4326')
+        :param velo_or_disp (string): 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
+        :param verbose (bool): Print informations throughout the process (default is False)
         
-        Returns:
-            - obs_filt:
+        Returns:\n
+        :return:
         """
 
         # def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
@@ -1131,21 +1126,21 @@ class cube_data_class:
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
-            Parameters:
-            - da_array: Input dask.array data
-            - mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
-            - date_range: 
-            - smooth_method: Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
-            - s_win: Window size for spatial average (default is 3)
-            - t_win: Time window size for 'ewma' smoothing (default is 90)
-            - sigma: Standard deviation for 'gaussian' filter (default is 3)
-            - order: Order of the smoothing function (default is 3)
-            - baseline:
-            - time_axis: Optional parameter for time axis (default is 2)
-            - verbose: Print informations throughout the process (default is False)
+            Parameters:\n
+            :param da_array: Input dask.array data
+            :param mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
+            :param date_range: 
+            :param smooth_method: Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
+            :param s_win: Window size for spatial average (default is 3)
+            :param t_win: Time window size for 'ewma' smoothing (default is 90)
+            :param sigma: Standard deviation for 'gaussian' filter (default is 3)
+            :param order: Order of the smoothing function (default is 3)
+            :param baseline:
+            :param time_axis: Optional parameter for time axis (default is 2)
+            :param verbose: Print informations throughout the process (default is False)
 
-            Returns:
-            - Dask array with exponential smoothed velocity
+            Returns:\n
+            :return: Dask array with exponential smoothed velocity
             """
 
             from dask.array.lib.stride_tricks import sliding_window_view
@@ -1376,15 +1371,15 @@ class cube_data_class:
         """
         Reproject cube to match the resolution, projection, and region of self.
         
-        Parameters:
-            - cube (cube_data_classxr): Cube to align to self
-            - unit (int): Unit of the velocities (365 for m/y, 1 for m/d) (default is 365)
-            - reproj_vel (bool): Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
-            - reproj_coord (bool): Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
-            - interp_method: Interpolation method used to reproject cube (default is 'nearest')
+        Parameters:\n
+        :param cube (cube_data_classxr): Cube to align to self
+        :param unit (int): Unit of the velocities (365 for m/y, 1 for m/d) (default is 365)
+        :param reproj_vel (bool): Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
+        :param reproj_coord (bool): Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
+        :param interp_method (string): Interpolation method used to reproject cube (default is 'nearest')
         
-        Returns:
-            - cube projected to self
+        Returns:\n
+        :return: Cube projected to self
         """
 
         if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
