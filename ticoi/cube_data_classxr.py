@@ -252,15 +252,11 @@ def dask_smooth(dask_array, t_obs, t_interp, t_out, filt_func=gaussian_smooth, t
                                              t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order))
 
 
-# TODO: find a more elegant way to handle the smoothing with different method
-#       now the code is a bit of complicated and hard to read (too many lines)
-#       But I can not find better way to do it currently...
 def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_win=90, sigma=3, order=3, axis=2):
     
     """
     A function that wraps a Dask array to apply a smoothing function. 
     
-    Parameters:\n
     :param dask_array: Dask array to be smoothed
     :param dates: Array of the central dates of the data
     :param t_out: Output timestamps for the smoothed array
@@ -270,7 +266,6 @@ def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_wi
     :param order: Order of the smoothing function (default is 3)
     :param axis: Axis along which smoothing is applied (default is 2)
         
-    Returns:\n
     :return: Smoothed dask array with specified parameters.
     """
     
@@ -301,7 +296,6 @@ def dask_smooth_wrapper(dask_array, dates, t_out, smooth_method="gaussian", t_wi
     )  # Time stamps for interpolated velocity, here every day
     
     # Apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
-    # NOTE: dask can not handle if..else... inside the map_blocks function
     filt_func = {
         'gaussian': gaussian_smooth,
         'ewma': ewma_smooth,
@@ -610,7 +604,6 @@ class cube_data_class:
         """
         Load a cube dataset written by E. Ducasse et al.
         
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
         :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
@@ -693,8 +686,6 @@ class cube_data_class:
         
         """
         Load a cube dataset written by L.Charrier et al.
-
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
         :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
@@ -776,7 +767,6 @@ class cube_data_class:
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
                        chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
@@ -915,7 +905,7 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def load_pixel_for_one_dataset(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
+    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
                                    merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
         # variables to keep
         var_to_keep = (
@@ -990,35 +980,10 @@ class cube_data_class:
             data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
             data = [data_dates, data_values]
 
-        # TODO add merge case
-        # TODO move this part into the inversion, and calculate the mean, dates_range for whole cube?
         if flags is not None:
             return data, mean, dates_range, regu, coef
         else:
             return data, mean, dates_range
-
-    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest', merged=None, proj='EPSG:4326',
-                   visual=False, rolling_mean=None, verbose=False):
-        '''
-        Load data over one pixel.
-        
-        :param i: int, x coordinate
-        :param j: int, y coordinate
-        :param unit: int, 365 in the unit is 'm/y' and 1 if the unit is 'm/d'
-        :param regu: int or string : regularisation of the solver
-        :param solver: string, 'LMSR', 'LMSMR_ini', 'LS_bounded', etc : solver mode
-        :param interp: string, 'linear' or 'nearest'
-        :param merged: None, or cube_data_class : cube_object to merge with self : the pd dataframe will contain values from self and merged
-        :param proj: string EPSG of i,j projection
-        :param velo_or_disp: string, 'disp' or 'vel' : if 'disp' return displacements, if 'vel' return velocities
-        :param visual: bool, do you want to visualize the results ?
-        :param verbose: bool, do you want to plot some information along the computation ?
-        :return: 
-        '''
-
-        if merged is None: return self.load_pixel_for_one_dataset(i, j, unit, regu, coef, flags, solver, interp, merged, proj,
-                   visual, rolling_mean, verbose)
-
 
     def coord2pix(self, x, y):
         
@@ -1048,7 +1013,6 @@ class cube_data_class:
         """
         Preprocess data to be processed on cube.
         
-        Parameters:\n
         :param i (int or None): x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
         :param j (int or None): y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
         :param smooth_method (string): Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
@@ -1063,65 +1027,9 @@ class cube_data_class:
         :param velo_or_disp (string): 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
         :param verbose (bool): Print informations throughout the process (default is False)
         
-        Returns:\n
         :return:
         """
-
-        # def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, time_axis=2,verbose=False):
-        #     """
-        #     A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
-
-        #     Parameters:
-        #     - array: input dask.array data
-        #     - dates: time labels for input array, in datetime format, should have same length as array
-        #     - s_win: window size for spatial average (default is 3)
-        #     - t_win: time window size for ewma smoothing (default is 90)
-        #     - sigma: standard deviation for gaussian filter (default is 3)
-        #     - radius: radius for gaussian filter (default is 90)
-        #     - time_axis: optional parameter for time axis (default is 2)
-
-        #     Returns:
-        #     - dask array with exponential smoothed velocity
-        #     """
-
-        #     from dask.array.lib.stride_tricks import sliding_window_view
-
-        #     # calculate the mean of the velocity over the spatial window
-        #     if verbose: start = time.time()
-        #     # chunk size : ((10, 2), (20, 4), (61366,))
-        #     spatial_mean = da.nanmean(sliding_window_view(da_arr.data, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
-        #     spatial_mean = da.pad(
-        #         spatial_mean,
-        #         ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
-        #         mode="edge",
-        #     )
-        #     # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
-
-        #     date_out = date_range[:-1] + np.diff(date_range) // 2
-
-        #     """
-        #     import matplotlib.pyplot as plt
-        #     f, ax = plt.subplots(1, 1, figsize=(12, 6))
-        #     mid_date = cube['mid_date'].values
-        #     ax.scatter(mid_date, series, marker='_', s=15, color='gray')
-        #     ax.scatter(date_out, gaussian_filt, marker='v', s=15, color='blue')
-        #     ax.scatter(date_out, median_filt, marker='^', s=15, color='green')
-        #     ax.scatter(date_out, savgol_filt, marker='p', s=15, color='orange')
-        #     ax.scatter(date_out, ewm_filt, marker='o', s=15, color='purple')
-        #     ax.legend(['Observed', 'Gaussian', 'Median', 'SavGol', 'EWMA'], loc='upper left')
-        #     f.savefig('compasion_different_smoother.png')
-        #     """
-            
-        #     with ProgressBar():
-        #         ewm_smooth = dask_smooth_wrapper(spatial_mean, mid_dates, t_out=date_out, smooth_method=smooth_method,
-        #                                          sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
-
-        #     if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
-
-        #     return ewm_smooth.compute(), np.unique(date_out)
-        
-        
-        def loop_rolling2(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2, verbose=False):
+        def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2, verbose=False):
             
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1289,7 +1197,7 @@ class cube_data_class:
         if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
             if verbose: start = time.time()
-            vx_filtered, dates_uniq = loop_rolling2(
+            vx_filtered, dates_uniq = loop_rolling(
                 cube["vx"],
                 cube["mid_date"],
                 date_range,
@@ -1300,7 +1208,7 @@ class cube_data_class:
                 order=order,
                 time_axis=2,
             )
-            vy_filtered, dates_uniq = loop_rolling2(
+            vy_filtered, dates_uniq = loop_rolling(
                 cube["vy"],
                 cube["mid_date"],
                 date_range,
@@ -1362,7 +1270,6 @@ class cube_data_class:
         self.ds = cube.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
-        # TODO calculate the mean, std, dates_range here for the whole cube
         return obs_filt
 
 
@@ -1447,7 +1354,100 @@ class cube_data_class:
         self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
         self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
         self.nz = self.ds['mid_date'].size
-        
+
+    def average_cube(self):
+        '''
+
+        :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
+        '''
+        ds_mean = xr.Dataset({})
+        coords = {'y': self.ds.y, 'x': self.ds.x}
+        ds_mean['vx_mean'] = xr.DataArray(self.ds['vx'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
+        ds_mean['vy_mean'] = xr.DataArray(self.ds['vy'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
+        return ds_mean
+
+    def compute_heatmap_moving(self, points_heatmap, variable='vv', method_interp='linear',
+                               verbose=False, freq='MS', method='mean'):
+        """
+        Compute a heatmap of the average monthly velocity, average all the velocities which are overlapping a given month
+
+        :param points_heatmap: pd dataframe, Points where the heatmap is to be computed
+        :param variable: str, What variable is to be computed ('vx', 'vy' or 'vv')
+        :param method_interp:str,  Interpolation method used to determine the value at a specified point from the discrete velocities datas
+        :param freq: str, frequency used in the pandas.date_range function (default: 'MS' every first day of the month)
+        :param method: str, 'mean' or 'median'
+
+        :return: pandas DataFrame, heatmap values where each line corresponds to a date and each row to a point of the line
+        """
+
+        date1 = self.date1_()
+        date2 = self.date2_()
+        # Create a DateTimeIndex range spanning from the minimum date to the maximum date
+        date_range = pd.date_range(np.nanmin(date1), np.nanmax(date2), freq=freq)  # 'MS' for start of each month
+        data = np.column_stack((date1, date2))  # Combine date1 and date2 into a single 2D array
+        # Sort data according to the first date
+        data = np.ma.array(sorted(data, key=lambda date: date[0]))  # sort according to the first date
+
+        # Find the index of the dates that have to be averaged, to get the heatmap
+        # Each value of the heatmap corresponds to an average of all the velocities which are overlapping a given period
+        save_line = [[] for _ in range(len(date_range) - 1)]
+        for i_date, date in enumerate(date_range[:-1]):
+            i = 0
+            while i < data.shape[0] and date_range[i_date + 1] >= data[i, 0]:
+                if date_range[i_date] <= data[i, 1]:
+                    save_line[i_date].append(i)
+                i += 1
+        interval_output = pd.Series(
+            [(date_range[k + 1] - date_range[k]) / np.timedelta64(1, 'D') for k in range(date_range.shape[0] - 1)])
+        dates_c = date_range[1:] - pd.to_timedelta((interval_output / 2).astype('int'), 'D')
+        del interval_output, date_range, data
+
+        def data_temporalpoint(k, points_heatmap):
+            '''Get the data at a given spatial point contained in points_heatmap'''
+            geopoint = points_heatmap['geometry'].iloc[
+                k]  # Return a point at the specified distance along a linear geometric object. # True -> interpretate k/n as fraction and not meters
+            i, j = geopoint.x, geopoint.y
+            if verbose: print('i,j', i, j)
+            if variable == 'vv':
+                v = np.sqrt(
+                    self.ds['vx'].interp(x=i, y=j, method=method_interp).load() ** 2 + self.ds['vy'].interp(x=i, y=j,
+                                                                                                            method="linear").load() ** 2)
+            elif variable == 'vx' or variable == 'vy':
+                v = self.ds[variable].interp(x=i, y=j, method=method_interp).load()
+            data = np.array([date1, date2, v.values], dtype=object).T
+            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # sort according to the first date
+            return data[:, 2]
+
+        for k in range(len(points_heatmap)):
+            if verbose: print('k', k)
+            data = data_temporalpoint(k, points_heatmap)
+            vvmasked = np.ma.masked_invalid(np.ma.array(data, dtype='float'))
+            if method == 'mean':
+                vvmean = [np.ma.mean(vvmasked[lines]) for lines in save_line]
+            elif method == 'median':
+                vvmean = [np.ma.median(vvmasked[lines]) for lines in save_line]
+
+            vvdf = pd.DataFrame(vvmean, index=dates_c, columns=[points_heatmap['distance'].iloc[k] / 1000])
+            if k > 0:
+                line_df_vv = pd.concat([line_df_vv, vvdf], join='inner', axis=1)
+            else:
+                line_df_vv = vvdf
+        return line_df_vv
+
+    # @jit(nopython=True)
+    def NCVV(self):
+        '''Return the Normalized Coherence Vector Velocity '''
+        return np.array([np.sqrt(np.nansum((self.ds['vx'].isel(x=i, y=j) / np.sqrt(
+            self.ds['vx'].isel(x=i, y=j) ** 2 + self.ds['vy'].isel(x=i, y=j) ** 2))) ** 2 + np.nansum((self.ds[
+                                                                                                           'vy'].isel(
+            x=i, y=j) / np.sqrt(self.ds['vx'].isel(x=i, y=j) ** 2 + self.ds['vy'].isel(x=i, y=j) ** 2))) ** 2) / self.nz
+                         for i in
+                         range(self.nx) for j in range(self.ny)]).reshape(self.nx, self.ny)
+
+
+    # %% ======================================================================== #
+    #                             WRITING RESULTS In A NETCDF                     #
+    # =========================================================================%% #
 
     def write_result_TICOI(self, result, source, sensor, filename='Time_series', savepath=None, result_quality=None,
                            verbose=False):
@@ -1661,92 +1661,3 @@ class cube_data_class:
             if verbose: print(f'Saved to {savepath}/{filename}.nc')
 
         return cubenew
-
-    def average_cube(self):
-        '''
-
-        :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
-        '''
-        ds_mean = xr.Dataset({})
-        coords = {'y': self.ds.y, 'x': self.ds.x}
-        ds_mean['vx_mean'] = xr.DataArray(self.ds['vx'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
-        ds_mean['vy_mean'] = xr.DataArray(self.ds['vy'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
-        return ds_mean
-
-    def compute_heatmap_moving(self, points_heatmap, variable='vv', method_interp='linear',
-                               verbose=False, freq='MS', method='mean'):
-        """
-        Compute a heatmap of the average monthly velocity, average all the velocities which are overlapping a given month
-
-        :param points_heatmap: pd dataframe, Points where the heatmap is to be computed
-        :param variable: str, What variable is to be computed ('vx', 'vy' or 'vv')
-        :param method_interp:str,  Interpolation method used to determine the value at a specified point from the discrete velocities datas
-        :param freq: str, frequency used in the pandas.date_range function (default: 'MS' every first day of the month)
-        :param method: str, 'mean' or 'median'
-
-        :return: pandas DataFrame, heatmap values where each line corresponds to a date and each row to a point of the line
-        """
-
-        date1 = self.date1_()
-        date2 = self.date2_()
-        # Create a DateTimeIndex range spanning from the minimum date to the maximum date
-        date_range = pd.date_range(np.nanmin(date1), np.nanmax(date2), freq=freq)  # 'MS' for start of each month
-        data = np.column_stack((date1, date2))  # Combine date1 and date2 into a single 2D array
-        # Sort data according to the first date
-        data = np.ma.array(sorted(data, key=lambda date: date[0]))  # sort according to the first date
-
-        # Find the index of the dates that have to be averaged, to get the heatmap
-        # Each value of the heatmap corresponds to an average of all the velocities which are overlapping a given period
-        save_line = [[] for _ in range(len(date_range) - 1)]
-        for i_date, date in enumerate(date_range[:-1]):
-            i = 0
-            while i < data.shape[0] and date_range[i_date + 1] >= data[i, 0]:
-                if date_range[i_date] <= data[i, 1]:
-                    save_line[i_date].append(i)
-                i += 1
-        interval_output = pd.Series(
-            [(date_range[k + 1] - date_range[k]) / np.timedelta64(1, 'D') for k in range(date_range.shape[0] - 1)])
-        dates_c = date_range[1:] - pd.to_timedelta((interval_output / 2).astype('int'), 'D')
-        del interval_output, date_range, data
-
-        def data_temporalpoint(k, points_heatmap):
-            '''Get the data at a given spatial point contained in points_heatmap'''
-            geopoint = points_heatmap['geometry'].iloc[
-                k]  # Return a point at the specified distance along a linear geometric object. # True -> interpretate k/n as fraction and not meters
-            i, j = geopoint.x, geopoint.y
-            if verbose: print('i,j', i, j)
-            if variable == 'vv':
-                v = np.sqrt(
-                    self.ds['vx'].interp(x=i, y=j, method=method_interp).load() ** 2 + self.ds['vy'].interp(x=i, y=j,
-                                                                                                            method="linear").load() ** 2)
-            elif variable == 'vx' or variable == 'vy':
-                v = self.ds[variable].interp(x=i, y=j, method=method_interp).load()
-            data = np.array([date1, date2, v.values], dtype=object).T
-            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # sort according to the first date
-            return data[:, 2]
-
-        for k in range(len(points_heatmap)):
-            if verbose: print('k', k)
-            data = data_temporalpoint(k, points_heatmap)
-            vvmasked = np.ma.masked_invalid(np.ma.array(data, dtype='float'))
-            if method == 'mean':
-                vvmean = [np.ma.mean(vvmasked[lines]) for lines in save_line]
-            elif method == 'median':
-                vvmean = [np.ma.median(vvmasked[lines]) for lines in save_line]
-
-            vvdf = pd.DataFrame(vvmean, index=dates_c, columns=[points_heatmap['distance'].iloc[k] / 1000])
-            if k > 0:
-                line_df_vv = pd.concat([line_df_vv, vvdf], join='inner', axis=1)
-            else:
-                line_df_vv = vvdf
-        return line_df_vv
-
-    # @jit(nopython=True)
-    def NCVV(self):
-        '''Return the Normalized Coherence Vector Velocity '''
-        return np.array([np.sqrt(np.nansum((self.ds['vx'].isel(x=i, y=j) / np.sqrt(
-            self.ds['vx'].isel(x=i, y=j) ** 2 + self.ds['vy'].isel(x=i, y=j) ** 2))) ** 2 + np.nansum((self.ds[
-                                                                                                           'vy'].isel(
-            x=i, y=j) / np.sqrt(self.ds['vx'].isel(x=i, y=j) ** 2 + self.ds['vy'].isel(x=i, y=j) ** 2))) ** 2) / self.nz
-                         for i in
-                         range(self.nx) for j in range(self.ny)]).reshape(self.nx, self.ny)

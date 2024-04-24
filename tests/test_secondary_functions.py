@@ -30,4 +30,10 @@ def test_Construct_Dates_range():
 # def test_load():
 
 # def test_load()
-# print(test_kwargs())
+print(test_kwargs(lowell_test_kwargs ))
+
+# class Testclass_cube_data_xr:
+#     def test_load(self,):
+
+
+
