@@ -181,7 +181,7 @@ def Construction_A_LP(dates, dates_range):
     
     :return: The design matrix A which represent the temporal closure of the displacement measurement network
     """
-    # Search at wich indice in dates_range is stored each date in dates
+    # Search at which index in dates_range is stored each date in dates
     date1_indices = np.searchsorted(dates_range, dates[:, 0])
     date2_indices = np.searchsorted(dates_range, dates[:, 1]) - 1
 
@@ -205,7 +205,7 @@ def Inversion_A_LP(A, dates_range, v_pos, data, solver, Weight, mu, coef=1, ini=
     :param solver: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
     :param Weight: Weight, =1 for Ordinary Least Square
     :param mu: regularization matrix
-    :param coef: Coef of Tikhonov regularisation
+    :param coef: Coef of Tikhonov regularization
     :param ini: np array, Initialization of the inversion
     :param: result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param regu : str, type of regularization
@@ -213,7 +213,7 @@ def Inversion_A_LP(A, dates_range, v_pos, data, solver, Weight, mu, coef=1, ini=
     :param linear_operator: linear operator or None
 
     :return X: The ILF temporal inversion of AX = Y using the given solver
-    :return residu_norm: Norm of the residu (when showing the L curve)
+    :return residu_norm: Norm of the residual (when showing the L curve)
     '''
 
     # Total process : about 50ms
