@@ -618,6 +618,9 @@ class cube_data_class:
         print(self.ds.dims)
         # if there is chunks in time, set no chunks
         if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
+        #create a variable for temporal_baseline
+        self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
+
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
         #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
@@ -670,6 +673,7 @@ class cube_data_class:
 
     def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
                                    merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
+
         # variables to keep
         var_to_keep = (
             ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
@@ -797,7 +801,6 @@ class cube_data_class:
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
-            Parameters:\n
             :param da_arr: Input dask.array data
             :param mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
             :param date_range: 
@@ -810,7 +813,6 @@ class cube_data_class:
             :param time_axis: Optional parameter for time axis (default is 2)
             :param verbose: Print informations throughout the process (default is False)
 
-            Returns:\n
             :return: Dask array with exponential smoothed velocity
             """
 
@@ -857,25 +859,8 @@ class cube_data_class:
             self.buffer(proj, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # convert all the dimension of the cube
-        # TODO:  do we need that?
-        if CRS(self.ds.proj4) != CRS(proj):
-            transformer = Transformer.from_crs(
-                CRS(proj), CRS(self.ds.proj4)
-            )  # convert the coordinates from proj to self.ds.proj4
-            self.ds = self.ds.assign_coords(
-                x=transformer.transform_x(self.ds.x, self.ds.y),
-                y=transformer.transform_y(self.ds.x, self.ds.y),
-            )
-            if verbose:
-                print(
-                    "transform to projection: {proj} to {proj2}".format(
-                        proj=proj, proj2=self.ds.proj4
-                    )
-                )
         cube = self.ds.copy()
-        cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
-        
+
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
