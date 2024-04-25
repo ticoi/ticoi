@@ -618,7 +618,7 @@ class cube_data_class:
         print(self.ds.dims)
         # if there is chunks in time, set no chunks
         if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
-        #create a variable for temporal_baseline,b
+        #create a variable for temporal_baseline,be
         self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
 
 
