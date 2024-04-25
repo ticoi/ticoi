@@ -671,8 +671,7 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
-                                   merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
+    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
 
         # variables to keep
         var_to_keep = (
@@ -700,9 +699,7 @@ class cube_data_class:
                 # data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
                 #     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
                 data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep]
-                print(data.sizes)
                 data = data.dropna(dim='mid_date')
-                print(data.sizes)
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)

@@ -1,15 +1,8 @@
-import pytest
-
-import ticoi.cube_data_classxr
-from ticoi.cube_data_classxr import cube_data_class
 import xarray as xr
-import os
-import pytest
-
 import pytest
 import os
 from ticoi.cube_data_classxr import cube_data_class  # Assuming cube_data_class is defined in your_module
-
+import numpy as np
 class Testclass_cube_data_xr:
     @pytest.fixture
     def base_filepath(self):
@@ -29,6 +22,7 @@ class Testclass_cube_data_xr:
         cube.load(filepath=filepath, verbose=False)  # Load data
         return cube
 
+    #to do the test for several paramters, the function test can be decorated with pytest.mark.parametrize
     @pytest.mark.parametrize("filepath", [
         "ITS_LIVE_Lowell_Lower_test.nc",
         "c_x18620_y08085_2016-2022_crop_GPS_Lower.nc"
@@ -44,5 +38,20 @@ class Testclass_cube_data_xr:
         expected_dims = ("x", "y", "mid_date")
         assert tuple(cube_data_class_instance.ds['vx'].dims) == expected_dims, "Dimension order incorrect"
 
-    def test_load_pixel(self,cube_data_class_instance):
-        pix = cube_data_class_instance.load_pixel()
+    #Test load_pixel for the cube from IGE, for different pixel coordinates, either in pixels or in EPSG:4326
+    @pytest.mark.parametrize("filepath", [
+        "c_x18620_y08085_2016-2022_crop_GPS_Lower.nc"
+    ], indirect=["filepath"])  #indirect mean that this parameter should be handled by a fixture that can interpret these values
+
+    @pytest.mark.parametrize("x, y, expected", [
+        (1, 2, np.array([-5.01364136, -18.12821579, 1.63058031, 1.63058031, 336.]).astype('float32')),
+        (-138.18069, 60.29076, np.array([-0.69107729, -8.73340321, 1.48879075, 1.48879075, 368.]).astype('float32'))
+    ])
+    def test_load_pixel(self,cube_data_class_instance,x,y, expected):
+        data, mean, dates_range = cube_data_class_instance.load_pixel(x,y)
+        assert len(data) ==2, "Data is not a list of two elements"
+        assert (data[0].shape[1] == 2), "data_dates is not an array with two columns"
+        assert str(data[0][0,0].dtype) == 'datetime64[D]', "data_dates is not an array with two columns"
+        assert data[1].shape[1] == 5
+        actual = data[1][0,:]
+        np.testing.assert_array_equal(actual, expected, err_msg=f"Arrays at coordinates ({x},{y}) do not match.")
