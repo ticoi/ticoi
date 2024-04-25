@@ -25,61 +25,6 @@ from dask.diagnostics import ProgressBar
 from ticoi.inversion_functions import Construction_dates_range_np
 from ticoi.filtering_functions import *
 
-def determine_optimal_chunk_size(ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True):
-    
-    """
-    A function to determine the optimal chunk size for a given time series array based on its size.
-    
-    Parameters:\n
-    :param ds: xarray Dataset containing the time series array
-    :param variable_name: Name of the variable containing the time series array (default is "vx")
-    :param x_dim: Name of the x dimension in the array (default is "x")
-    :param y_dim: Name of the y dimension in the array (default is "y")
-    :param verbose: Boolean flag to control verbosity of output (default is True)
-    
-    Returns:\n
-    :return tc: Chunk size along the time dimension
-    :return yc: Chunk size along the y dimension
-    :return xc: Chunk size along the x dimension
-    """
-    
-    if verbose:
-        print("Dask chunk size:")
-    ## set chunk size to 5 MB if single time series array < 1 MB in size
-    ## else increase to max of 1 GB chunk sizes.
-    time_series_array_size = (
-        ds[variable_name]
-        .sel(
-            {
-                x_dim: ds[variable_name][x_dim].values[0],
-                y_dim: ds[variable_name][y_dim].values[0],
-            }
-        )
-        .nbytes
-    )
-    MB = 1048576
-    if time_series_array_size < 1e6:
-        chunk_size_limit = 50 * MB
-    elif time_series_array_size < 1e7:
-        chunk_size_limit = 100 * MB
-    elif time_series_array_size < 1e8:
-        chunk_size_limit = 200 * MB
-    else:
-        chunk_size_limit = 1000 * MB
-    arr = ds[variable_name].data.rechunk(
-        {0: -1, 1: "auto", 2: "auto"}, block_size_limit=chunk_size_limit, balance=True
-    )
-    tc, yc, xc = arr.chunks[0][0], arr.chunks[1][0], arr.chunks[2][0]
-    chunksize = ds[variable_name][:tc, :yc, :xc].nbytes / 1e6
-    if verbose:
-        print("Chunk shape:", "(" + ",".join([str(x) for x in [tc, yc, xc]]) + ")")
-        print(
-            "Chunk size:",
-            ds[variable_name][:tc, :yc, :xc].nbytes,
-            "(" + str(round(chunksize, 1)) + "MB)",
-        )
-    return tc, yc, xc
-
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -152,6 +97,57 @@ class cube_data_class:
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
 
+    def determine_optimal_chunk_size(self, variable_name="vx", x_dim="x", y_dim="y", verbose=True):
+
+        """
+        A function to determine the optimal chunk size for a given time series array based on its size.
+
+        :param variable_name: Name of the variable containing the time series array (default is "vx")
+        :param x_dim: Name of the x dimension in the array (default is "x")
+        :param y_dim: Name of the y dimension in the array (default is "y")
+        :param verbose: Boolean flag to control verbosity of output (default is True)
+
+        :return tc: Chunk size along the time dimension
+        :return yc: Chunk size along the y dimension
+        :return xc: Chunk size along the x dimension
+        """
+
+        if verbose:
+            print("Dask chunk size:")
+        ## set chunk size to 5 MB if single time series array < 1 MB in size
+        ## else increase to max of 1 GB chunk sizes.
+        time_series_array_size = (
+            self.ds[variable_name]
+            .sel(
+                {
+                    x_dim: self.ds[variable_name][x_dim].values[0],
+                    y_dim: self.ds[variable_name][y_dim].values[0],
+                }
+            )
+            .nbytes
+        )
+        MB = 1048576
+        if time_series_array_size < 1e6:
+            chunk_size_limit = 50 * MB
+        elif time_series_array_size < 1e7:
+            chunk_size_limit = 100 * MB
+        elif time_series_array_size < 1e8:
+            chunk_size_limit = 200 * MB
+        else:
+            chunk_size_limit = 1000 * MB
+        arr = self.ds[variable_name].data.rechunk(
+            {0: -1, 1: "auto", 2: "auto"}, block_size_limit=chunk_size_limit, balance=True
+        )
+        tc, yc, xc = arr.chunks[0][0], arr.chunks[1][0], arr.chunks[2][0]
+        chunksize = self.ds[variable_name][:tc, :yc, :xc].nbytes / 1e6
+        if verbose:
+            print("Chunk shape:", "(" + ",".join([str(x) for x in [tc, yc, xc]]) + ")")
+            print(
+                "Chunk size:",
+                self.ds[variable_name][:tc, :yc, :xc].nbytes,
+                "(" + str(round(chunksize, 1)) + "MB)",
+            )
+        return tc, yc, xc
 
     # %% ==================================================================== #
     #                         CUBE LOADING METHODS                            #
@@ -578,8 +574,7 @@ class cube_data_class:
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
                     
                 if chunks == {}: # rechunk with optimal chunk size
-                    tc, yc, xc = determine_optimal_chunk_size(
-                        self.ds,
+                    tc, yc, xc = self.determine_optimal_chunk_size(
                         variable_name="vx",
                         x_dim="x",
                         y_dim="y",
