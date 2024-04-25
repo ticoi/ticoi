@@ -25,61 +25,6 @@ from dask.diagnostics import ProgressBar
 from ticoi.inversion_functions import Construction_dates_range_np
 from ticoi.filtering_functions import *
 
-def determine_optimal_chunk_size(ds, variable_name="vx", x_dim="x", y_dim="y", verbose=True):
-    
-    """
-    A function to determine the optimal chunk size for a given time series array based on its size.
-    
-    Parameters:\n
-    :param ds: xarray Dataset containing the time series array
-    :param variable_name: Name of the variable containing the time series array (default is "vx")
-    :param x_dim: Name of the x dimension in the array (default is "x")
-    :param y_dim: Name of the y dimension in the array (default is "y")
-    :param verbose: Boolean flag to control verbosity of output (default is True)
-    
-    Returns:\n
-    :return tc: Chunk size along the time dimension
-    :return yc: Chunk size along the y dimension
-    :return xc: Chunk size along the x dimension
-    """
-    
-    if verbose:
-        print("Dask chunk size:")
-    ## set chunk size to 5 MB if single time series array < 1 MB in size
-    ## else increase to max of 1 GB chunk sizes.
-    time_series_array_size = (
-        ds[variable_name]
-        .sel(
-            {
-                x_dim: ds[variable_name][x_dim].values[0],
-                y_dim: ds[variable_name][y_dim].values[0],
-            }
-        )
-        .nbytes
-    )
-    MB = 1048576
-    if time_series_array_size < 1e6:
-        chunk_size_limit = 50 * MB
-    elif time_series_array_size < 1e7:
-        chunk_size_limit = 100 * MB
-    elif time_series_array_size < 1e8:
-        chunk_size_limit = 200 * MB
-    else:
-        chunk_size_limit = 1000 * MB
-    arr = ds[variable_name].data.rechunk(
-        {0: -1, 1: "auto", 2: "auto"}, block_size_limit=chunk_size_limit, balance=True
-    )
-    tc, yc, xc = arr.chunks[0][0], arr.chunks[1][0], arr.chunks[2][0]
-    chunksize = ds[variable_name][:tc, :yc, :xc].nbytes / 1e6
-    if verbose:
-        print("Chunk shape:", "(" + ",".join([str(x) for x in [tc, yc, xc]]) + ")")
-        print(
-            "Chunk size:",
-            ds[variable_name][:tc, :yc, :xc].nbytes,
-            "(" + str(round(chunksize, 1)) + "MB)",
-        )
-    return tc, yc, xc
-
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -96,6 +41,10 @@ class cube_data_class:
         self.author = ''
         self.ds = xr.Dataset({})
 
+    def update_dimension(self):
+        self.nx = self.ds['x'].sizes['x']
+        self.ny = self.ds['y'].sizes['y']
+        self.nz = self.ds['mid_date'].sizes['mid_date']
 
     def subset(self, proj, subset):
         
@@ -152,6 +101,57 @@ class cube_data_class:
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
 
+    def determine_optimal_chunk_size(self, variable_name="vx", x_dim="x", y_dim="y", verbose=False):
+
+        """
+        A function to determine the optimal chunk size for a given time series array based on its size.
+
+        :param variable_name: Name of the variable containing the time series array (default is "vx")
+        :param x_dim: Name of the x dimension in the array (default is "x")
+        :param y_dim: Name of the y dimension in the array (default is "y")
+        :param verbose: Boolean flag to control verbosity of output (default is True)
+
+        :return tc: Chunk size along the time dimension
+        :return yc: Chunk size along the y dimension
+        :return xc: Chunk size along the x dimension
+        """
+
+        if verbose:
+            print("Dask chunk size:")
+        ## set chunk size to 5 MB if single time series array < 1 MB in size
+        ## else increase to max of 1 GB chunk sizes.
+        time_series_array_size = (
+            self.ds[variable_name]
+            .sel(
+                {
+                    x_dim: self.ds[variable_name][x_dim].values[0],
+                    y_dim: self.ds[variable_name][y_dim].values[0],
+                }
+            )
+            .nbytes
+        )
+        MB = 1048576
+        if time_series_array_size < 1e6:
+            chunk_size_limit = 50 * MB
+        elif time_series_array_size < 1e7:
+            chunk_size_limit = 100 * MB
+        elif time_series_array_size < 1e8:
+            chunk_size_limit = 200 * MB
+        else:
+            chunk_size_limit = 1000 * MB
+        arr = self.ds[variable_name].data.rechunk(
+            {0: -1, 1: "auto", 2: "auto"}, block_size_limit=chunk_size_limit, balance=True
+        )
+        tc, yc, xc = arr.chunks[0][0], arr.chunks[1][0], arr.chunks[2][0]
+        chunksize = self.ds[variable_name][:tc, :yc, :xc].nbytes / 1e6
+        if verbose:
+            print("Chunk shape:", "(" + ",".join([str(x) for x in [tc, yc, xc]]) + ")")
+            print(
+                "Chunk size:",
+                self.ds[variable_name][:tc, :yc, :xc].nbytes,
+                "(" + str(round(chunksize, 1)) + "MB)",
+            )
+        return tc, yc, xc
 
     # %% ==================================================================== #
     #                         CUBE LOADING METHODS                            #
@@ -192,9 +192,7 @@ class cube_data_class:
             self.ds = self.ds.where(((self.ds['acquisition_date_img1'] >= np.datetime64(pick_date[0])) & (
                     self.ds['acquisition_date_img2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()#update self.nx,self.ny,self.nz
 
         if conf:
             minconfx = np.nanmin(self.ds['vx_error'].values[:])
@@ -314,9 +312,7 @@ class cube_data_class:
         self.ds = self.ds.assign_coords(
             mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()
 
         if conf and 'confx' not in self.ds.data_vars:  # convert the errors into confidence indicators between 0 and 1
             minconfx = np.nanmin(self.ds['error_vx'].values[:])
@@ -421,9 +417,7 @@ class cube_data_class:
         self.ds = self.ds.assign_coords(
             mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()#update self.nx,self.ny,self.nz
 
         # Drop variables not in the specified list
         variables_to_keep = ['vx', 'vy', 'mid_date', 'x', 'y', 'date1', 'date2']
@@ -444,6 +438,12 @@ class cube_data_class:
             self.ds = self.ds.sel(
                 mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
                         ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
+            
+        # Set errors equal to one (no information on the error here)
+        self.ds['errorx'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
+            chunks=self.ds.chunks['mid_date'])
+        self.ds['errory'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
+            chunks=self.ds.chunks['mid_date'])
 
 
     def load_charrier(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
@@ -487,9 +487,7 @@ class cube_data_class:
                 drop=True)
         del pick_date
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()
 
         # Pick sensors or temporal baselines
         if pick_sensor is not None:
@@ -526,7 +524,6 @@ class cube_data_class:
             self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
                 chunks=self.ds.chunks['mid_date'])
     
-    
     def load(self, filepath, chunks={}, conf=False, subset=None, buffer=None, pick_date=None, 
              pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
         
@@ -547,7 +544,6 @@ class cube_data_class:
         :param verbose (bool): Print informations throughout the process (default is False)
         """
         
-        # Name of the temporal dimension depending on the dataset
         time_dim_name = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
             "J. Mouginot, R.Millan, A.Derkacheva": 'z',
@@ -567,25 +563,35 @@ class cube_data_class:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
                 except (NotImplementedError):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
-                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
+                    self.ds = xr.open_dataset(
+                        filepath, engine="netcdf4", chunks=chunks)  # set no chunks
                     
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
                     
                 if chunks == {}: # rechunk with optimal chunk size
-                    tc, yc, xc = determine_optimal_chunk_size(self.ds, variable_name="vx", x_dim="x",
-                                                              y_dim="y", verbose=True)
+                    tc, yc, xc = self.determine_optimal_chunk_size(
+                        variable_name="vx",
+                        x_dim="x",
+                        y_dim="y",
+                        verbose=True,
+                    )
                     self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
                 if chunks == {}:
-                    chunks = "auto"  # Change the default value to auto
-                    
-                self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
-                                          consolidated=True, chunks=chunks)
+                    chunks = "auto"  # change the default value to auto
+
+                self.ds = xr.open_dataset(
+                    filepath,
+                    decode_timedelta=False,
+                    engine="zarr",
+                    consolidated=True,
+                    chunks=chunks,
+                )
 
         if verbose:
-            print("File open")
+            print("file open")
 
         dico_load = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
@@ -594,28 +600,27 @@ class cube_data_class:
             "L. Charrier, L. Guo": self.load_charrier,
             "L. Charrier": self.load_charrier,
             "E. Ducasse": self.load_ducasse,
-            "S. Leinss, L. Charrier": self.load_charrier
+            "S. Leinss, L. Charrier": self.load_charrier,
         }
-        dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf,
-                                  pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
-                                  buffer=buffer, proj=proj)
-        
-        # Reorder the coordinates to keep the consistency
+        dico_load[self.ds.author](
+            filepath,
+            pick_date=pick_date,
+            subset=subset,
+            conf=conf,
+            pick_sensor=pick_sensor,
+            pick_temp_bas=pick_temp_bas,
+            buffer=buffer,
+            proj=proj,
+        )
+        # reorder the coordinates to keep the consistency
+        print(self.ds.dims)
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
+        print(self.ds.dims)
+        # if there is chunks in time, set no chunks
+        if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
+        #create a variable for temporal_baseline,be
+        self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
 
-        # If there is chunks in time, set no chunks
-        if self.ds.chunksizes['mid_date'] != (self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
-        
-        # If the errors are not available in data, we put it to one
-        if "errorx" not in self.ds.variables:
-            self.ds["errorx"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            )
-            self.ds["errory"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            )
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
         #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
@@ -666,8 +671,8 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',
-                                   merged=None, proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
+    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
+
         # variables to keep
         var_to_keep = (
             ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline"]
@@ -694,9 +699,7 @@ class cube_data_class:
                 # data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
                 #     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
                 data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep]
-                print(data.sizes)
                 data = data.dropna(dim='mid_date')
-                print(data.sizes)
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
@@ -795,7 +798,6 @@ class cube_data_class:
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
-            Parameters:\n
             :param da_arr: Input dask.array data
             :param mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
             :param date_range: 
@@ -808,7 +810,6 @@ class cube_data_class:
             :param time_axis: Optional parameter for time axis (default is 2)
             :param verbose: Print informations throughout the process (default is False)
 
-            Returns:\n
             :return: Dask array with exponential smoothed velocity
             """
 
@@ -855,25 +856,8 @@ class cube_data_class:
             self.buffer(proj, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # convert all the dimension of the cube
-        # TODO:  do we need that?
-        if CRS(self.ds.proj4) != CRS(proj):
-            transformer = Transformer.from_crs(
-                CRS(proj), CRS(self.ds.proj4)
-            )  # convert the coordinates from proj to self.ds.proj4
-            self.ds = self.ds.assign_coords(
-                x=transformer.transform_x(self.ds.x, self.ds.y),
-                y=transformer.transform_y(self.ds.x, self.ds.y),
-            )
-            if verbose:
-                print(
-                    "transform to projection: {proj} to {proj2}".format(
-                        proj=proj, proj2=self.ds.proj4
-                    )
-                )
         cube = self.ds.copy()
-        cube["temporal_baseline"] = xr.DataArray((cube["date2"] - cube["date1"]).dt.days.values, dims='mid_date')
-        
+
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
             cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
@@ -993,6 +977,15 @@ class cube_data_class:
         cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
         cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
+        if "errorx" not in cube.variables:
+            cube["errorx"] = (
+                ("mid_date", "x", "y"),
+                np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
+            )
+            cube["errory"] = (
+                ("mid_date", "x", "y"),
+                np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
+            )
         self.ds = cube.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
@@ -1004,14 +997,12 @@ class cube_data_class:
         """
         Reproject cube to match the resolution, projection, and region of self.
         
-        Parameters:\n
         :param cube (cube_data_classxr): Cube to align to self
         :param unit (int): Unit of the velocities (365 for m/y, 1 for m/d) (default is 365)
         :param reproj_vel (bool): Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
         :param reproj_coord (bool): Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
         :param interp_method (string): Interpolation method used to reproject cube (default is 'nearest')
         
-        Returns:\n
         :return: Cube projected to self
         """
 
@@ -1188,7 +1179,7 @@ class cube_data_class:
         :param savepath: string, path where to saved the file
         :return:
         """
-
+        # TODO: need to check the order of dimension: do we need to transpose?
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
                             result[i * self.ny + j]['vx'].shape[
