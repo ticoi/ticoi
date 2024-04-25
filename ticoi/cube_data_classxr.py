@@ -566,7 +566,7 @@ class cube_data_class:
                     
                 if chunks == {}: # rechunk with optimal chunk size
 
-                    tc, yc, xc = self.determine_optimal_chunk_size(self.ds, variable_name="vx", x_dim="x",
+                    tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x",
                                                               y_dim="y", verbose=True)
                     self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
