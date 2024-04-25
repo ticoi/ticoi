@@ -97,7 +97,7 @@ class cube_data_class:
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
 
-    def determine_optimal_chunk_size(self, variable_name="vx", x_dim="x", y_dim="y", verbose=True):
+    def determine_optimal_chunk_size(self, variable_name="vx", x_dim="x", y_dim="y", verbose=False):
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.

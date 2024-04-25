@@ -1,4 +1,6 @@
 import pytest
+
+import ticoi.cube_data_classxr
 from ticoi.inversion_functions import Construction_dates_range_np
 from ticoi.cube_data_classxr import cube_data_class
 import xarray as xr
@@ -43,13 +45,12 @@ class Testclass_cube_data_xr:
     @pytest.fixture
     def filepath_nc(self):
         return f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
-    def test_load(self, cube,filepath_nc, mocker):
-        mock_open = mocker.patch('xarray.open_dataset', return_value=xr.Dataset())
-
-        # Call the load function
+    def test_load(self, cube,filepath_nc):
         cube.load(filepath=filepath_nc, verbose=False)
-        print('Hello',filepath_nc)
+        assert isinstance(cube,ticoi.cube_data_classxr.cube_data_class)
+        assert isinstance(cube.ds,xr.Dataset)
+
         # Check if open_dataset was called with the correct parameters
-        mock_open.assert_called_once_with(filepath_nc, engine='netcdf4', chunks={})
+        # mock_open.assert_called_once_with(cube, engine='netcdf4', chunks={})
 
 
