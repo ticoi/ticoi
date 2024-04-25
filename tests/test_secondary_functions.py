@@ -1,5 +1,6 @@
 import pytest
-from ticoi.secondary_functions import Construction_dates_range_np
+from ticoi.inversion_functions import Construction_dates_range_np
+from ticoi.cube_data_classxr import cube_data_classxr
 import numpy as np
 # define kwargs to create single loc class objects
 mala_test_kwargs = {
@@ -30,4 +31,23 @@ def test_Construct_Dates_range():
 # def test_load():
 
 # def test_load()
-# print(test_kwargs())
+# print(test_kwargs(lowell_test_kwargs ))
+
+class Testclass_cube_data_xr:
+    @pytest.fixture(autouse=True)
+    def cube(self):
+        return ticoi.cube_data_classxr()
+
+    @pytest.fixture
+    def filepath_nc(self):
+        return "../ticoi/test_data/ITS_LIVE_Lowell_Lower_test.nc"
+    def test_load(self, filepath_nc, mocker):
+        mock_open = mocker.patch('xarray.open_dataset', return_value=xr.Dataset())
+
+        # Call the load function
+        cube.load(filepath=filepath_nc, verbose=False)
+
+        # Check if open_dataset was called with the correct parameters
+        mock_open.assert_called_once_with(filepath_nc, engine='netcdf4', chunks={})
+
+
