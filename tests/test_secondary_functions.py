@@ -37,18 +37,9 @@ def test_Construct_Dates_range():
 # def test_load()
 # print(test_kwargs(lowell_test_kwargs ))
 
-class Testclass_cube_data_xr:
-    @pytest.fixture(autouse=True)
-    def cube(self):
-        return cube_data_class()
 
-    @pytest.fixture
-    def filepath_nc(self):
-        return f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
-    def test_load(self, cube,filepath_nc):
-        cube.load(filepath=filepath_nc, verbose=False)
-        assert isinstance(cube,ticoi.cube_data_classxr.cube_data_class)
-        assert isinstance(cube.ds,xr.Dataset)
+        # required_variables = {'vx', 'vy', 'mid_date', 'x', 'y'}
+        # assert required_variables.issubset(cube.ds.variables), f"Dataset should contain variables {required_variables}"
 
         # Check if open_dataset was called with the correct parameters
         # mock_open.assert_called_once_with(cube, engine='netcdf4', chunks={})

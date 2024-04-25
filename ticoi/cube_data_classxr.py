@@ -41,6 +41,10 @@ class cube_data_class:
         self.author = ''
         self.ds = xr.Dataset({})
 
+    def update_dimension(self):
+        self.nx = self.ds['x'].sizes['x']
+        self.ny = self.ds['y'].sizes['y']
+        self.nz = self.ds['mid_date'].sizes['mid_date']
 
     def subset(self, proj, subset):
         
@@ -188,9 +192,7 @@ class cube_data_class:
             self.ds = self.ds.where(((self.ds['acquisition_date_img1'] >= np.datetime64(pick_date[0])) & (
                     self.ds['acquisition_date_img2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()#update self.nx,self.ny,self.nz
 
         if conf:
             minconfx = np.nanmin(self.ds['vx_error'].values[:])
@@ -310,9 +312,7 @@ class cube_data_class:
         self.ds = self.ds.assign_coords(
             mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()
 
         if conf and 'confx' not in self.ds.data_vars:  # convert the errors into confidence indicators between 0 and 1
             minconfx = np.nanmin(self.ds['error_vx'].values[:])
@@ -417,9 +417,7 @@ class cube_data_class:
         self.ds = self.ds.assign_coords(
             mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()#update self.nx,self.ny,self.nz
 
         # Drop variables not in the specified list
         variables_to_keep = ['vx', 'vy', 'mid_date', 'x', 'y', 'date1', 'date2']
@@ -489,9 +487,7 @@ class cube_data_class:
                 drop=True)
         del pick_date
 
-        self.nx = self.ds['x'].sizes['x']
-        self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.update_dimension()
 
         # Pick sensors or temporal baselines
         if pick_sensor is not None:
@@ -617,8 +613,9 @@ class cube_data_class:
             proj=proj,
         )
         # reorder the coordinates to keep the consistency
+        print(self.ds.dims)
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-
+        print(self.ds.dims)
         # if there is chunks in time, set no chunks
         if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
 
@@ -1018,14 +1015,12 @@ class cube_data_class:
         """
         Reproject cube to match the resolution, projection, and region of self.
         
-        Parameters:\n
         :param cube (cube_data_classxr): Cube to align to self
         :param unit (int): Unit of the velocities (365 for m/y, 1 for m/d) (default is 365)
         :param reproj_vel (bool): Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
         :param reproj_coord (bool): Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
         :param interp_method (string): Interpolation method used to reproject cube (default is 'nearest')
         
-        Returns:\n
         :return: Cube projected to self
         """
 
@@ -1202,7 +1197,7 @@ class cube_data_class:
         :param savepath: string, path where to saved the file
         :return:
         """
-
+        # TODO: need to check the order of dimension: do we need to transpose?
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
                             result[i * self.ny + j]['vx'].shape[
