@@ -444,12 +444,6 @@ class cube_data_class:
             self.ds = self.ds.sel(
                 mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
                         ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
-            
-        # Set errors equal to one (no information on the error here)
-        self.ds['errorx'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
-            chunks=self.ds.chunks['mid_date'])
-        self.ds['errory'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
-            chunks=self.ds.chunks['mid_date'])
 
 
     def load_charrier(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
@@ -532,6 +526,7 @@ class cube_data_class:
             self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
                 chunks=self.ds.chunks['mid_date'])
     
+    
     def load(self, filepath, chunks={}, conf=False, subset=None, buffer=None, pick_date=None, 
              pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
         
@@ -552,6 +547,7 @@ class cube_data_class:
         :param verbose (bool): Print informations throughout the process (default is False)
         """
         
+        # Name of the temporal dimension depending on the dataset
         time_dim_name = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
             "J. Mouginot, R.Millan, A.Derkacheva": 'z',
@@ -571,36 +567,25 @@ class cube_data_class:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
                 except (NotImplementedError):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
-                    self.ds = xr.open_dataset(
-                        filepath, engine="netcdf4", chunks=chunks)  # set no chunks
+                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
                     
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
                     
                 if chunks == {}: # rechunk with optimal chunk size
-                    tc, yc, xc = determine_optimal_chunk_size(
-                        self.ds,
-                        variable_name="vx",
-                        x_dim="x",
-                        y_dim="y",
-                        verbose=True,
-                    )
+                    tc, yc, xc = determine_optimal_chunk_size(self.ds, variable_name="vx", x_dim="x",
+                                                              y_dim="y", verbose=True)
                     self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
                 if chunks == {}:
-                    chunks = "auto"  # change the default value to auto
-
-                self.ds = xr.open_dataset(
-                    filepath,
-                    decode_timedelta=False,
-                    engine="zarr",
-                    consolidated=True,
-                    chunks=chunks,
-                )
+                    chunks = "auto"  # Change the default value to auto
+                    
+                self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
+                                          consolidated=True, chunks=chunks)
 
         if verbose:
-            print("file open")
+            print("File open")
 
         dico_load = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
@@ -609,23 +594,28 @@ class cube_data_class:
             "L. Charrier, L. Guo": self.load_charrier,
             "L. Charrier": self.load_charrier,
             "E. Ducasse": self.load_ducasse,
-            "S. Leinss, L. Charrier": self.load_charrier,
+            "S. Leinss, L. Charrier": self.load_charrier
         }
-        dico_load[self.ds.author](
-            filepath,
-            pick_date=pick_date,
-            subset=subset,
-            conf=conf,
-            pick_sensor=pick_sensor,
-            pick_temp_bas=pick_temp_bas,
-            buffer=buffer,
-            proj=proj,
-        )
-        # reorder the coordinates to keep the consistency
+        dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf,
+                                  pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                                  buffer=buffer, proj=proj)
+        
+        # Reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
 
-        # if there is chunks in time, set no chunks
-        if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
+        # If there is chunks in time, set no chunks
+        if self.ds.chunksizes['mid_date'] != (self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
+        
+        # If the errors are not available in data, we put it to one
+        if "errorx" not in self.ds.variables:
+            self.ds["errorx"] = (
+                ("mid_date", "x", "y"),
+                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
+            )
+            self.ds["errory"] = (
+                ("mid_date", "x", "y"),
+                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
+            )
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
         #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
@@ -1003,15 +993,6 @@ class cube_data_class:
         cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
         cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
-        if "errorx" not in cube.variables:
-            cube["errorx"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
-            )
-            cube["errory"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
-            )
         self.ds = cube.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
