@@ -820,7 +820,11 @@ class cube_data_class:
                 
             if baseline is not None:
                 baseline = baseline.compute()
-                idx = np.where(baseline < 700 )
+                t_thres = 120
+                idx = np.where(baseline < t_thres )
+                while len(idx[0]) < 3 * len(date_out):
+                    t_thres += 30
+                    idx = np.where(baseline < t_thres )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -939,6 +943,7 @@ class cube_data_class:
                 smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
+                baseline=cube["temporal_baseline"],
                 sigma=sigma,
                 order=order,
                 time_axis=2,
@@ -950,13 +955,12 @@ class cube_data_class:
                 smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
+                baseline=cube["temporal_baseline"],
                 sigma=sigma,
                 order=order,
                 time_axis=2,
             )
 
-            # the time dimension of the smoothed velocity observations is different from the original,
-            # which is because of the possible dublicate mid_date of different image pairs...
             obs_filt = xr.Dataset(
                 data_vars=dict(
                     vx_filt=(["x", "y", "mid_date"], vx_filtered),
