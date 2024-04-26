@@ -870,16 +870,8 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
             {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
              'vz': [], 'x_countz': [], 'NormR': []})
 
-def process_blocks(cube, solver, coef, apriori_weight, path_save, nb_cpu=8, block_size=0.5,
-                   obs_filt=None, interpolation_load_pixel='nearest',
-                   iteration=True, interval_output=1,
-                   first_date_interpol=None, proj='EPSG:4326',
-                   last_date_interpol=None, treshold_it=0.1, conf=True, flags=None, regu=1,
-                   interpolation_bas=False, option_interpol='spline',
-                   redundancy=False, detect_temporal_decorrelation=True, unit=365,
-                   result_quality=None, nb_max_iteration=10, delete_outliers=None, interpolation=True,
-                   linear_operator=None,
-                   visual=False, verbose=False):
+
+def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
     '''Loop over the blocks of the cube and process each block.
 
     :param cube: Class of the cube, e.g. Ticoi_cube
@@ -936,36 +928,57 @@ def process_blocks(cube, solver, coef, apriori_weight, path_save, nb_cpu=8, bloc
                     x_end = x_start + x_step if j != nblocks_x - 1 else cube.ds.dims['x']
                     y_end = y_start + y_step if i != nblocks_y - 1 else cube.ds.dims['y']
                     blocks.append([x_start, x_end, y_start,y_end])
-                    # subset = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-                    # blocks.append(subset)
-                    # obs_filt_subset = obs_filt.isel(x=slice(x_start, x_end), y=slice(y_start, y_end)) if obs_filt is not None else None
-                    # blocks_filt.append(obs_filt_subset)
         else:
             blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
-            # blocks_filt.append(obs_filt)
             if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
             
         return blocks
     
-    start = time.time()
+    
+    # get the parameters
+    if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+        for key, value in preData_kwargs.items():
+            globals()[key] = value
+        for key, value in inversion_kwargs.items():
+            globals()[key] = value
+    else:
+        raise ValueError('preData_kwars and inversion_kwars must be a dict')
+    
+    
+    start_blocks = time.time()
     blocks = cube_split(cube, block_size=block_size, verbose=True)
     dataf_list = [None] * ( cube.nx * cube.ny )
+    
     for n in range(len(blocks)):
+        
         print(f'Processing block {n+1}/{len(blocks)}')
         
         x_start, x_end, y_start, y_end = blocks[n]
+        
+        start = time.time()
         block = cube_data_class()
-        block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end)).load()
+        block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+        block.ds = block.ds.persist()
         block.update_dimension()
         
-        obs_filt_block = obs_filt.isel(x=slice(x_start, x_end), y=slice(y_start, y_end)).load() if obs_filt is not None else None
+        print(f'Time for block loading: {round((time.time() - start), 2)} sec')
+        
+        # noew calculate the rolling
+        obs_filt = block.preData_np(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order, 
+                            proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=True,
+                            velo_or_disp=velo_or_disp)
+        
+        # real loading to accelerate the inversion
+        obs_filt = obs_filt.load()
+        block.ds = block.ds.load()
+        
         
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
         result_tmp = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt_block,interpolation_load_pixel=interpolation_load_pixel, 
+            i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel, 
             iteration=iteration, interval_output=interval_output, first_date_interpol=first_date_interpol,
             last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu, 
             interpolation_bas=interpolation_bas, option_interpol=option_interpol, redundancy=redundancy, proj=proj,
@@ -980,8 +993,10 @@ def process_blocks(cube, solver, coef, apriori_weight, path_save, nb_cpu=8, bloc
             idx = int( col * cube.ny + row )
             
             dataf_list[idx]=result_tmp[i]
+        del block, result_tmp, obs_filt, xy_values, xy_values_tqdm
+        
     
-    print("Process all blocks completed in {:.2f} seconds".format(time.time() - start))
+    print("Process all blocks completed in {:.2f} seconds".format(time.time() - start_blocks))
     
     return dataf_list
 
