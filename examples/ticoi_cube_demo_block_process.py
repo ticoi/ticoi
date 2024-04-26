@@ -27,11 +27,11 @@ warnings.filterwarnings("ignore")
 
 # %%
 # Selection of data
-cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
+cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
-flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_flags.nc'  # Path where the flag file is stored
+flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset_flags.nc'  # Path where the flag file is stored
 
-result_fn = 'Hala_lake_velocity_LS7_block_test'
+result_fn = 'Hala_lake_velocity_LS7_subset_block_test'
 
 save = True
 merged = None  # Path to the second cube to merge with the first one
@@ -80,8 +80,6 @@ inversion_kwargs = {'solver': 'LSMR_ini',
                     'interpolation_load_pixel': 'nearest',
                     'iteration': True,
                     'interval_output': 1,
-                    'first_date_interpol': None,
-                    'last_date_interpol': None,
                     'treshold_it': 0.1,
                     'conf': False,
                     'flags': flags,
@@ -114,9 +112,15 @@ cube.load(cube_name, pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chu
 print(f'Time download cube {round((time.time() - start_process), 4)} sec')
 
 
+cube_date1 = cube.date1_().tolist()
+cube_date1.remove(np.min(cube_date1))
+first_date_interpol = np.min(cube_date1)
+last_date_interpol = np.max(cube.date2_())
+
+inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 start = time.time()
-result = process_blocks(cube, nb_cpu=40, block_size=0.6, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+result = process_blocks(cube, nb_cpu=40, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
 
 
 print(f'Time inversion {round((time.time() - start), 4)} sec')
