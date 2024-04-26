@@ -815,8 +815,11 @@ class cube_data_class:
             if baseline is not None:
                 baseline = baseline.compute()
                 idx = np.where(baseline < 700 )
-                mid_dates = mid_dates.isel(mid_date=idx[0])
-                da_arr = da_arr.isel(mid_date=idx[0])
+                t_thres = 120
+                idx = np.where(baseline < t_thres )
+                while len(idx[0]) < 3 * len(date_out):
+                    t_thres += 30
+                    idx = np.where(baseline < t_thres )
 
             # Apply the selected kernel in time
             if verbose:
@@ -916,6 +919,7 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
+                baseline=self.ds["temporal_baseline"],
                 time_axis=2,
             )
             vy_filtered, dates_uniq = loop_rolling(
@@ -927,6 +931,7 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
+                baseline=self.ds["temporal_baseline"],
                 time_axis=2,
             )
 
