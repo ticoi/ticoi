@@ -613,14 +613,9 @@ class cube_data_class:
             proj=proj,
         )
         # reorder the coordinates to keep the consistency
-        print(self.ds.dims)
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-        print(self.ds.dims)
+        self.prep_cube_for_processing()
         # if there is chunks in time, set no chunks
-        if self.ds.chunksizes['mid_date'] !=(self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
-        #create a variable for temporal_baseline,be
-        self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
-
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
         #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
@@ -630,6 +625,24 @@ class cube_data_class:
         if verbose:
             print(self.ds.author)
 
+    def prep_cube_for_processing(self):
+        '''
+        Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist
+        '''
+        if self.ds.chunksizes['mid_date'] != (self.nz,): self.ds = self.ds.chunk({'mid_date': self.nz})
+        # create a variable for temporal_baseline,be
+        self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values,
+                                                    dims='mid_date')
+
+        if "errorx" not in self.ds.variables:
+            self.ds["errorx"] = (
+                ("mid_date", "x", "y"),
+                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
+            )
+            self.ds["errory"] = (
+                ("mid_date", "x", "y"),
+                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
+            )
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
@@ -748,22 +761,6 @@ class cube_data_class:
             return data, mean, dates_range, regu, coef
         else:
             return data, mean, dates_range
-
-    def coord2pix(self, x, y):
-        
-        '''Convert a point in coordinates to a point in pixels'''
-        
-        try:
-            i = int(np.where(np.round(self.ds['x']).astype('int') == round(x))[0])
-            j = int(np.where(np.round(self.ds['y']).astype('int') == round(y))[0])
-        except:
-            print('exact correspondance between x,y and i,j does not exist')
-            i = int(
-                (round(x) - round(np.min(self.ds['x'].values))) / (
-                        self.ds['x'][1] - self.ds['x'][0]))  # [1,250] -> python index mode [0:249]
-            j = int((round(y) - round(np.max(self.ds['y'].values))) / (
-                    self.ds['y'][1] - self.ds['y'][0]))  # y et j varient en sens inverse
-        return i, j
 
 
     # %% ==================================================================== #
@@ -977,15 +974,6 @@ class cube_data_class:
         cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
         cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
 
-        if "errorx" not in cube.variables:
-            cube["errorx"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
-            )
-            cube["errory"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(cube["mid_date"]), len(cube["x"]), len(cube["y"]))),
-            )
         self.ds = cube.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
