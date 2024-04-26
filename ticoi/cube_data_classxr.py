@@ -636,13 +636,19 @@ class cube_data_class:
 
         if "errorx" not in self.ds.variables:
             self.ds["errorx"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            )
+                ("mid_date",
+                np.ones((len(self.ds["mid_date"])))))
             self.ds["errory"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            )
+                ("mid_date",
+                np.ones((len(self.ds["mid_date"])))))
+            # self.ds["errorx"] = (
+            #     ("mid_date", "x", "y"),
+            #     np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
+            # )
+            # self.ds["errory"] = (
+            #     ("mid_date", "x", "y"),
+            #     np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
+            # )
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
@@ -684,6 +690,19 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
+    def convert_coordinates(self,i,j,proj,verbose=False):
+        # Convert coordinates if needed
+        if proj == 'EPSG:4326':
+            myProj = Proj(self.ds.proj4)
+            i, j = myProj(i, j)
+            if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+        else:
+            if CRS(self.ds.proj4) != CRS(proj):
+                transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
+                i, j = transformer.transform(i, j)
+                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+        return i,j
+
     def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
 
         # variables to keep
@@ -693,24 +712,12 @@ class cube_data_class:
             else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
         )
 
-        if proj == 'int':
-            data = self.ds.isel(x=i, y=j)[var_to_keep]
+        if proj == 'int': data = self.ds.isel(x=i, y=j)[var_to_keep]
         else:
-            # Convert coordinates if needed
-            if proj == 'EPSG:4326':
-                myProj = Proj(self.ds.proj4)
-                i, j = myProj(i, j)
-                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
-            else:
-                if CRS(self.ds.proj4) != CRS(proj):
-                    transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
-                    i, j = transformer.transform(i, j)
-                    if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
-
+            i,j = self.convert_coordinates(i,j,proj=proj)
             # Interpolate only necessary variables and drop NaN values
             if interp == 'nearest':
-                # data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
-                #     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
+                 # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
                 data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep]
                 data = data.dropna(dim='mid_date')
             else:
@@ -848,9 +855,10 @@ class cube_data_class:
             return spatial_mean.compute(), np.unique(date_out)
               
         if i is not None and j is not None:
-            if verbose: print("Clipping dataset to individual pixel: (x, y) = ({},{})".format(i, j))
+            i, j = self.convert_coordinates(i, j, proj=proj,verbose=verbose)
+            if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
-            self.buffer(proj, [i, j, buffer])
+            self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
         # cube = self.ds.copy()

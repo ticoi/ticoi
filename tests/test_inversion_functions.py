@@ -16,6 +16,8 @@ class Test_inversion:
             '2013-10-16', '2013-10-24', '2013-11-01'
         ]).astype('datetime64[D]')
 
+
+
     def test_Construct_Dates_range(self):
         # Expected result
         expected_dates_range = self.dates_range
@@ -40,3 +42,6 @@ class Test_inversion:
 
         # Assert the results are as expected
         np.testing.assert_array_equal(actual, expected, err_msg="Construct A LP does not give the correct result")
+
+    # def test_Inversion_A_LP(self):
+
