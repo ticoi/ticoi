@@ -614,7 +614,7 @@ class cube_data_class:
         )
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-        self.prep_cube_for_processing()
+        self.standardize_cube_for_processing()
         # if there is chunks in time, set no chunks
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
@@ -625,7 +625,7 @@ class cube_data_class:
         if verbose:
             print(self.ds.author)
 
-    def prep_cube_for_processing(self):
+    def standardize_cube_for_processing(self):
         '''
         Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist
         '''
@@ -853,12 +853,12 @@ class cube_data_class:
             self.buffer(proj, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        cube = self.ds.copy()
+        # cube = self.ds.copy()
 
         # the rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide displacement values
-            cube["vx"] = cube["vx"] / cube["temporal_baseline"] * unit
-            cube["vy"] = cube["vy"] / cube["temporal_baseline"] * unit
+            self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
+            self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
         if flags is not None:
             flags = flags.load()
@@ -873,19 +873,18 @@ class cube_data_class:
                 regu = list(regu.split())
         
         if delete_outliers == "median_angle":
-            start = time.time()
-            vx_mean = cube["vx"].median(dim=['mid_date'])
-            vy_mean = cube["vy"].median(dim=['mid_date'])
+            vx_mean = self.ds["vx"].median(dim=['mid_date'])
+            vy_mean = self.ds["vy"].median(dim=['mid_date'])
 
             mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
-            cube_magnitude = np.sqrt(cube["vx"] ** 2 + cube["vy"] ** 2)
+            cube_magnitude = np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
 
             # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
             tolerance = 1e-6
             valid_magnitudes = (cube_magnitude > tolerance).compute()
 
             # Calculate the dot product of mean velocity vector and individual velocity vectors
-            cube_bis = cube[['vx', 'vy']].where(valid_magnitudes, drop=True)
+            cube_bis = self.ds[['vx', 'vy']].where(valid_magnitudes, drop=True)
             cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
 
             dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
@@ -899,23 +898,22 @@ class cube_data_class:
                 flag_condition = (flags == 0)
                 angle_condition = angle_condition.where(flag_condition['flags'].T, True, False).compute()
             
-            cube[['vx', 'vy']] = cube_bis[['vx', 'vy']].where(angle_condition, drop=True)
+            self.ds[['vx', 'vy']] = cube_bis[['vx', 'vy']].where(angle_condition, drop=True)
 
             del cube_magnitude, mean_magnitude, angle_condition, cube_bis
-            print(f'time to delete outliers: {round((time.time() - start), 1)} s')
 
         elif isinstance(delete_outliers, int):
-            cube = cube.where(
-                (cube["errorx"] < delete_outliers)
-                & (cube["errory"] < delete_outliers)
+            self.ds = self.ds.where(
+                (self.ds["errorx"] < delete_outliers)
+                & (self.ds["errory"] < delete_outliers)
             )
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
-            date_range = np.sort(np.unique(np.concatenate((cube['date1'].values, cube['date2'].values), axis=0)))
+            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                cube["vx"],
-                cube["mid_date"],
+                self.ds["vx"],
+                self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
                 s_win=s_win,
@@ -925,8 +923,8 @@ class cube_data_class:
                 time_axis=2,
             )
             vy_filtered, dates_uniq = loop_rolling(
-                cube["vy"],
-                cube["mid_date"],
+                self.ds["vy"],
+                self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
                 s_win=s_win,
@@ -965,16 +963,16 @@ class cube_data_class:
                 )
             )
         elif solver == 'LSMR_ini': #The initialization is based on the averaged velocity over the period, for every pixel
-            obs_filt = cube[['vx','vy']].mean(dim='mid_date')
+            obs_filt = self.ds[['vx','vy']].mean(dim='mid_date')
             obs_filt.attrs['description'] = 'Averaged velocity over the period'
             obs_filt.attrs['units'] = 'm/y'
 
         # unify the observations to displacement
         # to provide displacement values during inversion
-        cube["vx"] = cube["vx"] * cube["temporal_baseline"] / unit
-        cube["vy"] = cube["vy"] * cube["temporal_baseline"] / unit
+        self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
+        self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        self.ds = cube.persist() #crash memory without loading
+        self.ds = self.ds.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
         return obs_filt
