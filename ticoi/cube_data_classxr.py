@@ -615,7 +615,7 @@ class cube_data_class:
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
-        self.ds = self.ds.persist()
+        # self.ds = self.ds.persist()
         # if there is chunks in time, set no chunks
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
@@ -634,16 +634,11 @@ class cube_data_class:
         # create a variable for temporal_baseline,be
         self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values,
                                                     dims='mid_date')
-
         if "errorx" not in self.ds.variables:
-            self.ds["errorx"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            )
-            self.ds["errory"] = (
-                ("mid_date", "x", "y"),
-                np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            )
+            self.ds['errorx'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
+                chunks=self.ds.chunks['mid_date'])
+            self.ds['errory'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
+                chunks=self.ds.chunks['mid_date'])
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
