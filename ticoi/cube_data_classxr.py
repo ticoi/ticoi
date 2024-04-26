@@ -615,6 +615,7 @@ class cube_data_class:
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
+        self.ds = self.ds.persist()
         # if there is chunks in time, set no chunks
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
