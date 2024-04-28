@@ -814,7 +814,6 @@ class cube_data_class:
                 
             if baseline is not None:
                 baseline = baseline.compute()
-                idx = np.where(baseline < 700 )
                 t_thres = 120
                 idx = np.where(baseline < t_thres )
                 while len(idx[0]) < 3 * len(date_out):
