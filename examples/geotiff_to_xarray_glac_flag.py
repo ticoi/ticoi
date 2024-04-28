@@ -10,9 +10,9 @@ import geopandas as gpd
 
 start = time.time()
 
-dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS8.nc"
+dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc"
 
-file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS8/"
+file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS7/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
 
@@ -23,7 +23,7 @@ files.sort()
 
 assign_flag = True
 flag_shp = "~/data/HMA_surging_glacier_inventory/HMA_surging_glacier_inventory_gamdam_v2_all.gpkg"
-dst_flag_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS8_flags.nc"
+dst_flag_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc"
 
 datasets = []
 
