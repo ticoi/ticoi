@@ -592,6 +592,11 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
     ####  Reconstruct a time series with a given temporal sampling, and a given overlap
     step = interval_output if redundancy is None else int(interval_output / redundancy)
 
+    if step >= len(x_regu):
+        return pd.DataFrame(
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
+             'vz': [], 'x_countz': [], 'NormR': []})
+    
     x_shifted = x_regu[step:]
     dx = fdx(x_shifted) - fdx(
         x_regu[:-step])  # equivalent to [fdx(x_regu[i + step]) - fdx(x_regu[i]) for i in range(len(x_regu) - step)]
@@ -971,7 +976,6 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         # real loading to accelerate the inversion
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
-        
         
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
