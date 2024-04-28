@@ -10,9 +10,9 @@ import geopandas as gpd
 
 start = time.time()
 
-dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7.nc"
+dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS8.nc"
 
-file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS7/"
+file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS8/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
 
@@ -23,6 +23,7 @@ files.sort()
 
 assign_flag = True
 flag_shp = "~/data/HMA_surging_glacier_inventory/HMA_surging_glacier_inventory_gamdam_v2_all.gpkg"
+dst_flag_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS8_flags.nc"
 
 datasets = []
 
@@ -93,7 +94,7 @@ ds_combined.vy.attrs = {
 
 proj4 = CRS(ds.spatial_ref.projected_crs_name).to_proj4()
 source = "L. Charrier, L. Guo"
-sensor = "LS7"
+sensor = "LS8"
 
 ds_combined.attrs.update(
     {
@@ -115,7 +116,6 @@ ds_combined.to_netcdf(dst_nc)
 print("time ", (time.time() - start), "seconds")
 
 if assign_flag:
-    flag_shp = "~/data/HMA_surging_glacier_inventory/HMA_surging_glacier_inventory_gamdam_v2_all.gpkg"
     flag_shp = gpd.read_file(flag_shp).to_crs(proj4).clip(ds_combined.rio.bounds())
     
     flag_id = flag_shp['Surge_class'].apply(lambda x: 2 if x is not None else 1).astype("int16")
@@ -138,4 +138,4 @@ if assign_flag:
                     x=(["x"], ds_combined.x.data),
                     y=(["y"], ds_combined.y.data),))
     
-    flags.to_netcdf('Hala_lake_velocity_LS7_flags.nc')
+    flags.to_netcdf(dst_flag_nc)

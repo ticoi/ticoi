@@ -27,11 +27,11 @@ warnings.filterwarnings("ignore")
 
 # %%
 # Selection of data
-cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
+cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS8.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
-flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_velocity_LS7_subset_flags.nc'  # Path where the flag file is stored
+flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS8_flags.nc'  # Path where the flag file is stored
 
-result_fn = 'Hala_lake_velocity_LS7_subset_block_test'
+result_fn = 'Hala_lake_velocity_LS8_block_test'
 
 save = True
 merged = None  # Path to the second cube to merge with the first one
@@ -52,7 +52,7 @@ load_kwargs = {'filepath': cube_name,
                'conf': False, 
                'subset': None, 
                'buffer': None, 
-               'pick_date': ['2000-01-01', '2014-12-31'],
+               'pick_date': ['2013-06-01', '2023-12-31'],
                'pick_sensor': None, 
                'pick_temp_bas': None, 
                'proj': proj, 
