@@ -68,8 +68,7 @@ preData_kwargs = {'smooth_method': 'gaussian',
                   'flags': flags,
                   'regu': regu,
                   'solver': 'LSMR_ini',
-                  'proj': proj,
-                  'unit': 365, 
+                  'proj': proj, 
                   'velo_or_disp': 'disp',
                   'verbose': True}
 
