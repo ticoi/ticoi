@@ -854,11 +854,6 @@ class cube_data_class:
 
         # cube = self.ds.copy()
 
-        # the rolling smooth should be carried on velocity, while we need displacement during inversion
-        if velo_or_disp == "disp":  # to provide displacement values
-            self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
-            self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
-
         if flags is not None:
             flags = flags.load()
             if isinstance(regu, dict):
@@ -908,10 +903,19 @@ class cube_data_class:
             )
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
+            
+            # the rolling smooth should be carried on velocity, while we need displacement during inversion
+            if velo_or_disp == "disp":  # to provide velocity values
+                vx_arr = self.ds["vx"] / self.ds["temporal_baseline"] * unit
+                vy_arr = self.ds["vy"] / self.ds["temporal_baseline"] * unit
+            else:
+                vx_arr = self.ds["vx"]
+                vy_arr = self.ds["vy"]
+            
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                self.ds["vx"],
+                vx_arr,
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -923,7 +927,7 @@ class cube_data_class:
                 time_axis=2,
             )
             vy_filtered, dates_uniq = loop_rolling(
-                self.ds["vy"],
+                vy_arr,
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -970,8 +974,9 @@ class cube_data_class:
 
         # unify the observations to displacement
         # to provide displacement values during inversion
-        self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
-        self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
+        if velo_or_disp == "velo":
+            self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
+            self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         self.ds = self.ds.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
