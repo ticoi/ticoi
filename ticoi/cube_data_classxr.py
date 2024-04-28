@@ -819,6 +819,8 @@ class cube_data_class:
                 while len(idx[0]) < 3 * len(date_out):
                     t_thres += 30
                     idx = np.where(baseline < t_thres )
+                mid_dates = mid_dates.isel(mid_date=idx[0])
+                da_arr = da_arr.isel(mid_date=idx[0])
 
             # Apply the selected kernel in time
             if verbose:
