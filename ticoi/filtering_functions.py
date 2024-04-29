@@ -271,7 +271,7 @@ def dask_filt_warpper(da_vx, da_vy, filt_method="median_angle", angle_thres=45, 
     
     if filt_method == 'median_angle':
         obs_arr = da_vx.data + 1j * da_vy.data
-        inlier_mask = obs_arr.map_blocks(median_angle_filt_chunk, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
+        inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
         
     elif filt_method == 'z_score':
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)

@@ -143,11 +143,14 @@ class cube_data_class:
             chunk_size_limit = 200 * MB
         else:
             chunk_size_limit = 1000 * MB
-        
+        time_axis = self.ds[variable_name].dims.index('mid_date')
+        x_axis = self.ds[variable_name].dims.index(x_dim)
+        y_axis = self.ds[variable_name].dims.index(y_dim)
+        axis_sizes = {i: -1 if i == time_axis else "auto" for i in range(3)}
         arr = self.ds[variable_name].data.rechunk(
-            {0: -1, 1: "auto", 2: "auto"}, block_size_limit=chunk_size_limit, balance=True
+            axis_sizes, block_size_limit=chunk_size_limit, balance=True
         )
-        tc, yc, xc = arr.chunks[0][0], arr.chunks[1][0], arr.chunks[2][0]
+        tc, yc, xc = arr.chunks[time_axis][0], arr.chunks[y_axis][0], arr.chunks[x_axis][0]
         chunksize = self.ds[variable_name][:tc, :yc, :xc].nbytes / 1e6
         if verbose:
             print("Chunk shape:", "(" + ",".join([str(x) for x in [tc, yc, xc]]) + ")")
@@ -824,7 +827,7 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
     
-    def delete_outliers(self, delete_outliers:str|float,flags:bool=None, axis:int=2):
+    def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
         
         if isinstance(delete_outliers, int):
             self.ds = self.ds.where(
@@ -833,11 +836,11 @@ class cube_data_class:
             )
         else:
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
-            
-            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, flags=flags["flags"])
+            axis = self.ds['vx'].dims.index('mid_date')
+            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, axis=axis)
             
             if flags is not None:
-                flag = flags['flags'].values if flags['flags'].shape[0] == self.ds.nx else flags['flags'].values.T
+                flag = flags['flags'].values if flags['flags'].shape[0] == self.nx else flags['flags'].values.T
                 flag_condition = (flag == 0)
                 flag_condition = np.expand_dims(flag_condition, axis=axis)
                 inlier_mask = np.logical_or(inlier_mask, flag_condition)
@@ -873,7 +876,7 @@ class cube_data_class:
         
         :return:
         """
-        def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, time_axis=2, verbose=False):
+        def loop_rolling(da_arr, mid_dates, date_range, smooth_method="gaussian", s_win=3, t_win=90, sigma=3, order=3, baseline=None, verbose=False):
             
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -909,6 +912,8 @@ class cube_data_class:
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
+            # find the time axis for dask processing
+            time_axis = self.ds['vx'].dims.index('mid_date')
             # Apply the selected kernel in time
             if verbose:
                 with ProgressBar(): # Plot a progress bar
@@ -922,10 +927,13 @@ class cube_data_class:
 
             # Spatial average
             if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :# The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
-                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=(0, 1)), axis=(-1, -2))
+                
+                spatial_axis = tuple(i for i in range(3) if i != time_axis)
+                pad_widths = tuple((s_win // 2, s_win // 2) if i != time_axis else (0, 0) for i in range(3))
+                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis), axis=(-1, -2))
                 spatial_mean = da.pad(
                     spatial_mean,
-                    ((s_win // 2, s_win // 2), (s_win // 2, s_win // 2), (0, 0)),
+                    pad_widths,
                     mode="edge",
                 )
             else: spatial_mean = filtered_in_time
@@ -961,7 +969,7 @@ class cube_data_class:
         
         start = time.time()
         if delete_outliers is not None: 
-            self.delete_outliers(filt_method=delete_outliers, flags=flags, axis=2)
+            self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
         print(f'Delete outlier took {round((time.time() - start), 1)} s')
 
         
@@ -986,8 +994,7 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
-                baseline=self.ds["temporal_baseline"],
-                time_axis=2,
+                baseline=self.ds["temporal_baseline"]
             )
             vy_filtered, dates_uniq = loop_rolling(
                 vy_arr,
@@ -998,8 +1005,7 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
-                baseline=self.ds["temporal_baseline"],
-                time_axis=2,
+                baseline=self.ds["temporal_baseline"]
             )
 
             # the time dimension of the smoothed velocity observations is different from the original,
