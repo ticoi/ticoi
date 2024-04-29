@@ -966,11 +966,16 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         block.ds = block.ds.persist()
         block.update_dimension()
         
+        if flags is not None:
+            flags_block = flags.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+        else:
+            flags_block = None
+        
         print(f'Time for block loading: {round((time.time() - start), 2)} sec')
         
         # noew calculate the rolling
         obs_filt = block.preData_np(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order, 
-                            proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=True,
+                            proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers, verbose=True,
                             velo_or_disp=velo_or_disp)
         
         # real loading to accelerate the inversion
