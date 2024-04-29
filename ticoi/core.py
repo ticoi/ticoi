@@ -963,6 +963,7 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         start = time.time()
         block = cube_data_class()
         block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+        block.determine_optimal_chunk_size()
         block.ds = block.ds.persist()
         block.update_dimension()
         
