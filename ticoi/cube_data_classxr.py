@@ -135,12 +135,15 @@ class cube_data_class:
         MB = 1048576
         if time_series_array_size < 1e6:
             chunk_size_limit = 50 * MB
+            if self.ds.nbytes < 1024 * MB:
+                chunk_size_limit = 10 * MB
         elif time_series_array_size < 1e7:
             chunk_size_limit = 100 * MB
         elif time_series_array_size < 1e8:
             chunk_size_limit = 200 * MB
         else:
             chunk_size_limit = 1000 * MB
+        
         arr = self.ds[variable_name].data.rechunk(
             {0: -1, 1: "auto", 2: "auto"}, block_size_limit=chunk_size_limit, balance=True
         )
@@ -734,7 +737,7 @@ class cube_data_class:
                 if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
         return i,j
 
-    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:None|np.array=None, verbose=False):
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
         '''
 
         :param i: pixel coordinate for x
@@ -820,52 +823,32 @@ class cube_data_class:
     # %% ==================================================================== #
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
-
-    def delete_outliers(self,delete_outliers:str|float,flags:bool):
-        '''
-        Delete outliers according to a certain criterium
-        :param delete_outliers (int, 'median_angle', or None): If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
-        :param flags:
-
-        Returns: nothing, but modify self
-
-        '''
-        if delete_outliers == "median_angle":
-            vx_mean = self.ds["vx"].median(dim=['mid_date'])
-            vy_mean = self.ds["vy"].median(dim=['mid_date'])
-
-            mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
-            cube_magnitude = np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
-
-            # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
-            tolerance = 1e-6
-            valid_magnitudes = (cube_magnitude > tolerance).compute()
-
-            # Calculate the dot product of mean velocity vector and individual velocity vectors
-            # cube_bis = self.ds[['vx', 'vy']].where(valid_magnitudes, drop=True)
-            cube_bis = self.ds.where(valid_magnitudes, drop=True)
-            cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
-
-            dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
-
-            # Calculate the angle condition
-            angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
-
-            # Apply the angle condition to filter the cube
-            # cube_bis = cube_bis.where(angle_condition, drop=True)
-            if flags is not None:
-                flag_condition = (flags == 0)
-                angle_condition = angle_condition.where(flag_condition['flags'].T, True, False).compute()
-
-            self.ds = cube_bis.where(angle_condition, drop=True).load()
-
-            del cube_magnitude, mean_magnitude, angle_condition, cube_bis
-
-        elif isinstance(delete_outliers, int):
+    
+    def delete_outliers(self, delete_outliers:str|float,flags:bool=None, axis:int=2):
+        
+        if isinstance(delete_outliers, int):
             self.ds = self.ds.where(
                 (self.ds["errorx"] < delete_outliers)
                 & (self.ds["errory"] < delete_outliers)
             )
+        else:
+            # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
+            
+            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, flags=flags["flags"])
+            
+            if flags is not None:
+                flag = flags['flags'].values if flags['flags'].shape[0] == self.ds.nx else flags['flags'].values.T
+                flag_condition = (flag == 0)
+                flag_condition = np.expand_dims(flag_condition, axis=axis)
+                inlier_mask = np.logical_or(inlier_mask, flag_condition)
+            
+            inlier_flag = xr.DataArray(inlier_mask.transpose([2,0,1]), dims=self.ds.dims)
+            
+            for var in ["vx", "vy"]:
+                self.ds[var] = self.ds[var].where(inlier_flag, drop=True)
+                
+        self.ds = self.ds.persist()
+
 
     def preData_np(self, i:int|float|None=None, j:int|float|None=None, smooth_method:str="gaussian", s_win:int=3, t_win:int=90, sigma:int=3,
                    order:int=3, unit:int=365, delete_outliers:str|float|None=None, flags:None|dict=None, regu:int|str=1, solver:str='LSMR_ini',
@@ -975,9 +958,13 @@ class cube_data_class:
                 regu = [regu]
             elif isinstance(regu, str):#if regu is a string
                 regu = list(regu.split())
+        
+        start = time.time()
+        if delete_outliers is not None: 
+            self.delete_outliers(filt_method=delete_outliers, flags=flags, axis=2)
+        print(f'Delete outlier took {round((time.time() - start), 1)} s')
 
-        if delete_outliers is not None: self.delete_outliers(delete_outliers,flags)
-        print('delete outlier')
+        
         if ("1accelnotnull" in regu or "directionxy" in regu):
             
             # the rolling smooth should be carried on velocity, while we need displacement during inversion
