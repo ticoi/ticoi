@@ -42,6 +42,10 @@ class cube_data_class:
         self.ds = xr.Dataset({})
 
     def update_dimension(self):
+        '''
+        Update the variable the attribute corresponding to cube dimensions: nx, ny, and nz
+
+        '''
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
         self.nz = self.ds['mid_date'].sizes['mid_date']
@@ -51,7 +55,6 @@ class cube_data_class:
         """
         Directly crop the dataset according to 4 coordinates.
         
-        Parameters:\n
         :param proj: EPSG system of the coordinates given in subset
         :param subset: A list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
         """
@@ -76,7 +79,6 @@ class cube_data_class:
         """
         Directly crop the dataset around a given pixel, according to a given buffer
         
-        Parameters:\n
         :param proj: EPSG system of the coordinates given in subset
         :param buffer:  A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
         """
@@ -163,7 +165,6 @@ class cube_data_class:
         """
         Load a cube dataset written by ITS_LIVE.
         
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
         :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
@@ -263,7 +264,6 @@ class cube_data_class:
         """
         Load a cube dataset written by R. Millan et al.
 
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
         :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
@@ -635,22 +635,39 @@ class cube_data_class:
         self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values,
                                                     dims='mid_date')
         if "errorx" not in self.ds.variables:
-            self.ds['errorx'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
-                chunks=self.ds.chunks['mid_date'])
-            self.ds['errory'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
-                chunks=self.ds.chunks['mid_date'])
+            self.ds["errorx"] = (
+                ("mid_date",
+                np.ones((len(self.ds["mid_date"])))))
+            self.ds["errory"] = (
+                ("mid_date",
+                np.ones((len(self.ds["mid_date"])))))
+
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
     # =====================================================================%% #
     
-    def sensor_(self):
+    def sensor_(self) -> list:
+        '''
+
+        :return: list of sensor
+        '''
         return self.ds['sensor'].values.tolist()
 
-    def source_(self):
+    def source_(self)-> list:
+        '''
+
+        :return: list of source
+        '''
         return self.ds['source'].values.tolist()
 
     def temp_base_(self, list=True, format='float'):
+        '''
+        Get the temporal baseline of the dataset
+        :param list: bool, if True return of a list of date, else return a np array
+        :param format: 'float' or 'D' format of the date as output
+        :return: list or np array of temporal baselines
+        '''
         if format == 'D':
             temp = (self.ds['date2'] - self.ds['date1'])
         elif format == 'float':
@@ -664,15 +681,31 @@ class cube_data_class:
             return temp.values
 
     def date1_(self):
+        '''
+
+        :return: np array of date1
+        '''
         return np.asarray(self.ds['date1']).astype('datetime64[D]')
 
     def date2_(self):
+        '''
+
+         :return: np array of date2
+         '''
         return np.asarray(self.ds['date2']).astype('datetime64[D]')
 
     def datec_(self):
+        '''
+
+         :return: np array of central date
+         '''
         return (self.date1_() + self.temp_base_(list=False, format='D') // 2).astype('datetime64[D]')
 
     def vv_(self):
+        '''
+
+         :return: np array of velocity magnitude
+         '''
         return np.sqrt(self.ds['vx'] ** 2 + self.ds['vy'] ** 2)
 
 
@@ -680,7 +713,44 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
+    def convert_coordinates(self,i:int|float,j:int|float,proj:str,verbose:bool=False)->(float,float):
+        '''
+        Convert the coordinate (i,j) which are in projection proj, to projection of the cube dataset
+        :param i: pixel coordinate for x
+        :param j: pixel coordinate for y
+        :param proj: projection, e.g EPSG:4326
+        :param verbose: if True, print text
+        :return: converted i,j
+        '''
+        # Convert coordinates if needed
+        if proj == 'EPSG:4326':
+            myProj = Proj(self.ds.proj4)
+            i, j = myProj(i, j)
+            if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+        else:
+            if CRS(self.ds.proj4) != CRS(proj):
+                transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
+                i, j = transformer.transform(i, j)
+                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+        return i,j
+
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:None|np.array=None, verbose=False):
+        '''
+
+        :param i: pixel coordinate for x
+        :param j: pixel coordinate for y
+        :param unit: 365 if the unit if m/y and 1 if the unit is m/day
+        :param regu: type of regularization
+        :param coef: coef of the regularization
+        :param flags: if not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param solver: solver for the inversion
+        :param interp: interpolation to get the value of the given pixel
+        :param proj: projection of i and j
+        :param visual: if the user want to visualize soem figures
+        :param rolling_mean: filtered cube using a spatio-temporal filter
+        :param verbose:
+        :return:
+        '''
 
         # variables to keep
         var_to_keep = (
@@ -689,24 +759,12 @@ class cube_data_class:
             else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
         )
 
-        if proj == 'int':
-            data = self.ds.isel(x=i, y=j)[var_to_keep]
+        if proj == 'int': data = self.ds.isel(x=i, y=j)[var_to_keep]
         else:
-            # Convert coordinates if needed
-            if proj == 'EPSG:4326':
-                myProj = Proj(self.ds.proj4)
-                i, j = myProj(i, j)
-                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
-            else:
-                if CRS(self.ds.proj4) != CRS(proj):
-                    transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
-                    i, j = transformer.transform(i, j)
-                    if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
-
+            i,j = self.convert_coordinates(i,j,proj=proj)
             # Interpolate only necessary variables and drop NaN values
             if interp == 'nearest':
-                # data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep].dropna(
-                #     dim='mid_date')  # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
+                 # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each
                 data = self.ds.sel(x=i, y=j, method='nearest')[var_to_keep]
                 data = data.dropna(dim='mid_date')
             else:
@@ -763,9 +821,55 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    def preData_np(self, i=None, j=None, smooth_method="gaussian", s_win=3, t_win=90, sigma=3,
-                   order=3, unit=365, delete_outliers=None, flags=None, regu=1, solver='LSMR_ini',
-                   proj="EPSG:4326", velo_or_disp="velo", verbose=False):
+    def delete_outliers(self,delete_outliers:str|float,flags:bool):
+        '''
+        Delete outliers according to a certain criterium
+        :param delete_outliers (int, 'median_angle', or None): If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
+        :param flags:
+
+        Returns: nothing, but modify self
+
+        '''
+        if delete_outliers == "median_angle":
+            vx_mean = self.ds["vx"].median(dim=['mid_date'])
+            vy_mean = self.ds["vy"].median(dim=['mid_date'])
+
+            mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
+            cube_magnitude = np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
+
+            # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
+            tolerance = 1e-6
+            valid_magnitudes = (cube_magnitude > tolerance).compute()
+
+            # Calculate the dot product of mean velocity vector and individual velocity vectors
+            # cube_bis = self.ds[['vx', 'vy']].where(valid_magnitudes, drop=True)
+            cube_bis = self.ds.where(valid_magnitudes, drop=True)
+            cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
+
+            dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
+
+            # Calculate the angle condition
+            angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
+
+            # Apply the angle condition to filter the cube
+            # cube_bis = cube_bis.where(angle_condition, drop=True)
+            if flags is not None:
+                flag_condition = (flags == 0)
+                angle_condition = angle_condition.where(flag_condition['flags'].T, True, False).compute()
+
+            self.ds = cube_bis.where(angle_condition, drop=True).load()
+
+            del cube_magnitude, mean_magnitude, angle_condition, cube_bis
+
+        elif isinstance(delete_outliers, int):
+            self.ds = self.ds.where(
+                (self.ds["errorx"] < delete_outliers)
+                & (self.ds["errory"] < delete_outliers)
+            )
+
+    def preData_np(self, i:int|float|None=None, j:int|float|None=None, smooth_method:str="gaussian", s_win:int=3, t_win:int=90, sigma:int=3,
+                   order:int=3, unit:int=365, delete_outliers:str|float|None=None, flags:None|dict=None, regu:int|str=1, solver:str='LSMR_ini',
+                   proj:str="EPSG:4326", velo_or_disp:str="velo", verbose:bool=False):
         
         """
         Preprocess data to be processed on cube.
@@ -778,7 +882,7 @@ class cube_data_class:
         :param sigma (int): Standard deviation for 'gaussian' filter (default is 3)
         :param order (int): Order of the smoothing function (default is 3)
         :param unit (int): 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
-        :param delete_outliers (int or None): If int delete all velocities which a quality indicator higher than delete_outliers (defau)
+        :param delete_outliers (int, 'median_angle', or None): If int delete all velocities which a quality indicator higher than delete_outliers (defau)
         :param regu (int or string): Regularisation of the solver (default is 1)
         :param proj (string): EPSG of i,j projection (default is 'EPSG:4326')
         :param velo_or_disp (string): 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
@@ -848,12 +952,17 @@ class cube_data_class:
             return spatial_mean.compute(), np.unique(date_out)
               
         if i is not None and j is not None:
-            if verbose: print("Clipping dataset to individual pixel: (x, y) = ({},{})".format(i, j))
+            i, j = self.convert_coordinates(i, j, proj=proj,verbose=verbose)
+            if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
-            self.buffer(proj, [i, j, buffer])
+            self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # cube = self.ds.copy()
+        # the rolling smooth should be carried on velocity, while we need displacement during inversion
+        if velo_or_disp == "disp":  # to provide displacement values
+            self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
+            self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
+
 
         if flags is not None:
             flags = flags.load()
@@ -866,43 +975,9 @@ class cube_data_class:
                 regu = [regu]
             elif isinstance(regu, str):#if regu is a string
                 regu = list(regu.split())
-        
-        if delete_outliers == "median_angle":
-            vx_mean = self.ds["vx"].median(dim=['mid_date'])
-            vy_mean = self.ds["vy"].median(dim=['mid_date'])
 
-            mean_magnitude = np.sqrt(vx_mean ** 2 + vy_mean ** 2)
-            cube_magnitude = np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
-
-            # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
-            tolerance = 1e-6
-            valid_magnitudes = (cube_magnitude > tolerance).compute()
-
-            # Calculate the dot product of mean velocity vector and individual velocity vectors
-            cube_bis = self.ds[['vx', 'vy']].where(valid_magnitudes, drop=True)
-            cube_magnitude = np.sqrt(cube_bis["vx"] ** 2 + cube_bis["vy"] ** 2)
-
-            dot_product = (vx_mean * cube_bis["vx"] + vy_mean * cube_bis["vy"])
-
-            # Calculate the angle condition
-            angle_condition = (dot_product / (mean_magnitude * cube_magnitude) > np.sqrt(2) / 2).compute()
-
-            # Apply the angle condition to filter the cube
-            # cube_bis = cube_bis.where(angle_condition, drop=True)
-            if flags is not None:
-                flag_condition = (flags == 0)
-                angle_condition = angle_condition.where(flag_condition['flags'].T, True, False).compute()
-            
-            self.ds[['vx', 'vy']] = cube_bis[['vx', 'vy']].where(angle_condition, drop=True)
-
-            del cube_magnitude, mean_magnitude, angle_condition, cube_bis
-
-        elif isinstance(delete_outliers, int):
-            self.ds = self.ds.where(
-                (self.ds["errorx"] < delete_outliers)
-                & (self.ds["errory"] < delete_outliers)
-            )
-
+        if delete_outliers is not None: self.delete_outliers(delete_outliers,flags)
+        print('delete outlier')
         if ("1accelnotnull" in regu or "directionxy" in regu):
             
             # the rolling smooth should be carried on velocity, while we need displacement during inversion
