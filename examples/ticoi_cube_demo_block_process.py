@@ -31,7 +31,7 @@ cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.
 path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
 flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
 
-result_fn = 'Hala_lake_velocity_LS7_block_test'
+result_fn = 'Hala_lake_velocity_LS7_block_test_median_filt'
 
 save = True
 merged = None  # Path to the second cube to merge with the first one
@@ -64,7 +64,7 @@ preData_kwargs = {'smooth_method': 'gaussian',
                   'sigma': 3,
                   'order': 3,
                   'unit': 365,
-                  'delete_outliers': None,
+                  'delete_outliers': 'median_angle',
                   'flags': flags,
                   'regu': regu,
                   'solver': 'LSMR_ini',
@@ -91,7 +91,7 @@ inversion_kwargs = {'solver': 'LSMR_ini',
                     'unit': 365,
                     'result_quality': ['X_contribution'],
                     'nb_max_iteration': 10,
-                    'delete_outliers': None,
+                    'delete_outliers': 'median_angle',
                     'interpolation': True,
                     'linear_operator': None,
                     'visual': False,

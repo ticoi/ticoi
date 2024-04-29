@@ -135,8 +135,6 @@ class cube_data_class:
         MB = 1048576
         if time_series_array_size < 1e6:
             chunk_size_limit = 50 * MB
-            if self.ds.nbytes < 1024 * MB:
-                chunk_size_limit = 10 * MB
         elif time_series_array_size < 1e7:
             chunk_size_limit = 100 * MB
         elif time_series_array_size < 1e8:

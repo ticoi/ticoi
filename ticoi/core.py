@@ -963,7 +963,9 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         start = time.time()
         block = cube_data_class()
         block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-        block.determine_optimal_chunk_size()
+        # rechunk will become slower...
+        # tc, xc, yc = block.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y")
+        # block.ds = block.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
         block.ds = block.ds.persist()
         block.update_dimension()
         
