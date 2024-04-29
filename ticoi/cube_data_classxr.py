@@ -50,7 +50,7 @@ class cube_data_class:
         self.ny = self.ds['y'].sizes['y']
         self.nz = self.ds['mid_date'].sizes['mid_date']
 
-    def subset(self, proj, subset):
+    def subset(self, proj:str, subset:list):
         
         """
         Directly crop the dataset according to 4 coordinates.
@@ -74,7 +74,7 @@ class cube_data_class:
                                   y=slice(np.max([subset[2], subset[3]]), np.min([subset[2], subset[3]])))
 
 
-    def buffer(self, proj, buffer):
+    def buffer(self, proj:str, buffer:list):
         
         """
         Directly crop the dataset around a given pixel, according to a given buffer
@@ -103,7 +103,7 @@ class cube_data_class:
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
 
-    def determine_optimal_chunk_size(self, variable_name="vx", x_dim="x", y_dim="y", verbose=False):
+    def determine_optimal_chunk_size(self, variable_name:str="vx", x_dim:str="x", y_dim:str="y", verbose:bool=False) -> (int,int,int):
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
@@ -159,21 +159,21 @@ class cube_data_class:
     #                         CUBE LOADING METHODS                            #
     # =====================================================================%% #
 
-    def load_itslive(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
-                     pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+    def load_itslive(self, filepath:str, conf:bool=False, subset:list|None=None, buffer:list|None=None, pick_date:list|None=None,
+                     pick_sensor:list|None=None, pick_temp_bas:list|None=None, proj:str='EPSG:4326', verbose:bool=False):
         
         """
         Load a cube dataset written by ITS_LIVE.
         
-        :param filepath (str): Filepath of the dataset
-        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-        :param verbose (bool): Print informations throughout the process (default is False)
+        :param filepath: Filepath of the dataset
+        :param conf: If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer: A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date: A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor: A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas: A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj: Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose: Print informations throughout the process (default is False)
         """
         
         if verbose:
@@ -258,21 +258,21 @@ class cube_data_class:
         self.ds = self.ds.unify_chunks()
         
 
-    def load_millan(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
-                    pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+    def load_millan(self, filepath:str, conf:bool=False, subset:list|None=None, buffer:list|None=None, pick_date:list|None=None,
+                     pick_sensor:list|None=None, pick_temp_bas:list|None=None, proj:str='EPSG:4326', verbose:bool=False):
         
         """
         Load a cube dataset written by R. Millan et al.
 
-        :param filepath (str): Filepath of the dataset
-        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-        :param verbose (bool): Print informations throughout the process (default is False)
+        :param filepath: Filepath of the dataset
+        :param conf: If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer: A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date: A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor: A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas: A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj: Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose: Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -365,21 +365,21 @@ class cube_data_class:
                         ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
         self.ds = self.ds.unify_chunks()
 
-    def load_ducasse(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
-                     pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+    def load_ducasse(self, filepath:str, conf:bool=False, subset:list|None=None, buffer:list|None=None, pick_date:list|None=None,
+                     pick_sensor:list|None=None, pick_temp_bas:list|None=None, proj:str='EPSG:4326', verbose:bool=False):
         
         """
         Load a cube dataset written by E. Ducasse et al.
         
-        :param filepath (str): Filepath of the dataset
-        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-        :param verbose (bool): Print informations throughout the process (default is False)
+        :param filepath: Filepath of the dataset
+        :param conf: If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer: A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date: A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor: A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas: A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj: Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose: Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -446,20 +446,21 @@ class cube_data_class:
             chunks=self.ds.chunks['mid_date'])
 
 
-    def load_charrier(self, filepath, conf=False, subset=None, buffer=None, pick_date=None, 
-                    pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+    def load_charrier(self, filepath:str, conf:bool=False, subset:list|None=None, buffer:list|None=None, pick_date:list|None=None,
+                     pick_sensor:list|None=None, pick_temp_bas:list|None=None, proj:str='EPSG:4326', verbose:bool=False):
         
         """
         Load a cube dataset written by L.Charrier et al.
-        :param filepath (str): Filepath of the dataset
-        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-        :param verbose (bool): Print informations throughout the process (default is False)
+
+        :param filepath: Filepath of the dataset
+        :param conf: If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer: A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date: A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor: A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas: A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj: Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose: Print informations throughout the process (default is False)
         """
 
         if verbose:
@@ -524,24 +525,24 @@ class cube_data_class:
             self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
                 chunks=self.ds.chunks['mid_date'])
     
-    def load(self, filepath, chunks={}, conf=False, subset=None, buffer=None, pick_date=None, 
-             pick_sensor=None, pick_temp_bas=None, proj='EPSG:4326', verbose=False):
+    def load(self, filepath:str, chunks:dict|str|int={}, conf:bool=False, subset:str|None=None, buffer:str|None=None, pick_date:str|None=None,
+             pick_sensor:str|None=None, pick_temp_bas:str|None=None, proj:str='EPSG:4326', verbose:bool=False):
         
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
-        :param filepath (str): Filepath of the dataset
+        :param filepath: Filepath of the dataset
         :param chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
                        chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
                        chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
-        :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
-        :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
-        :param buffer (list or None): A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
-        :param pick_date (list or None): A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
-        :param pick_sensor (list or None): A list of strings, pick only the corresponding sensors (default is None)
-        :param pick_temp_bas (list or None): A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
-        :param proj (str): Projection of the buffer or subset which is given (default is 'EPSG:4326')
-        :param verbose (bool): Print informations throughout the process (default is False)
+        :param conf: If True convert the error in confidence between 0 and 1 (default is False)
+        :param subset: A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
+        :param buffer: A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size (default is None)
+        :param pick_date: A list of 2 string yyyy-mm-dd, pick the data between these two date (default is None)
+        :param pick_sensor: A list of strings, pick only the corresponding sensors (default is None)
+        :param pick_temp_bas: A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
+        :param proj: Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param verbose: Print informations throughout the process (default is False)
         """
         
         time_dim_name = {
@@ -741,7 +742,7 @@ class cube_data_class:
                 if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
         return i,j
 
-    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:None|np.array=None, verbose=False):
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:None | np.ndarray =None, verbose:bool=False) -> (list,None | np.ndarray,np.ndarray):
         '''
 
         :param i: pixel coordinate for x
@@ -756,7 +757,9 @@ class cube_data_class:
         :param visual: if the user want to visualize soem figures
         :param rolling_mean: filtered cube using a spatio-temporal filter
         :param verbose:
-        :return:
+        :return: data, a list 2 elements : the first one is np.ndarray with the observed
+        :return: mean, a list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
+        :return: dates_range: dates between which the displacements will be inverted
         '''
 
         # variables to keep
@@ -881,19 +884,19 @@ class cube_data_class:
         """
         Preprocess data to be processed on cube.
         
-        :param i (int or None): x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
-        :param j (int or None): y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
-        :param smooth_method (string): Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
-        :param s_win (int): Size of the spatial window (default is 3)
-        :param t_win (int): Time window size for 'ewma' smoothing (default is 90)
-        :param sigma (int): Standard deviation for 'gaussian' filter (default is 3)
-        :param order (int): Order of the smoothing function (default is 3)
-        :param unit (int): 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
-        :param delete_outliers (int, 'median_angle', or None): If int delete all velocities which a quality indicator higher than delete_outliers (defau)
-        :param regu (int or string): Regularisation of the solver (default is 1)
-        :param proj (string): EPSG of i,j projection (default is 'EPSG:4326')
-        :param velo_or_disp (string): 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
-        :param verbose (bool): Print informations throughout the process (default is False)
+        :param i: x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
+        :param j: y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
+        :param smooth_method: Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
+        :param s_win: Size of the spatial window (default is 3)
+        :param t_win: Time window size for 'ewma' smoothing (default is 90)
+        :param sigma: Standard deviation for 'gaussian' filter (default is 3)
+        :param order: Order of the smoothing function (default is 3)
+        :param unit: 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
+        :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers (defau)
+        :param regu: Regularisation of the solver (default is 1)
+        :param proj: EPSG of i,j projection (default is 'EPSG:4326')
+        :param velo_or_disp: 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
+        :param verbose: Print informations throughout the process (default is False)
         
         :return:
         """
