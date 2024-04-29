@@ -947,12 +947,6 @@ class cube_data_class:
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # the rolling smooth should be carried on velocity, while we need displacement during inversion
-        if velo_or_disp == "disp":  # to provide displacement values
-            self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
-            self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
-
-
         if flags is not None:
             flags = flags.load()
             if isinstance(regu, dict):
