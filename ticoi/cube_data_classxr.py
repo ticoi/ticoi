@@ -615,6 +615,7 @@ class cube_data_class:
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
+        # self.ds = self.ds.persist()
         # if there is chunks in time, set no chunks
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
@@ -633,7 +634,6 @@ class cube_data_class:
         # create a variable for temporal_baseline,be
         self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values,
                                                     dims='mid_date')
-
         if "errorx" not in self.ds.variables:
             self.ds["errorx"] = (
                 ("mid_date",
@@ -641,14 +641,7 @@ class cube_data_class:
             self.ds["errory"] = (
                 ("mid_date",
                 np.ones((len(self.ds["mid_date"])))))
-            # self.ds["errorx"] = (
-            #     ("mid_date", "x", "y"),
-            #     np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            # )
-            # self.ds["errory"] = (
-            #     ("mid_date", "x", "y"),
-            #     np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            # )
+
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
@@ -925,7 +918,11 @@ class cube_data_class:
                 
             if baseline is not None:
                 baseline = baseline.compute()
-                idx = np.where(baseline < 700 )
+                t_thres = 120
+                idx = np.where(baseline < t_thres )
+                while len(idx[0]) < 3 * len(date_out):
+                    t_thres += 30
+                    idx = np.where(baseline < t_thres )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -966,6 +963,7 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
+
         if flags is not None:
             flags = flags.load()
             if isinstance(regu, dict):
@@ -981,10 +979,19 @@ class cube_data_class:
         if delete_outliers is not None: self.delete_outliers(delete_outliers,flags)
         print('delete outlier')
         if ("1accelnotnull" in regu or "directionxy" in regu):
+            
+            # the rolling smooth should be carried on velocity, while we need displacement during inversion
+            if velo_or_disp == "disp":  # to provide velocity values
+                vx_arr = self.ds["vx"] / self.ds["temporal_baseline"] * unit
+                vy_arr = self.ds["vy"] / self.ds["temporal_baseline"] * unit
+            else:
+                vx_arr = self.ds["vx"]
+                vy_arr = self.ds["vy"]
+            
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                self.ds["vx"],
+                vx_arr,
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -992,10 +999,11 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
+                baseline=self.ds["temporal_baseline"],
                 time_axis=2,
             )
             vy_filtered, dates_uniq = loop_rolling(
-                self.ds["vy"],
+                vy_arr,
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -1003,6 +1011,7 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
+                baseline=self.ds["temporal_baseline"],
                 time_axis=2,
             )
 
@@ -1041,8 +1050,9 @@ class cube_data_class:
 
         # unify the observations to displacement
         # to provide displacement values during inversion
-        self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
-        self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
+        if velo_or_disp == "velo":
+            self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
+            self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         self.ds = self.ds.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
