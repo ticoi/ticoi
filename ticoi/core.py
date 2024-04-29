@@ -16,6 +16,7 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 '''
 
+import time, os
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -28,6 +29,11 @@ from ticoi.inversion_functions import Construction_A_LP, class_inversion, find_d
     Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation
 from ticoi.other_functions import reconstruct_Common_Ref
 from ticoi.inversion_functions import Construction_dates_range_np
+from ticoi.cube_data_classxr import cube_data_class
+from tqdm import tqdm
+import itertools
+from joblib import Parallel, delayed
+    
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -586,6 +592,11 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
     ####  Reconstruct a time series with a given temporal sampling, and a given overlap
     step = interval_output if redundancy is None else int(interval_output / redundancy)
 
+    if step >= len(x_regu):
+        return pd.DataFrame(
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
+             'vz': [], 'x_countz': [], 'NormR': []})
+    
     x_shifted = x_regu[step:]
     dx = fdx(x_shifted) - fdx(
         x_regu[:-step])  # equivalent to [fdx(x_regu[i + step]) - fdx(x_regu[i]) for i in range(len(x_regu) - step)]
@@ -864,6 +875,134 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
             {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
              'vz': [], 'x_countz': [], 'NormR': []})
 
+
+def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
+    '''Loop over the blocks of the cube and process each block.
+
+    :param cube: Class of the cube, e.g. Ticoi_cube
+    :param solver: str, solver for the inversion
+    :param coef: float, coefficient for the L2 norm of the residuals
+    :param apriori_weight: float, apriori weight for the inversion
+    :param path_save: str, path where to save the figures
+    :param obs_filt: None or array, True where to apply a filter on the observations (usually to remove outliers)
+    :param interpolation_load_pixel: str, type of interpolation to load the previous pixel in the temporal interpolation (nearest or linear)
+    :param iteration: bool, if True the inversion is performed for each pixel in the block
+    :param interval_output: int, temporal interval of the output (in years)
+    :param first_date_interpol: str, first date of the interpolation
+    :param proj: str, projection of the cube
+    :param last_date_interpol: str, last date of the interpolation
+    :param treshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
+    :param conf: bool, if True set the confidence to the error in the observations
+    :param flags: None or list, which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
+    :param regu: int, type of regularisation
+    :param interpolation_bas: int, temporal sampling of the velocity time series
+    :param option_interpol: str, type of interpolation : 'spline', 'nearest' or 'spline_smooth' for smoothing spline
+    :param redundancy: int, overlap between two velocities in the interpolated time-series in days
+    :param detect_temporal_decorrelation: bool, if True detect temporal decorrelation by setting a weight of 0 at the beginning at the first inversion to all observation with a temporal baseline larger than 200
+    :param unit: str, m/y or m/d
+    :param result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+    :param nb_max_iteration: int, maximal number of iteration for the inversion
+    :param delete_outliers: None or str, if None no outlier is deleted, otherwise the outlier are deleted according to the method (median_angle for the moment)
+    :param interpolation: bool, if True perform the temporal interpolation
+    :param linear_operator: None or array, linear operator to use in the inversion (e.g. the covariance matrix of the observation errors)
+    :param visual: bool, if True plot the figures
+    :param verbose: bool, if True print some information
+
+    :return: pandas dataframe, time series of the velocity estimates
+    '''
+    def cube_split(cube, block_size=1, verbose=False):
+        GB = 1073741824
+        blocks = []
+        if cube.ds.nbytes > block_size * GB:
+            nblocks = int(np.ceil(cube.ds.nbytes / (block_size * GB)))
+            
+            # Determine the closest pair of nblocks in x and y direction
+            nblocks_x = int(np.sqrt(nblocks))
+            while nblocks % nblocks_x != 0:
+                nblocks_x -= 1
+            nblocks_y = nblocks // nblocks_x
+            
+            x_step = cube.ds.dims['x'] // nblocks_x
+            y_step = cube.ds.dims['y'] // nblocks_y
+
+            if verbose: print(f'Divide into {nblocks} blocks\n blocks size: {x_step} x {y_step}')
+            for i in range(nblocks_y):
+                for j in range(nblocks_x):
+                    x_start = j * x_step
+                    y_start = i * y_step
+                    x_end = x_start + x_step if j != nblocks_x - 1 else cube.ds.dims['x']
+                    y_end = y_start + y_step if i != nblocks_y - 1 else cube.ds.dims['y']
+                    blocks.append([x_start, x_end, y_start,y_end])
+        else:
+            blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
+            if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
+            
+        return blocks
+    
+    
+    # get the parameters
+    if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+        for key, value in preData_kwargs.items():
+            globals()[key] = value
+        for key, value in inversion_kwargs.items():
+            globals()[key] = value
+    else:
+        raise ValueError('preData_kwars and inversion_kwars must be a dict')
+    
+    
+    start_blocks = time.time()
+    blocks = cube_split(cube, block_size=block_size, verbose=True)
+    dataf_list = [None] * ( cube.nx * cube.ny )
+    
+    for n in range(len(blocks)):
+        
+        print(f'Processing block {n+1}/{len(blocks)}')
+        
+        x_start, x_end, y_start, y_end = blocks[n]
+        
+        start = time.time()
+        block = cube_data_class()
+        block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+        block.ds = block.ds.persist()
+        block.update_dimension()
+        
+        print(f'Time for block loading: {round((time.time() - start), 2)} sec')
+        
+        # noew calculate the rolling
+        obs_filt = block.preData_np(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order, 
+                            proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=True,
+                            velo_or_disp=velo_or_disp)
+        
+        # real loading to accelerate the inversion
+        obs_filt = obs_filt.load()
+        block.ds = block.ds.load()
+        
+        xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
+        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
+
+        result_tmp = Parallel(n_jobs=nb_cpu, verbose=0)(
+        delayed(process)(block,
+            i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel, 
+            iteration=iteration, interval_output=interval_output, first_date_interpol=first_date_interpol,
+            last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu, 
+            interpolation_bas=interpolation_bas, option_interpol=option_interpol, redundancy=redundancy, proj=proj,
+            detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality, 
+            nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers, interpolation=interpolation,
+            linear_operator=linear_operator, visual=visual, verbose=verbose)
+        for i, j in xy_values_tqdm)
+        
+        for i in range(len(result_tmp)):
+            row = i % block.ny + y_start
+            col = np.floor( i / block.ny ) + x_start
+            idx = int( col * cube.ny + row )
+            
+            dataf_list[idx]=result_tmp[i]
+        del block, result_tmp, obs_filt, xy_values, xy_values_tqdm
+        
+    
+    print("Process all blocks completed in {:.2f} seconds".format(time.time() - start_blocks))
+    
+    return dataf_list
 
 def visualisation(data, result, option_visual, path_save, interval_output=1, interval_inputMax=None, A=False,
                   dataf=False, unit='m/y',
