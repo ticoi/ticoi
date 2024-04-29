@@ -42,6 +42,10 @@ class cube_data_class:
         self.ds = xr.Dataset({})
 
     def update_dimension(self):
+        '''
+        Update the variable the attribute corresponding to cube dimensions: nx, ny, and nz
+
+        '''
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
         self.nz = self.ds['mid_date'].sizes['mid_date']
@@ -51,7 +55,6 @@ class cube_data_class:
         """
         Directly crop the dataset according to 4 coordinates.
         
-        Parameters:\n
         :param proj: EPSG system of the coordinates given in subset
         :param subset: A list of 4 float, these values are used to give a subset of the dataset : [xmin,xmax,ymax,ymin]
         """
@@ -76,7 +79,6 @@ class cube_data_class:
         """
         Directly crop the dataset around a given pixel, according to a given buffer
         
-        Parameters:\n
         :param proj: EPSG system of the coordinates given in subset
         :param buffer:  A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
         """
@@ -163,7 +165,6 @@ class cube_data_class:
         """
         Load a cube dataset written by ITS_LIVE.
         
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
         :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
@@ -263,7 +264,6 @@ class cube_data_class:
         """
         Load a cube dataset written by R. Millan et al.
 
-        Parameters:\n
         :param filepath (str): Filepath of the dataset
         :param conf (bool): If True convert the error in confidence between 0 and 1 (default is False)
         :param subset (list or None): A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax] (default is None)
@@ -615,6 +615,7 @@ class cube_data_class:
         # reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
+        # self.ds = self.ds.persist()
         # if there is chunks in time, set no chunks
 
         # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
@@ -633,7 +634,6 @@ class cube_data_class:
         # create a variable for temporal_baseline,be
         self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values,
                                                     dims='mid_date')
-
         if "errorx" not in self.ds.variables:
             self.ds["errorx"] = (
                 ("mid_date",
@@ -641,26 +641,33 @@ class cube_data_class:
             self.ds["errory"] = (
                 ("mid_date",
                 np.ones((len(self.ds["mid_date"])))))
-            # self.ds["errorx"] = (
-            #     ("mid_date", "x", "y"),
-            #     np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            # )
-            # self.ds["errory"] = (
-            #     ("mid_date", "x", "y"),
-            #     np.ones((len(self.ds["mid_date"]), len(self.ds["x"]), len(self.ds["y"]))),
-            # )
+
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
     # =====================================================================%% #
     
-    def sensor_(self):
+    def sensor_(self) -> list:
+        '''
+
+        :return: list of sensor
+        '''
         return self.ds['sensor'].values.tolist()
 
-    def source_(self):
+    def source_(self)-> list:
+        '''
+
+        :return: list of source
+        '''
         return self.ds['source'].values.tolist()
 
     def temp_base_(self, list=True, format='float'):
+        '''
+        Get the temporal baseline of the dataset
+        :param list: bool, if True return of a list of date, else return a np array
+        :param format: 'float' or 'D' format of the date as output
+        :return: list or np array of temporal baselines
+        '''
         if format == 'D':
             temp = (self.ds['date2'] - self.ds['date1'])
         elif format == 'float':
@@ -674,15 +681,31 @@ class cube_data_class:
             return temp.values
 
     def date1_(self):
+        '''
+
+        :return: np array of date1
+        '''
         return np.asarray(self.ds['date1']).astype('datetime64[D]')
 
     def date2_(self):
+        '''
+
+         :return: np array of date2
+         '''
         return np.asarray(self.ds['date2']).astype('datetime64[D]')
 
     def datec_(self):
+        '''
+
+         :return: np array of central date
+         '''
         return (self.date1_() + self.temp_base_(list=False, format='D') // 2).astype('datetime64[D]')
 
     def vv_(self):
+        '''
+
+         :return: np array of velocity magnitude
+         '''
         return np.sqrt(self.ds['vx'] ** 2 + self.ds['vy'] ** 2)
 
 
@@ -690,7 +713,15 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def convert_coordinates(self,i,j,proj,verbose=False):
+    def convert_coordinates(self,i:int|float,j:int|float,proj:str,verbose:bool=False)->(float,float):
+        '''
+        Convert the coordinate (i,j) which are in projection proj, to projection of the cube dataset
+        :param i: pixel coordinate for x
+        :param j: pixel coordinate for y
+        :param proj: projection, e.g EPSG:4326
+        :param verbose: if True, print text
+        :return: converted i,j
+        '''
         # Convert coordinates if needed
         if proj == 'EPSG:4326':
             myProj = Proj(self.ds.proj4)
@@ -703,7 +734,23 @@ class cube_data_class:
                 if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
         return i,j
 
-    def load_pixel(self, i, j, unit=365, regu=1, coef=1, flags=None, solver='LSMR', interp='nearest',proj='EPSG:4326', visual=False, rolling_mean=None, verbose=False):
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:None|np.array=None, verbose=False):
+        '''
+
+        :param i: pixel coordinate for x
+        :param j: pixel coordinate for y
+        :param unit: 365 if the unit if m/y and 1 if the unit is m/day
+        :param regu: type of regularization
+        :param coef: coef of the regularization
+        :param flags: if not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param solver: solver for the inversion
+        :param interp: interpolation to get the value of the given pixel
+        :param proj: projection of i and j
+        :param visual: if the user want to visualize soem figures
+        :param rolling_mean: filtered cube using a spatio-temporal filter
+        :param verbose:
+        :return:
+        '''
 
         # variables to keep
         var_to_keep = (
@@ -774,7 +821,7 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    def delete_outliers(self,delete_outliers,flags):
+    def delete_outliers(self,delete_outliers:str|float,flags:bool):
         '''
         Delete outliers according to a certain criterium
         :param delete_outliers (int, 'median_angle', or None): If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
@@ -820,9 +867,9 @@ class cube_data_class:
                 & (self.ds["errory"] < delete_outliers)
             )
 
-    def preData_np(self, i=None, j=None, smooth_method="gaussian", s_win=3, t_win=90, sigma=3,
-                   order=3, unit=365, delete_outliers=None, flags=None, regu=1, solver='LSMR_ini',
-                   proj="EPSG:4326", velo_or_disp="velo", verbose=False):
+    def preData_np(self, i:int|float|None=None, j:int|float|None=None, smooth_method:str="gaussian", s_win:int=3, t_win:int=90, sigma:int=3,
+                   order:int=3, unit:int=365, delete_outliers:str|float|None=None, flags:None|dict=None, regu:int|str=1, solver:str='LSMR_ini',
+                   proj:str="EPSG:4326", velo_or_disp:str="velo", verbose:bool=False):
         
         """
         Preprocess data to be processed on cube.
@@ -871,7 +918,11 @@ class cube_data_class:
                 
             if baseline is not None:
                 baseline = baseline.compute()
-                idx = np.where(baseline < 700 )
+                t_thres = 120
+                idx = np.where(baseline < t_thres )
+                while len(idx[0]) < 3 * len(date_out):
+                    t_thres += 30
+                    idx = np.where(baseline < t_thres )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -912,6 +963,7 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
+
         if flags is not None:
             flags = flags.load()
             if isinstance(regu, dict):
@@ -927,10 +979,19 @@ class cube_data_class:
         if delete_outliers is not None: self.delete_outliers(delete_outliers,flags)
         print('delete outlier')
         if ("1accelnotnull" in regu or "directionxy" in regu):
+            
+            # the rolling smooth should be carried on velocity, while we need displacement during inversion
+            if velo_or_disp == "disp":  # to provide velocity values
+                vx_arr = self.ds["vx"] / self.ds["temporal_baseline"] * unit
+                vy_arr = self.ds["vy"] / self.ds["temporal_baseline"] * unit
+            else:
+                vx_arr = self.ds["vx"]
+                vy_arr = self.ds["vy"]
+            
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                self.ds["vx"],
+                vx_arr,
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -938,10 +999,11 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
+                baseline=self.ds["temporal_baseline"],
                 time_axis=2,
             )
             vy_filtered, dates_uniq = loop_rolling(
-                self.ds["vy"],
+                vy_arr,
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -949,6 +1011,7 @@ class cube_data_class:
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
+                baseline=self.ds["temporal_baseline"],
                 time_axis=2,
             )
 
@@ -987,8 +1050,9 @@ class cube_data_class:
 
         # unify the observations to displacement
         # to provide displacement values during inversion
-        self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
-        self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
+        if velo_or_disp == "velo":
+            self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
+            self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         self.ds = self.ds.persist() #crash memory without loading
         #persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.

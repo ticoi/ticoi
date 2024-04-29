@@ -40,14 +40,13 @@ for file in files:
     ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})
     ds = ds.expand_dims("mid_date")
     
-    if obs_mode == 'displacement':
+    if obs_mode == "velocity":
+        velo_unit = 365 if unit == "m/y" else 1
         period = (date2 - date1).days
-        ds['vx'] = ds['vx'] / period * 365
-        ds['vy'] = ds['vy'] / period * 365
-    elif obs_mode == 'velocity':
-        if unit == 'm/d':
-            ds['vx'] = ds['vx'] * 365
-            ds['vy'] = ds['vy'] * 365
+        ds["vx"] = ds["vx"] * period / velo_unit
+        ds["vy"] = ds["vy"] * period / velo_unit
+    elif obs_mode == "displacement":
+        pass
 
     ds["date1"] = date1
     ds["date2"] = date2
