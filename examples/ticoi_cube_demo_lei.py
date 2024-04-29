@@ -39,10 +39,10 @@ temp_baseline = None  # to select certain temporal baselines in the dataset
 sensor = None
 conf = False  # if you want confidence indicators ranging between 0 and 1, with 1 the lowest errors
 unit = 'm/y'
-delete_outliers = 'median_angle'  # if None, all the data are included; if an integer, the data with a error higher than this interger are removed; if median_average, the data with a direction 45° away compared to the averaged direction are removed
+delete_outliers = None  # if None, all the data are included; if an integer, the data with a error higher than this interger are removed; if median_average, the data with a direction 45° away compared to the averaged direction are removed
 
 # Where to save the results
-name_result = 'cube-with-flag-flag_test_1.nc'  # name of the cube where to save the results
+name_result = 'Hala_lake_velocity_LS7_block_test.nc'  # name of the cube where to save the results
 path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # folder where to save the results
 
 ####  Inversion
@@ -68,7 +68,7 @@ redundancy = 30
 nb_cpu = 40
 verbose = False
 save = True
-interpolation = False
+interpolation = True
 linear_operator = None
 option_visual = ['orginal_velocity_xy', 'original_magnitude', 'X_magnitude_zoom',
                  'X',
@@ -76,7 +76,7 @@ option_visual = ['orginal_velocity_xy', 'original_magnitude', 'X_magnitude_zoom'
                  'vv_quality']  # ['orginal_velocity_xy','original_magnitude','error','vv_good_quality','vv_quality','vxvy_quality','X','X_vxvy','X_magnitude','X_magnitude_Zoom','X_filter','X_filterZoom','X_magnitude_filter','Y_contribution','Residu','Residu_magnitude']
 
 
-
+obs_filt_fn = os.path.join(path_save, 'Hala_lake_velocity_LS7_obs_filt.nc')
 
 
 unit = 365 if unit == 'm/y' else 1
@@ -98,9 +98,15 @@ if assign_flag:
 
 
 start = time.time()
-obs_filt = cube.preData_np(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, 
-                           proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=False,
-                           velo_or_disp='velo')
+if os.path.exists(obs_filt_fn) is False:
+    obs_filt = cube.preData_np(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, 
+                            proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=False,
+                            velo_or_disp='disp')
+    if save:
+        obs_filt.to_netcdf(obs_filt_fn)
+else:
+    obs_filt = xr.open_dataset(obs_filt_fn)
+    obs_filt.load()
 print(f'Time rolling_mean {round((time.time() - start), 4)} sec')
 
 cube_date1 = cube.date1_().tolist()
@@ -112,6 +118,7 @@ last_date_interpol = np.max(cube.date2_())
 print(f'Cube of dimesion (nz,nx,ny) ITS_LIVE: ({cube.nz},{cube.nx},{cube.ny}) ')
 
 start = time.time()
+
 
 # %% Initialisation of the cube to store the data
 start = time.time()
@@ -135,20 +142,35 @@ if save:
 
 EPSG = f'EPSG:{CRS(cube.ds.proj4).to_epsg()}'
 
-
-
-xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
-xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values))
-
-result = Parallel(n_jobs=nb_cpu, verbose=0)(
-    delayed(process)(cube,
-        i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt,interpolation_load_pixel='nearest', first_date_interpol=start_date_interpol,
+result = process_blocks(cube,
+        solver, coef, apriori_weight, path_save, nb_cpu=nb_cpu, block_size=0.5, obs_filt=obs_filt,interpolation_load_pixel='nearest', first_date_interpol=start_date_interpol,
         last_date_interpol=last_date_interpol, conf=conf, flags=flags, regu=regu, interpolation_bas=interpolation_bas,
         option_interpol=option_interpol, redundancy=redundancy, proj=proj,
         detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
         delete_outliers=delete_outliers, interpolation=interpolation,linear_operator=linear_operator,
         verbose=verbose)
-    for i, j in xy_values_tqdm)
+
+# xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
+# xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values))
+# result = Parallel(n_jobs=nb_cpu, verbose=0)(
+#     delayed(process)(cube,
+#         i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt,interpolation_load_pixel='nearest', first_date_interpol=start_date_interpol,
+#         last_date_interpol=last_date_interpol, conf=conf, flags=flags, regu=regu, interpolation_bas=interpolation_bas,
+#         option_interpol=option_interpol, redundancy=redundancy, proj=proj,
+#         detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
+#         delete_outliers=delete_outliers, interpolation=interpolation,linear_operator=linear_operator,
+#         verbose=verbose)
+#     for i, j in xy_values_tqdm)
+
+# result = Parallel(n_jobs=nb_cpu, verbose=0)(
+#     delayed(process)(cube,
+#         i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt,interpolation_load_pixel='nearest', first_date_interpol=start_date_interpol,
+#         last_date_interpol=last_date_interpol, conf=conf, flags=flags, regu=regu, interpolation_bas=interpolation_bas,
+#         option_interpol=option_interpol, redundancy=redundancy, proj=proj,
+#         detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
+#         delete_outliers=delete_outliers, interpolation=interpolation,linear_operator=linear_operator,
+#         verbose=verbose)
+#     for i, j in xy_values_tqdm)
 
 
 # # %% Inversion
@@ -177,9 +199,9 @@ result = Parallel(n_jobs=nb_cpu, verbose=0)(
 print(f'Time inversion {round((time.time() - start), 4)} sec')
 
 # %% save the res
-# cube.write_result_TICOI(result, source, sensor, filename=name_result,
-#                         savepath=path_save, result_quality=result_quality, verbose=verbose)
-cube.write_result_TICO(result, source, sensor, filename=name_result,
+cube.write_result_TICOI(result, source, sensor, filename=name_result,
                         savepath=path_save, result_quality=result_quality, verbose=verbose)
+# cube.write_result_TICO(result, source, sensor, filename=name_result,
+#                         savepath=path_save, result_quality=result_quality, verbose=verbose)
 print(f'Total process {(time.time() - start_process) / 60} min')
 print('stop')
