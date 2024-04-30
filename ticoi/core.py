@@ -15,7 +15,6 @@ Reference:
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 '''
-
 import time, os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -24,126 +23,26 @@ import sklearn.metrics as sm
 import scipy.sparse as sp
 import pandas as pd
 from scipy import stats
-from scipy import interpolate
-from ticoi.inversion_functions import Construction_A_LP, class_inversion, find_date_obs, Inversion_A_LP, \
-    Inversion_A_LPxydir, TukeyBiweight, average_absolute_deviation
-from ticoi.other_functions import reconstruct_Common_Ref
-from ticoi.inversion_functions import Construction_dates_range_np
 from ticoi.cube_data_classxr import cube_data_class
 from tqdm import tqdm
 import itertools
 from joblib import Parallel, delayed
-    
+from ticoi.inversion_functions import construction_a_lf, class_linear_operator, find_date_obs, inversion_one_component, \
+    inversion_two_components, TukeyBiweight, weight_for_inversion,mu_regularisation,construction_dates_range_np
+from ticoi.interpolation_functions import reconstruct_common_ref, set_function_for_interpolation, visualisation_interpolation
+from typing import Union
+
+
+
 import warnings
 
 warnings.filterwarnings("ignore")
 
 
-def mu_regularisation(regu, A, dates_range, ini=None):
-    """
-    Compute the Tikhonov regularisation matrix
-    
-    :param regu: str, type of regularization
-    :param A: np array, design matrix
-    :param dates_range: list, list of estimated dates
-    :param ini: initial parameter (velocity and/or acceleration mean)
-        
-    :return mu: Tikhonov regularisation matrix
-    """
 
-    # First order Tikhonov regularisation
-    if regu == 1:
-        mu = np.identity(A.shape[1], dtype='float32')
-        mu[np.arange(mu.shape[0] - 1) + 1, np.arange(mu.shape[0] - 1)] = -1
-        mu /= (np.diff(dates_range) / np.timedelta64(1, 'D'))
-        mu = np.delete(mu, 0, axis=0)
-
-    # First order Tikhonov regularisation, with an apriori on the acceleration
-    elif regu == '1accelnotnull':
-        mu = np.diag(np.full(A.shape[1], -1, dtype='float32'))
-        mu[np.arange(A.shape[1] - 1), np.arange(A.shape[1] - 1) + 1] = 1
-        mu /= (np.diff(dates_range) / np.timedelta64(1, 'D'))
-        mu = np.delete(mu, -1, axis=0)
-
-    # Second order Tikhonov regularisation
-    elif regu == 2:
-        delta = (np.diff(dates_range) / np.timedelta64(1, 'D'))
-        mu = np.zeros((A.shape[1], A.shape[1]), dtype='float64')
-        mu[range(1, A.shape[1] - 1), range(0, A.shape[1] - 2)] = 1 / delta[:-2]
-        mu[range(1, A.shape[1] - 1), range(1, A.shape[1] - 1)] = -2 / delta[1:-1]
-        mu[range(1, A.shape[1] - 1), range(2, A.shape[1])] = 1 / delta[2:]
-        mu[0, 0] = 0
-        mu[-1, -1] = 0
-
-    # Regularisation on the direction when vx and vy are inverted together
-    elif regu == 'directionxy':
-        mu = np.zeros((A.shape[1], 2 * A.shape[1]), dtype='float64')
-        delta = [(dates_range[k + 1] - dates_range[k]) / np.timedelta64(1, 'D') for k in range(len(dates_range) - 1)]
-
-        if len(ini) == 2:
-            vv = (np.array(ini[0]) ** 2 + np.array(ini[1]) ** 2)
-            for k in range(
-                    len(dates_range) - 1):  # Force estimated vector to be colinear to the averaged vector : vector product equal to 1
-                mu[k, k] = ini[0][k] / int(delta[k]) / vv[k]  # vx * meanvx
-                mu[k, k + len(dates_range) - 1] = (ini[1][k] / int(delta[k]) / vv[k])  # vy * meanvy
-
-        elif len(ini) == 4:
-            vv = np.sqrt(ini[0] ** 2 + ini[1] ** 2) / 365 * np.sqrt(ini[2] ** 2 + ini[3] ** 2) / delta
-            for k in range(
-                    len(dates_range) - 1):  # Force estimated vector to be colinear to the averaged vector : vector product equal to 1
-                mu[k, k] = ini[0][k] / 365 / int(delta[k]) / vv[k]  # vx * meanvx
-                mu[k, k + len(dates_range) - 1] = (ini[1][k] / 365 / int(delta[k]) / vv[k])  # vy * meanvy
-
-    else:
-        raise ValueError("Enter 1, 2,'1accelnotnull', 'directionxy")
-
-    return mu
-
-
-def weight_for_inversion(weight_origine, conf, data, pos, inside_Tukey=False, apriori_weight=None):
-    """
-    Initialisation of the weights
-    
-    :param weight_origine: bool, if True the weights are calculated from the data quality indicators
-    :param conf: bool, if True the weights correspond to the confidence intervals between 0 and 1 (1 is highest quality)
-    :param data: np array, the data array
-    :param pos: int, the position of the variable dx or dy
-    :param inside_Tukey: bool, if True the weight will be injected inside the Tukey biweight function
-    :param apriori_weight: None or np array, apriori weight, for examples a list of 0 and 1 to detect temporal decorrelation
-    
-    :return Weight: np array of the initial weights
-    """
-
-    # Weight based on data quality
-    if weight_origine == True and not inside_Tukey:
-        if conf:  # Based on data quality given in confidence indicator, i.e. between 0 and 1 (1 is highest quality)
-            Weight = data[:, pos]
-        else:  # The data quality corresponds to errors in m/y or m/d
-            # Normalization of the residual
-            try:
-                Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
-            except ZeroDivisionError:
-                Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            Weight = TukeyBiweight(Weight, 4.685)
-
-        if apriori_weight is not None:
-            Weight = np.multiply(apriori_weight, Weight)
-
-    # Apriori weights (ex : detection of temporal decorrelation)
-    elif apriori_weight is not None:
-        Weight = apriori_weight
-
-    # If no apriori knowledge, identity matrix
-    else:
-        Weight = np.ones(data.shape[0])
-
-    return Weight
-
-
-def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, result_dy, mu, born=None, regu=1,
-                        accel=None, mean=None, linear_operator=None,
-                        result_quality=None, ini=None, visual=False, verbose=False):
+def inversion_iteration(data:np.ndarray, A:np.ndarray, dates_range:np.ndarray, solver:str, coef:int, Weight:np.ndarray, result_dx:np.ndarray, result_dy:np.ndarray, mu:np.ndarray, regu:int|str=1,
+                        accel:np.ndarray|None=None, linear_operator=Union["class_linear_operator",None],
+                        result_quality:list|None=None, ini:np.ndarray|None=None, verbose:bool=False)-> (np.ndarray,np.ndarray,np.ndarray,np.ndarray,np.ndarray|None,np.ndarray|None):
     '''
     Compute an iteration of the inversion : update the weights using the weights from the previous iteration and a studentized residual, update the results in consequence
     and compute the residu's norm if required.
@@ -151,18 +50,15 @@ def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, res
     :param data: np array, containing the data at a given point
     :param A: np array, design matrix linking X (vector containing the velocity observations) to Y
     :param dates_range: list, Dates of the displacements in X
-    :param mode: str, solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
+    :param solver: str, solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
     :param coef: int, coef of Tikhonov regularisation
     :param Weight: list, weight to give to the inversion
     :param result_dx: np array, estimated time series vx at the given iteration
     :param result_dy: np array, estimated time series vx at the given iteration
     :param mu: regularization matrix
-    :param visual: bool, if you want to plot the results
     :verbose: bool, if you want to plot some text
-    :param born: list or None, the born of the estimated velocity when the solver is LS_bounded
     :param regu : str, type of regularization
     :param accel: list or None, apriori on the acceleration
-    :param mean, list or None, apriori on the average
     :param: result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
 
     :return result_dx, result_dy: Obtained results (velocities) for this iteration along x and y axis
@@ -171,11 +67,11 @@ def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, res
 
     '''
 
-    def compute_residual(A, v, X):
+    def compute_residual(A:np.ndarray, v:np.ndarray, X:np.ndarray)->np.ndarray:
         Residu = (v - A.dot(X))
         return Residu
 
-    def weightf(residu, Weight):
+    def weightf(residu:np.ndarray, Weight:np.ndarray)->np.ndarray:
         '''
         Compte weight according to the residual
         :param residu: np array, residual vector
@@ -200,57 +96,50 @@ def inversion_iteration(data, A, dates_range, mode, coef, Weight, result_dx, res
         return result_dx, result_dy, weightx, weighty, None, None
 
     if regu == 'directionxy':
-        if mode == 'LSMR_ini':
-            result_dx, result_dy, residu_normx, residu_normy = Inversion_A_LPxydir(A, dates_range, 0, data, mode,
-                                                                                   np.concatenate([weightx, weighty]),
-                                                                                   mu, coef=coef,
-                                                                                   ini=np.concatenate(
-                                                                                       [result_dx, result_dy]),
-                                                                                   born=born,
-                                                                                   result_quality=result_quality,
-                                                                                   regu=regu, accel=accel)
+        if solver == 'LSMR_ini':
+            result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(A, dates_range, 0, data, solver,
+                                                                                        np.concatenate([weightx, weighty]),
+                                                                                        mu, coef=coef,
+                                                                                        ini=np.concatenate(
+                                                                                       [result_dx, result_dy]))
         else:
-            result_dx, result_dy, residu_normx, residu_normy = Inversion_A_LPxydir(A, dates_range, 0, data, mode,
-                                                                                   np.concatenate([weightx, weighty]),
-                                                                                   mu, coef=coef, born=born
-                                                                                   , result_quality=result_quality,
-                                                                                   regu=regu,
-                                                                                   accel=accel)
+            result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(A, dates_range, 0, data, solver,
+                                                                                        np.concatenate([weightx, weighty]),
+                                                                                        mu, coef=coef)
 
-    elif mode == 'LSMR_ini':
+    elif solver == 'LSMR_ini':
         if ini == None:  # initialization with the result from the previous inversion
-            result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef,
-                                                     ini=result_dx, result_quality=result_quality, regu=regu,
-                                                     accel=accel, linear_operator=linear_operator)
-            result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef,
-                                                     ini=result_dy, result_quality=result_quality, regu=regu,
-                                                     accel=accel, linear_operator=linear_operator)
+            result_dx, residu_normx = inversion_one_component(A, dates_range, 0, data, solver, weightx, mu, coef=coef,
+                                                              ini=result_dx, result_quality=result_quality, regu=regu,
+                                                              accel=accel, linear_operator=linear_operator)
+            result_dy, residu_normy = inversion_one_component(A, dates_range, 1, data, solver, weighty, mu, coef=coef,
+                                                              ini=result_dy, result_quality=result_quality, regu=regu,
+                                                              accel=accel, linear_operator=linear_operator)
         else:  # initialization with the list ini, which can be a moving average
-            result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef,
-                                                     ini=ini[0], result_quality=result_quality, regu=regu,
-                                                     accel=accel, linear_operator=linear_operator)
-            result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef,
-                                                     ini=ini[1], born=born, result_quality=result_quality, regu=regu,
-                                                     accel=accel, linear_operator=linear_operator)
+            result_dx, residu_normx = inversion_one_component(A, dates_range, 0, data, solver, weightx, mu, coef=coef,
+                                                              ini=ini[0], result_quality=result_quality, regu=regu,
+                                                              accel=accel, linear_operator=linear_operator)
+            result_dy, residu_normy = inversion_one_component(A, dates_range, 1, data, solver, weighty, mu, coef=coef,
+                                                              ini=ini[1], result_quality=result_quality, regu=regu,
+                                                              accel=accel, linear_operator=linear_operator)
 
     else:  # no initialization
-        result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data, mode, weightx, mu, coef=coef,
-                                                 result_quality=result_quality, regu=regu, accel=accel,
-                                                 linear_operator=linear_operator)
-        result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data, mode, weighty, mu, coef=coef,
-                                                 result_quality=result_quality, regu=regu, accel=accel,
-                                                 linear_operator=linear_operator)
+        result_dx, residu_normx = inversion_one_component(A, dates_range, 0, data, solver, weightx, mu, coef=coef,
+                                                          result_quality=result_quality, regu=regu, accel=accel,
+                                                          linear_operator=linear_operator)
+        result_dy, residu_normy = inversion_one_component(A, dates_range, 1, data, solver, weighty, mu, coef=coef,
+                                                          result_quality=result_quality, regu=regu, accel=accel,
+                                                          linear_operator=linear_operator)
 
     return result_dx, result_dy, weightx, weighty, residu_normx, residu_normy
 
 
-def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=False, iteration=True,
-              B=None, treshold_it=0.1, unit=365,
-              conf=False, regu=1, mean=None, rolling_mean=None,
-              detect_temporal_decorrelation=True, linear_operator=None, visual_inversion=None, result_quality=None,
-              nb_max_iteration=10,
-              visual=True,
-              verbose=False):
+def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.ndarray | None=None, solver:str= 'LSMR', coef:int=100, weight:bool=False, iteration:bool=True, treshold_it:float=0.1, unit:int=365,
+                   conf:bool=False, regu:int|str=1, mean:list|None=None,
+                   detect_temporal_decorrelation:bool=True, linear_operator:bool=False, result_quality:list|None=None,
+                   nb_max_iteration:int=10,
+                   visual:bool=True,
+                   verbose:bool=False)-> (np.ndarray,pd.DataFrame,pd.DataFrame):
     """
     Computes A in AX = Y and does the inversion using a given solver
     
@@ -262,16 +151,13 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
     :param coef: Coef of Tikhonov regularisation, int
     :param weight: bool, if True  use of aprori weight
     :param iteration: bool, if True, use of iterations
-    :param B: Matrix of the temporal invserion system AX=BY
     :param treshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
     :param unit: str, m/d or m/y
     :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param regu : str, type of regularization
     :param mean, list or None, apriori on the average
-    :param rolling_mean: list or None, apriori on the acceleration
     :param detect_temporal_decorrelation: bool, if True the first inversion is solved using only velocity observations with small temporal baselines, to detect temporal decorelation
     :param linear_operator: linear operator or None, if linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
-    :param: visual_inversion: None or path to save the visualization of the different iteration of the inversion
     :param result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param nb_max_iteration: int, maximal number of iterations
     :param visual:
@@ -290,15 +176,15 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         else:
             data_dates, data_values = data
 
-        if dates_range is None: dates_range = Construction_dates_range_np(
+        if dates_range is None: dates_range = construction_dates_range_np(
             data_dates)  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
 
         ####  Build A (design matrix in AX = Y)
         if not linear_operator:
-            A = Construction_A_LP(data_dates,
+            A = construction_a_lf(data_dates,
                                   dates_range)  # 1.93 ms ± 219 µs per loop (mean ± std. dev. of 7 runs, 1 loop each)
         else:  # use a linear operator to solve the inversion
-            linear_operator = class_inversion()
+            linear_operator = class_linear_operator()
             linear_operator.load(find_date_obs(data_dates[:, :2], dates_range), dates_range,
                                  coef)  # load parameter of the linear operator
             A = sp.linalg.LinearOperator((data_values.shape[0], len(dates_range) - 1),
@@ -320,9 +206,9 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         if not linear_operator:
             if regu == 'directionxy':
                 # Constrain according to the vectorial product, the magnitude of the vector corresponds to mean2, the magnitude of a rolling mean
-                mu = mu_regularisation(regu, A, dates_range, ini=rolling_mean)
+                mu = mu_regularisation(regu, A, dates_range, ini=mean)
             else:
-                mu = mu_regularisation(regu, A, dates_range, ini=rolling_mean)
+                mu = mu_regularisation(regu, A, dates_range, ini=mean)
 
         #### Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
@@ -344,18 +230,17 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         #### Inversion
         # 87.5 ms ± 668 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
         if regu == 'directionxy':
-            result_dx, result_dy, residu_normx, residu_normy = Inversion_A_LPxydir(A, dates_range, 0, data_values,
+            result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(A, dates_range, 0, data_values,
                                                                                    solver,
                                                                                    np.concatenate([Weightx, Weighty]),
-                                                                                   mu, B=B, coef=coef,
-                                                                                   ini=mean_ini,
-                                                                                   result_quality=None)
+                                                                                   mu, coef=coef,
+                                                                                   ini=mean_ini)
         else:
-            result_dx, residu_normx = Inversion_A_LP(A, dates_range, 0, data_values, solver, Weightx, mu, coef=coef,
+            result_dx, residu_normx = inversion_one_component(A, dates_range, 0, data_values, solver, Weightx, mu, coef=coef,
                                                      ini=mean_ini, result_quality=None,
                                                      regu=regu,
                                                      linear_operator=linear_operator, accel=accel)
-            result_dy, residu_normy = Inversion_A_LP(A, dates_range, 1, data_values, solver, Weighty, mu, coef=coef,
+            result_dy, residu_normy = inversion_one_component(A, dates_range, 1, data_values, solver, Weighty, mu, coef=coef,
                                                      ini=mean_ini, result_quality=None,
                                                      regu=regu,
                                                      linear_operator=linear_operator, accel=accel)
@@ -363,7 +248,7 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
         if not visual: del Weighty, Weightx
 
         if regu == 'directionxy':
-            mu = mu_regularisation(regu, A, dates_range, ini=[rolling_mean[0], rolling_mean[1], result_dx, result_dy])
+            mu = mu_regularisation(regu, A, dates_range, ini=[mean[0], mean[1], result_dx, result_dy])
             # coef = coef * 1000
 
         # Second Iteration
@@ -376,10 +261,9 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
                 [None, None],
                 result_dx,
                 result_dy, mu=mu,
-                visual=visual,
                 verbose=verbose,
                 regu=regu,
-                mean=mean, linear_operator=linear_operator, result_quality=result_quality, ini=None, accel=accel)
+                linear_operator=linear_operator, ini=None, accel=accel)
             # print('nb_max_iteration',nb_max_iteration)
             # Continue to iterate until the difference between two results is lower than treshold_it or the number of iteration larger than 10
             # 6 sec
@@ -395,9 +279,8 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
                     [None, None],
                     result_dx,
                     result_dy, mu,
-                    visual=visual,
-                    verbose=verbose, regu=regu, mean=mean,
-                    linear_operator=linear_operator, result_quality=result_quality, ini=None, accel=accel)
+                    verbose=verbose, regu=regu,
+                    linear_operator=linear_operator, ini=None, accel=accel)
 
                 i += 1
 
@@ -510,10 +393,10 @@ def inversion(data, i, j, dates_range=None, solver='LSMR', coef=100, weight=Fals
     return A, result, dataf
 
 
-def interpolation_post(result, interval_output, path_save, option_interpol='spline',
-                       first_date_interpol=None,
-                       last_date_interpol=None, visual=False,
-                       data=False, unit=365, redundancy=None, simulation=False, vmax=[False, False], figsize=(12, 6),
+def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, option_interpol:str= 'spline',
+                       first_date_interpol:np.datetime64|None=None,
+                       last_date_interpol:np.datetime64|None=None, visual:bool=False,
+                       data:pd.DataFrame|None=False, unit:int=365, redundancy:int|None=None, vmax=[False, False], figsize=(12, 6),
                        show_temp=True, result_quality=None, verbose=False):
     '''
     Interpolate Irregular Leap Frog time series (result of an inversion) to Regular LF time series using Cumulative Displacement times series.
@@ -528,7 +411,6 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
     :param data: pd dataframe, where each line is (date1, date2, vx, vy, errorx, errory) for which a velocity is computed
     :param unit: str, m/y or m/d
     :param redundancy: None or int, if None there is no redundancy between two velocity in the interpolated time-series, else the overlap between two velocities is redundancy days
-    :param simulation: bool, if the data have been simulated
     :param vmax: list, [min,max] where min,max correspond to the ylim of the figures
     :param figsize: list, (width, height) where width and height are the size of the figures
     :param show_temp: bool, if True, show the temporal baseline on the plot
@@ -539,7 +421,7 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
     '''
 
     ##Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
-    dataf = reconstruct_Common_Ref(result, result_quality)  # build cumulative displacement time series
+    dataf = reconstruct_common_ref(result, result_quality)  # build cumulative displacement time series
     if first_date_interpol is None:
         start_date = dataf['Ref_date'][0]  # first date at the considered pixel
     else:
@@ -558,25 +440,8 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
              'vz': [], 'x_countz': [], 'NormR': []})
 
     # Compute the functions used to interpolate
-    if option_interpol == 'spline_smooth':
-        # print(len(dataf['dx']) - np.sqrt(2 * len(dataf['dx'])))
-        fdx = interpolate.UnivariateSpline(x, dataf['dx'], k=3)
-        fdy = interpolate.UnivariateSpline(x, dataf['dy'], k=3)
-        if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.UnivariateSpline(x, dataf['xcountx'], k=3)
-            fdy_xcount = interpolate.UnivariateSpline(x, dataf['xcounty'], k=3)
-    elif option_interpol == 'spline':
-        fdx = interpolate.interp1d(x, dataf['dx'], kind='cubic')
-        fdy = interpolate.interp1d(x, dataf['dy'], kind='cubic')
-        if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.interp1d(x, dataf['xcountx'], kind='cubic')
-            fdy_xcount = interpolate.interp1d(x, dataf['xcounty'], kind='cubic')
-    elif option_interpol == 'nearest':
-        fdx = interpolate.interp1d(x, dataf['dx'], kind='nearest')
-        fdy = interpolate.interp1d(x, dataf['dy'], kind='nearest')
-        if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.interp1d(x, dataf['xcountx'], kind='nearest')
-            fdy_xcount = interpolate.interp1d(x, dataf['xcounty'], kind='nearest')
+    fdx,fdy,fdx_xcount,fdy_xcount = set_function_for_interpolation(option_interpol, x, dataf, result_quality)
+
 
     if redundancy is None:  # No redundancy between two interpolated velocity
         x_regu = np.arange(np.min(x) + (interval_output - np.min(x) % interval_output), np.max(x), interval_output)
@@ -596,7 +461,7 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
         return pd.DataFrame(
             {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
              'vz': [], 'x_countz': [], 'NormR': []})
-    
+
     x_shifted = x_regu[step:]
     dx = fdx(x_shifted) - fdx(
         x_regu[:-step])  # equivalent to [fdx(x_regu[i + step]) - fdx(x_regu[i]) for i in range(len(x_regu) - step)]
@@ -641,154 +506,7 @@ def interpolation_post(result, interval_output, path_save, option_interpol='spli
         dataf_lp = pd.concat([dataf_lp, nul_df], ignore_index=True)
 
     ####  Visualisation
-    if visual:
-        offset = (dataf_lp['Second_date'] - dataf_lp['First_date'])
-        offset_bar = data['date2'] - data['date1']
-        date_cori = data['date2'] - offset_bar / 2
-        delta = offset_bar.dt.days
-
-        # Vizualisation of the original velocity x and y [m/an]
-        fig1, ax1 = plt.subplots(2, 1, figsize=figsize)
-        ymin = np.min(dataf_lp['vx']) - 50
-        ymax = np.max(dataf_lp['vx']) + 50
-        ax1[0].set_ylim(ymin, ymax)
-        if show_temp:
-            ax1[0].errorbar(date_cori, data["vx"], xerr=offset_bar / 2, color='orange', alpha=0.2, fmt=',', zorder=1)
-            ax1[0].errorbar(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vx'], xerr=offset / 2, color='b',
-                            alpha=0.2, fmt=',', zorder=1)
-        ax1[0].plot(date_cori, data["vx"], linestyle='', zorder=1, marker='o', color='orange', markersize=3,
-                    alpha=0.3)
-        ax1[0].plot(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vx'], linestyle='', marker='o', markersize=3,
-                    color='b')
-        ax1[0].set_ylabel('Vx [m/y]', fontsize=16)
-        ymin = np.min(dataf_lp['vy']) - 50
-        ymax = np.max(dataf_lp['vy']) + 50
-        ax1[1].set_ylim(ymin, ymax)
-        if show_temp:
-            ax1[1].errorbar(date_cori, data["vy"], xerr=offset_bar / 2, color='orange', alpha=0.2, fmt=',', zorder=1,
-                            label='Regular LF velocities [m/y]')
-            ax1[1].errorbar(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vy'], xerr=offset / 2, color='b',
-                            alpha=0.2,
-                            fmt=',', zorder=1)
-        ax1[1].plot(date_cori, data["vy"], linestyle='', zorder=1, marker='o', color='orange', markersize=3,
-                    alpha=0.7,
-                    label='Velocity observations [m/y]')
-        ax1[1].plot(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vy'], linestyle='', marker='o', markersize=3,
-                    color='b', label=f'Temporal Baselines of {interval_output} days')
-
-        ax1[1].set_ylabel('Vy [m/y]', fontsize=16)
-        # dataf_lp.plot(x='First_date', y='vx', style='.')
-        plt.subplots_adjust(bottom=0.20)
-        ax1[1].legend(loc='lower left', bbox_to_anchor=(0.15, 0), bbox_transform=fig1.transFigure, fontsize=12)
-        plt.show()
-        # dataf_lp.plot(x='First_date', y='vx', style='.')
-        plt.show()
-        fig1.savefig(f'{path_save}interpol_vx_vy.png')
-
-        vv = np.sqrt((data["vx"] ** 2 + data["vy"] ** 2).astype('float'))
-
-        fig1, ax1 = plt.subplots(figsize=figsize)
-        ax1.plot(dataf_lp['First_date'] + offset[0] / 2, np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2),
-                 linestyle='',
-                 marker='o', markersize=3, color='b')
-        if show_temp:
-            ax1.errorbar(dataf_lp['First_date'] + offset[0] / 2, np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2),
-                         xerr=offset / 2, color='b', alpha=0.2, fmt=',', zorder=1)
-        ax1.plot(date_cori, vv, linestyle='', color='orange', zorder=1, marker='o', lw=0.7, markersize=2, alpha=0.7)
-        ax1.errorbar(date_cori, vv, xerr=offset_bar / 2, color='orange', alpha=0.2, fmt=',', zorder=1)
-        plt.show()
-        fig1.savefig(f'{path_save}interpol_vv')
-
-        fig1, ax1 = plt.subplots(figsize=figsize)
-        if vmax == [False, False]:
-            ymin = np.min(np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2))
-            ymax = np.max(np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2))
-        else:
-            ymin = vmax[0]
-            ymax = vmax[1]
-        ax1.set_ylim(ymin, ymax)
-        ax1.plot(dataf_lp['First_date'] + offset[0] / 2, np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2),
-                 linestyle='',
-                 marker='o', markersize=3, color='b', label=f'Temporal baseline of Regular LF velocity[{unit}]')
-        if show_temp: ax1.errorbar(dataf_lp['First_date'] + offset[0] / 2,
-                                   np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2),
-                                   xerr=offset / 2, color='b', fmt=',', zorder=1,
-                                   label=f'Central date of Regular LF velocity[{unit}]')
-        ax1.plot(date_cori, vv, linestyle='', color='orange', zorder=1, marker='o', lw=0.7, markersize=2, alpha=0.7,
-                 label=f'Central date of velocity observations [{unit}]')
-        if show_temp: ax1.errorbar(date_cori, vv, xerr=offset_bar / 2, color='orange', alpha=0.2, fmt=',', zorder=1,
-                                   label=f'Temporal baseline of velocity observations [{unit}]')
-        plt.subplots_adjust(bottom=0.2)
-        ax1.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, fontsize=12, ncol=2)
-        plt.show()
-        fig1.savefig(f'{path_save}interpol_vv_zoom.png')
-
-        fig1, ax1 = plt.subplots(2, 1, figsize=figsize)
-        ymin = np.min(data["vx"])
-        ymax = np.max(data["vx"])
-        ax1[0].set_ylim(ymin, ymax)
-        if show_temp:
-            ax1[0].errorbar(date_cori, data["vx"], xerr=offset_bar / 2, color='orange', alpha=0.2, fmt=',', zorder=1)
-            ax1[0].errorbar(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vx'], xerr=offset / 2, color='b',
-                            alpha=0.2,
-                            fmt=',', zorder=1)
-        ax1[0].plot(date_cori, data["vx"], linestyle='', zorder=1, marker='o', color='orange', markersize=3,
-                    alpha=0.7)
-        ax1[0].plot(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vx'], linestyle='', marker='o', markersize=3,
-                    color='b')
-        ax1[0].set_ylabel('Vx [m/y]', fontsize=16)
-        ymin = np.min(data["vy"])
-        ymax = np.max(data["vy"])
-        ax1[1].set_ylim(ymin, ymax)
-        if show_temp:
-            ax1[1].errorbar(date_cori, data["vy"], xerr=offset_bar / 2, color='orange', alpha=0.2, fmt=',', zorder=1,
-                            label='Regular LF velocities [m/y]')
-            ax1[1].errorbar(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vy'], xerr=offset / 2, color='b',
-                            alpha=0.2,
-                            fmt=',', zorder=1)
-        ax1[1].plot(date_cori, data["vy"], linestyle='', zorder=1, marker='o', color='orange', markersize=3,
-                    alpha=0.7,
-                    label='Velocity observations [m/y]')
-
-        ax1[1].plot(dataf_lp['First_date'] + offset[0] / 2, dataf_lp['vy'], linestyle='', marker='o', markersize=3,
-                    color='b',
-                    label=f'Temporal Baselines of {interval_output} days')
-        ax1[1].set_ylabel('Vy [m/y]', fontsize=16)
-        plt.subplots_adjust(bottom=0.20)
-        ax1[1].legend(loc='lower left', bbox_to_anchor=(0.15, 0), bbox_transform=fig1.transFigure, fontsize=12)
-        plt.show()
-        fig1.savefig(f'{path_save}interpol_vy_vx_zoom')
-
-        ####  Compute the averaged direction, and the directions of the observations and the results
-        directionr = np.arctan2(dataf_lp['vy'], dataf_lp['vx'])
-        directionr[directionr < 0] += 2 * np.pi
-        directionm = np.arctan2(data["vy"].astype('float32'), data["vx"].astype('float32'))
-        directionm[directionm < 0] += 2 * np.pi
-        directionm_mean = np.arctan2(np.mean(data["vy"]), np.mean(data["vx"]))
-        if directionm_mean < 0: directionm_mean += 2 * np.pi
-
-        # Convert to degrees
-        directionr *= 360 / (2 * np.pi)
-        directionm *= 360 / (2 * np.pi)
-        directionm_mean *= 360 / (2 * np.pi)
-
-        fig1, ax1 = plt.subplots(figsize=(12, 6))
-        ax1.plot(dataf_lp['First_date'] + offset[0] / 2, directionr, linestyle='', marker='o', markersize=3,
-                 color='b',
-                 label='Direction of the RLF velocities')
-        ax1.plot(date_cori, directionm, linestyle='', color='orange', zorder=1, marker='o', lw=0.7, markersize=2,
-                 alpha=0.7,
-                 label='Direction of the observed velocities')
-        ax1.hlines(directionm_mean, np.min(dataf_lp['First_date'] + offset[0] / 2),
-                   np.max(dataf_lp['First_date'] + offset[0] / 2),
-                   label='Mean direction of the observed velocities')
-        ax1.set_ylim(0, 360)
-        ax1.set_ylabel('Direction [°]')
-        ax1.set_xlabel('Central Dates')
-        ax1.legend(loc='lower left', bbox_to_anchor=(0.15, 0), bbox_transform=fig1.transFigure, ncol=3, fontsize=9)
-        fig1.suptitle('Direction of the velocity vectors (observations and RLF)', fontsize=20)
-        plt.show()
-        fig1.savefig(f'{path_save}direction_vv')
+    if visual: visualisation_interpolation(dataf_lp, data,path_save, show_temp=show_temp,figsize=figsize,vmax=vmax,interval_output=interval_output)
 
     return dataf_lp
 
@@ -845,7 +563,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
         regu, coef = data[3], data[4]
     # INVERSION
     if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-    result = inversion(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
+    result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
                        visual=visual,
                        verbose=verbose, unit=unit,
                        conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=treshold_it,
@@ -858,7 +576,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     # INTERPOLATION
     if result[1] is not None:  # if inversion have been performed
         if interpolation_bas == False: interpolation_bas = interval_output
-        dataf_list = interpolation_post(result[1],
+        dataf_list = interpolation_core(result[1],
                                         interpolation_bas,
                                         path_save, option_interpol=option_interpol,
                                         first_date_interpol=first_date_interpol, last_date_interpol=last_date_interpol,
@@ -915,13 +633,13 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         blocks = []
         if cube.ds.nbytes > block_size * GB:
             nblocks = int(np.ceil(cube.ds.nbytes / (block_size * GB)))
-            
+
             # Determine the closest pair of nblocks in x and y direction
             nblocks_x = int(np.sqrt(nblocks))
             while nblocks % nblocks_x != 0:
                 nblocks_x -= 1
             nblocks_y = nblocks // nblocks_x
-            
+
             x_step = cube.ds.dims['x'] // nblocks_x
             y_step = cube.ds.dims['y'] // nblocks_y
 
@@ -936,10 +654,10 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         else:
             blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
             if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
-            
+
         return blocks
-    
-    
+
+
     # get the parameters
     if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
         for key, value in preData_kwargs.items():
@@ -948,18 +666,18 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
             globals()[key] = value
     else:
         raise ValueError('preData_kwars and inversion_kwars must be a dict')
-    
-    
+
+
     start_blocks = time.time()
     blocks = cube_split(cube, block_size=block_size, verbose=True)
     dataf_list = [None] * ( cube.nx * cube.ny )
-    
+
     for n in range(len(blocks)):
-        
+
         print(f'Processing block {n+1}/{len(blocks)}')
-        
+
         x_start, x_end, y_start, y_end = blocks[n]
-        
+
         start = time.time()
         block = cube_data_class()
         block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
@@ -975,46 +693,47 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
             flags_block = None
         
         print(f'Time for block loading: {round((time.time() - start), 2)} sec')
-        
+
         # noew calculate the rolling
-        obs_filt = block.preData_np(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order, 
-                            proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers, verbose=True,
-                            velo_or_disp=velo_or_disp)
-        
+
+        obs_filt = block.filter_cube(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order,
+                            proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=True, velo_or_disp=velo_or_disp)
+
         # real loading to accelerate the inversion
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
-        
+
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
         result_tmp = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel, 
+            i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel,
             iteration=iteration, interval_output=interval_output, first_date_interpol=first_date_interpol,
-            last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu, 
+            last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu,
             interpolation_bas=interpolation_bas, option_interpol=option_interpol, redundancy=redundancy, proj=proj,
-            detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality, 
+            detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
             nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers, interpolation=interpolation,
             linear_operator=linear_operator, visual=visual, verbose=verbose)
         for i, j in xy_values_tqdm)
-        
+
         for i in range(len(result_tmp)):
             row = i % block.ny + y_start
             col = np.floor( i / block.ny ) + x_start
             idx = int( col * cube.ny + row )
-            
+
             dataf_list[idx]=result_tmp[i]
         del block, result_tmp, obs_filt, xy_values, xy_values_tqdm
-        
-    
+
+
     print("Process all blocks completed in {:.2f} seconds".format(time.time() - start_blocks))
-    
+
     return dataf_list
 
-def visualisation(data, result, option_visual, path_save, interval_output=1, interval_inputMax=None, A=False,
-                  dataf=False, unit='m/y',
-                  figsize=(12, 6), show=True):
+
+
+def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list, path_save:str, interval_output:int=1, interval_inputMax:int|None=None, A:np.ndarray|None=None,
+                  dataf:pd.DataFrame|None=None, unit:str='m/y',figsize:tuple=(12, 6), show:bool=True):
     """
     Visualize the data (original datas and results).
 
@@ -1030,7 +749,7 @@ def visualisation(data, result, option_visual, path_save, interval_output=1, int
     :param figsize: Size of the figures (int1,int2)
     :param show: bool, if True the figures are showed
     """
-    if data.size:  # If there are datas at the given point
+    if data is not None and data.size:  # If there are datas at the given point
         conversion = unit
         unit = 'm/y' if unit == 365 else 'm/d'
 
