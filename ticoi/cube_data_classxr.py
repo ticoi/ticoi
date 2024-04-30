@@ -828,7 +828,6 @@ class cube_data_class:
         :param flags:
 
         Returns: nothing, but modify self
-
         '''
         if delete_outliers == "median_angle":
             vx_mean = self.ds["vx"].median(dim=['mid_date'])
