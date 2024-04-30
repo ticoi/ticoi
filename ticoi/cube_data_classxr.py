@@ -842,7 +842,7 @@ class cube_data_class:
 
     
     def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
-           """
+        """
         Delete outliers according to a certain criterium
         :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flags:
@@ -852,9 +852,7 @@ class cube_data_class:
         """
         
         if isinstance(delete_outliers, int):
-            self.ds = self.ds.where(
-                (self.ds["errorx"] < delete_outliers)
-                & (self.ds["errory"] < delete_outliers)
+            self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers)
             )
         else:
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
@@ -862,15 +860,16 @@ class cube_data_class:
             inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, axis=axis)
             
             if flags is not None:
-                flag = flags['flags'].values if flags['flags'].shape[0] == self.nx else flags['flags'].values.T
-                flag_condition = (flag == 0)
-                flag_condition = np.expand_dims(flag_condition, axis=axis)
-                inlier_mask = np.logical_or(inlier_mask, flag_condition)
+                if delete_outliers != 'vvc_angle':
+                    flag = flags['flags'].values if flags['flags'].shape[0] == self.nx else flags['flags'].values.T
+                    flag_condition = (flag == 0)
+                    flag_condition = np.expand_dims(flag_condition, axis=axis)
+                    inlier_mask = np.logical_or(inlier_mask, flag_condition)
             
-            inlier_flag = xr.DataArray(inlier_mask.transpose([2,0,1]), dims=self.ds.dims)
+            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds['vx'].dims)
             
             for var in ["vx", "vy"]:
-                self.ds[var] = self.ds[var].where(inlier_flag, drop=True)
+                self.ds[var] = self.ds[var].where(inlier_flag)
                 
         self.ds = self.ds.persist()
 
@@ -985,6 +984,11 @@ class cube_data_class:
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
+        # the rolling smooth should be carried on velocity, while we need displacement during inversion
+        if velo_or_disp == "disp":  # to provide velocity values
+            self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
+            self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
+        
         if flags is not None:
             flags = flags.load()
             if isinstance(regu, dict):
@@ -1004,18 +1008,10 @@ class cube_data_class:
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
 
-            # the rolling smooth should be carried on velocity, while we need displacement during inversion
-            if velo_or_disp == "disp":  # to provide velocity values
-                vx_arr = self.ds["vx"] / self.ds["temporal_baseline"] * unit
-                vy_arr = self.ds["vy"] / self.ds["temporal_baseline"] * unit
-            else:
-                vx_arr = self.ds["vx"]
-                vy_arr = self.ds["vy"]
-
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                vx_arr,
+                self.ds["vx"],
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
@@ -1026,7 +1022,7 @@ class cube_data_class:
                 baseline=self.ds["temporal_baseline"]
             )
             vy_filtered, dates_uniq = loop_rolling(
-                vy_arr,
+                self.ds["vy"],
                 self.ds["mid_date"],
                 date_range,
                 smooth_method=smooth_method,
