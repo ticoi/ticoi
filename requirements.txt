@@ -15,6 +15,7 @@ netcdf4
 rioxarray
 tqdm
 zarr
-seaborn
 requests #to access data on the cloud
 aiohttp #to access data on the cloud
+shapely
+seaborn

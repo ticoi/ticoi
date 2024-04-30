@@ -1,4 +1,4 @@
-from ticoi.inversion_functions import Construction_dates_range_np, Construction_A_LP
+from ticoi.inversion_functions import construction_dates_range_np, construction_a_lf
 from ticoi.core import mu_regularisation
 import numpy as np
 import pytest
@@ -29,14 +29,14 @@ class Test_inversion:
 
         # self.mu1 =
 
-    def test_Construct_Dates_range(self):
+    def test_construct_dates_range(self):
         expected_dates_range = self.dates_range
-        result = Construction_dates_range_np(self.dates)
+        result = construction_dates_range_np(self.dates)
         np.testing.assert_array_equal(result, expected_dates_range)
 
-    def test_Construction_A_LP(self):
+    def test_construction_a_lf(self):
         expected = self.A
-        actual = Construction_A_LP(self.dates, self.dates_range)
+        actual = construction_a_lf(self.dates, self.dates_range)
         np.testing.assert_array_equal(actual, expected, err_msg="Construction A LP does not give the correct result")
 
     @pytest.mark.parametrize("regu, expected", [
