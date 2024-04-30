@@ -697,7 +697,7 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
         # noew calculate the rolling
 
         obs_filt = block.filter_cube(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order,
-                            proj=proj, flags=flags, regu=regu, delete_outliers=delete_outliers, verbose=True, velo_or_disp=velo_or_disp)
+                            proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers, verbose=True, velo_or_disp=velo_or_disp)
 
         # real loading to accelerate the inversion
         obs_filt = obs_filt.load()
