@@ -428,9 +428,10 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
     # Total process : about 50ms
     if verbose: matric_property(A) # Matrix A properties
 
-    if Weight == 1: Weight = np.ones(v.shape[0])
 
     v = data[:, v_pos]
+
+    if Weight == 1: Weight = np.ones(v.shape[0])#equivalent to an Ordinary Least Square
 
     if regu == '1accelnotnull':  # apriori on the acceleration
         D_regu = np.multiply(accel[v_pos - 2], coef)
@@ -452,6 +453,7 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
             0]  # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
 
     elif solver == 'LSMR_ini':  # 50ms
+        if ini is None: raise ValueError('Please provide an initalization for the solver LSMR_ini')
         #16.7 ms ± 141 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
         if not linear_operator:
             condi = (Weight != 0)

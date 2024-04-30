@@ -1,4 +1,4 @@
-from ticoi.inversion_functions import construction_dates_range_np, construction_a_lf
+from ticoi.inversion_functions import construction_dates_range_np, construction_a_lf, inversion_one_component
 from ticoi.core import mu_regularisation
 import numpy as np
 import pytest
@@ -27,7 +27,9 @@ class Test_inversion:
             [1, 1, 1, 1, 1, 1, 1, 1]
         ])
 
-        # self.mu1 =
+        self.data = np.array([[  -0.69107729,   -8.73340321], [   2.40452456 , -13.41930866], [  -3.96273065 ,  -9.17936611], [   3.73120785 , -14.85955429], [  -2.19656491  , -9.20514107], [  10.38781738 , -28.12755966], [   3.23966694 , -17.77642059], [ 368.12982178 ,-118.80034637], [   1.13138795 , -11.47720432], [   2.95655584 , -19.49642754]])
+
+        self.mu1accelnotnull = np.array([[-0.0625 ,     0.0625  ,    0.   ,       0.    ,      0.   ,       0.,   0.   ,       0.        ], [ 0.    ,     -0.0625  ,    0.01538462 , 0.     ,     0.    ,      0.,   0.      ,    0.        ], [ 0.   ,       0.   ,      -0.01538462 , 0.04166667 , 0.      ,    0.,   0.  ,        0.        ], [ 0.     ,     0.     ,     0.   ,      -0.04166667,  0.03225806 , 0.,   0.   ,       0.        ], [ 0.   ,       0.    ,      0.    ,      0.     ,    -0.03225806 , 0.015625,   0.   ,       0.        ], [ 0.    ,      0.    ,      0.     ,     0.    ,      0.     ,    -0.015625,   0.125     ,  0.        ], [ 0.    ,      0.   ,       0.     ,     0.   ,       0.    ,      0.,  -0.125  ,     0.125     ]]).astype('float32')
 
     def test_construct_dates_range(self):
         """ Test construction of Dates_range for a small subset of values"""
@@ -53,6 +55,13 @@ class Test_inversion:
     def test_mu_regularization(self,regu,expected):
         """ Test construction of mu for a three different regularization"""
         actual = mu_regularisation(regu, self.A, self.dates_range)
-        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-8, err_msg="mu_regularisation does not give the correct result for regu={}".format(regu))
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-8, err_msg=f"mu_regularisation does not give the correct result for regu={regu}")
 
-
+    @pytest.mark.parametrize("solver, expected", [('LSMR',
+    np.array([  -7.55988695  , -8.47012557 ,  53.40071386 ,-118.09971264  , 52.38361652,   10.86749089   , 5.53293348 ,  -7.3502032 ]).astype('float32')),
+                                                  ('LS',np.array([  -7.5791097  , -8.460544   ,113.54745   ,-118.18973  ,   -7.585056,   10.759924   ,  5.560593   , -7.3482523]))])
+    def test_inversion_one_component(self,solver,expected):
+        actual = inversion_one_component(self.A, self.dates_range, 1, self.data, solver=solver, Weight=1, mu=self.mu1accelnotnull)[0]
+        print(actual)
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-4,
+                                   err_msg=f"inversion_one_component does not give the correct result for solver {solver}")
