@@ -219,3 +219,74 @@ def dask_smooth_wrapper(dask_array: da.array, dates: xr.DataArray, t_out: np.nda
                                       order=order, axis=axis, dtype=dask_array.dtype)
 
     return da_smooth
+
+def z_score_filt(obs, z_thres=3, axis=2):
+    
+    mean = np.nanmean(obs, axis=axis, keepdims=True)
+    std_dev = np.nanstd(obs, axis=axis, keepdims=True)
+
+    z_scores = (obs - mean) / std_dev
+    inlier_flag = np.abs(z_scores) < z_thres
+
+    return inlier_flag
+
+def median_angle_filt_np(vx, vy, angle_thres=45):
+    
+    vx_mean = np.nanmedian(vx, axis=2, keepdims=True)
+    vy_mean = np.nanmedian(vy, axis=2, keepdims=True)
+    
+    mean_magnitude = np.hypot(vx_mean, vy_mean)
+    velo_magnitude = np.hypot(vx, vy)
+    
+    # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
+    bis_cond = (velo_magnitude > 1e-6)
+    
+    dot_product = np.where(bis_cond, (vx_mean * vx + vy_mean * vy), np.nan)
+    inlier_flag = np.where(bis_cond, (dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)), False)
+    
+    return inlier_flag
+
+def median_angle_filt(obs_cpx, angle_thres=45, axis=2):
+    
+    vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
+    
+    vx_mean = np.nanmedian(vx, axis=axis, keepdims=True)
+    vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
+    
+    mean_magnitude = np.hypot(vx_mean, vy_mean)
+    velo_magnitude = np.hypot(vx, vy)
+    
+    # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
+    bis_cond = (velo_magnitude > 1e-6)
+    
+    dot_product = np.where(bis_cond, (vx_mean * vx + vy_mean * vy), np.nan)
+    inlier_flag = np.where(bis_cond, (dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)), False)
+    
+    return inlier_flag
+
+
+def dask_filt_warpper(da_vx, da_vy, filt_method="median_angle", angle_thres=45, z_thres=3, magnitude_thres=1000, error_thres=100, axis=2):
+    
+    if filt_method == 'median_angle':
+        obs_arr = da_vx.data + 1j * da_vy.data
+        inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
+        
+    elif filt_method == 'z_score':
+        inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
+        inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+        
+    elif filt_method == 'magnitude':
+        obs_arr = np.hypot(da_vx.data, da_vy.data)
+        inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
+        
+    elif filt_method == 'error':
+        inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
+        inlier_mask_vy = da_vy.data.map_blocks(lambda x: x < error_thres, dtype=da_vy.dtype)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+        
+    else:
+        raise ValueError(f"Filtering method should be either 'median_angle', 'z_score', 'magnitude' or 'error'.")
+    
+    return inlier_mask.compute()
+
