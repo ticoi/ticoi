@@ -220,6 +220,17 @@ def dask_smooth_wrapper(dask_array: da.array, dates: xr.DataArray, t_out: np.nda
 
     return da_smooth
 
+def NVVC_np(vx, vy, axis=2):
+    
+    velo_magnitude = np.hypot(vx, vy)
+    x_component = np.nansum(vx / velo_magnitude)
+    y_component = np.nansum(vy / velo_magnitude)
+    
+    nz = velo_magnitude.shape[axis]
+    VVC = np.hypot(x_component, y_component) / nz
+    
+    return VVC
+
 def z_score_filt(obs, z_thres=3, axis=2):
     
     mean = np.nanmean(obs, axis=axis, keepdims=True)
@@ -229,6 +240,33 @@ def z_score_filt(obs, z_thres=3, axis=2):
     inlier_flag = np.abs(z_scores) < z_thres
 
     return inlier_flag
+
+def NVVC_angle_filt(obs_cpx, vvc_thres=0.1, angle_thres=45, axis=2):
+    
+    vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
+    vx_mean = np.nanmedian(vx, axis=axis, keepdims=True)
+    vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
+    mean_magnitude = np.hypot(vx_mean, vy_mean)
+    
+    
+    velo_magnitude = np.hypot(vx, vy)
+    x_component = np.nansum(vx / velo_magnitude, axis=axis)
+    y_component = np.nansum(vy / velo_magnitude, axis=axis)
+    
+    nz = velo_magnitude.shape[axis]
+    VVC = np.hypot(x_component, y_component) / nz
+    VVC = np.expand_dims(VVC, axis=axis)
+    
+    vvc_cond = (VVC > vvc_thres)
+    
+    dot_product = vx_mean * vx + vy_mean * vy
+    
+    angle_filter = dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
+    
+    inlier_flag = np.where(vvc_cond, angle_filter, z_score_filt(velo_magnitude, z_thres=3, axis=axis))
+    
+    return inlier_flag
+
 
 def median_angle_filt_np(vx, vy, angle_thres=45):
     
@@ -257,20 +295,28 @@ def median_angle_filt(obs_cpx, angle_thres=45, axis=2):
     velo_magnitude = np.hypot(vx, vy)
     
     # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
-    bis_cond = (velo_magnitude > 1e-6)
+    # bis_cond = (velo_magnitude > 1e-6)
     
-    dot_product = np.where(bis_cond, (vx_mean * vx + vy_mean * vy), np.nan)
-    inlier_flag = np.where(bis_cond, (dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)), False)
+    dot_product = vx_mean * vx + vy_mean * vy
+    angle_filter = dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
+    # inlier_flag = np.where(bis_cond, (dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)), False)
+    
+    bis_cond = (mean_magnitude > 10)
+    inlier_flag = np.where(bis_cond, angle_filter, z_score_filt(velo_magnitude, z_thres=3, axis=axis))
+    # inlier_flag = np.where(bis_cond, True, inlier_flag)
     
     return inlier_flag
 
 
-def dask_filt_warpper(da_vx, da_vy, filt_method="median_angle", angle_thres=45, z_thres=3, magnitude_thres=1000, error_thres=100, axis=2):
+def dask_filt_warpper(da_vx, da_vy, filt_method="median_angle", vvc_thres=0.3, angle_thres=45, z_thres=3, magnitude_thres=1000, error_thres=100, axis=2):
     
     if filt_method == 'median_angle':
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
-        
+    
+    elif filt_method == 'vvc_angle':
+        obs_arr = da_vx.data + 1j * da_vy.data
+        inlier_mask = obs_arr.map_blocks(NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
     elif filt_method == 'z_score':
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
