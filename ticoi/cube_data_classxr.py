@@ -842,7 +842,7 @@ class cube_data_class:
 
     
     def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
-           """
+        """
         Delete outliers according to a certain criterium
         :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flags:
