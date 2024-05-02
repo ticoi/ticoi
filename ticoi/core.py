@@ -812,7 +812,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
             nchunks_block = int(block_size * GB // chunk_bytes)
             
             x_step = int(np.sqrt(nchunks_block))
-            y_step = nchunks_block // nckunks_x
+            y_step = nchunks_block // x_step
             
             nblocks_x = int(np.ceil(len(cube.ds.chunks['x']) / x_step))
             nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
