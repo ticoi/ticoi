@@ -230,7 +230,7 @@ def z_score_filt(obs, z_thres=3, axis=2):
 
     return inlier_flag
 
-def z_score_rolling_filt(obs, z_thres=3, axis=2):
+def z_score_rolling_filt(obs, z_thres=3, window_size=90, axis=2):
     
     # Compute rolling mean
     mean = uniform_filter(obs, size=window_size, mode='mirror', axis=axis)
