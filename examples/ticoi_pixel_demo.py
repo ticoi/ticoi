@@ -12,6 +12,7 @@ Reference:
 import time
 import os
 import numpy as np
+
 from ticoi.core import inversion_core, visualisation, interpolation_core
 from ticoi.cube_data_classxr import cube_data_class
 
@@ -46,7 +47,7 @@ load_interp = 'nearest' # Interpolation used to select which data to use when th
 
 ####  Inversion
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
-# '1accelnotnull': minization of the difference between the acceleration of the time series and acceleration computed on a moving average
+# '1accelnotnull': minimisation of the difference between the acceleration of the time series and acceleration computed on a moving average
 regu = '1accelnotnull'
 coef = 100  # lambda : coef of the regularisation
 apriori_weight = True  # Add a weight in the first step of the inversion, True ou False

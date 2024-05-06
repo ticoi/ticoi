@@ -578,11 +578,9 @@ class cube_data_class:
             if filepath.split(".")[-1] == "nc":
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
-                except (
-                        NotImplementedError):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
-                    self.ds = xr.open_dataset(
-                        filepath, engine="netcdf4", chunks=chunks)  # set no chunks
+                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
 
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
