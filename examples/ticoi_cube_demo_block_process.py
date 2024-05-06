@@ -13,14 +13,10 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 '''
 from ticoi.core import *
-from joblib import Parallel, delayed
 import time
 from ticoi.cube_data_classxr import cube_data_class
 import os
 import xarray as xr
-from pyproj import CRS
-from tqdm import tqdm
-import itertools
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -32,7 +28,6 @@ path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-
 flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
 
 result_fn = 'Hala_lake_velocity_LS7_block_test_median_filt'
-
 save = True
 merged = None  # Path to the second cube to merge with the first one
 sensor = None
@@ -52,7 +47,7 @@ load_kwargs = {'filepath': cube_name,
                'conf': False, 
                'subset': None, 
                'buffer': None, 
-               'pick_date': ['2000-01-01', '2014-12-31'],
+               'pick_date': ['1999-09-01', '2015-03-01'],
                'pick_sensor': None, 
                'pick_temp_bas': None, 
                'proj': proj, 
@@ -64,7 +59,7 @@ preData_kwargs = {'smooth_method': 'gaussian',
                   'sigma': 3,
                   'order': 3,
                   'unit': 365,
-                  'delete_outliers': 'median_angle',
+                  'delete_outliers': 'vvc_angle',
                   'flags': flags,
                   'regu': regu,
                   'solver': 'LSMR_ini',
@@ -91,7 +86,7 @@ inversion_kwargs = {'solver': 'LSMR_ini',
                     'unit': 365,
                     'result_quality': ['X_contribution'],
                     'nb_max_iteration': 10,
-                    'delete_outliers': 'median_angle',
+                    'delete_outliers': 'vvc_angle',
                     'interpolation': True,
                     'linear_operator': None,
                     'visual': False,
@@ -119,7 +114,7 @@ last_date_interpol = np.max(cube.date2_())
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 start = time.time()
-result = process_blocks(cube, nb_cpu=40, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+result = process_blocks_refine(cube, nb_cpu=40, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
 
 
 print(f'Time inversion {round((time.time() - start), 4)} sec')
@@ -148,7 +143,7 @@ if save:
 
 
 # %% save the res
-cube.write_result_TICOI(result, source, sensor, filename=result_fn,
+cube.write_result_ticoi(result, source, sensor, filename=result_fn,
                         savepath=path_save, result_quality=inversion_kwargs['result_quality'], verbose=True)
 # cube.write_result_TICO(result, source, sensor, filename=name_result,
 #                         savepath=path_save, result_quality=result_quality, verbose=verbose)
