@@ -431,7 +431,7 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
 
     v = data[:, v_pos]
 
-    if Weight == 1: Weight = np.ones(v.shape[0])#equivalent to an Ordinary Least Square
+    if (Weight == 1).all(): Weight = np.ones(v.shape[0])#equivalent to an Ordinary Least Square
 
     if regu == '1accelnotnull':  # apriori on the acceleration
         D_regu = np.multiply(accel[v_pos - 2], coef)

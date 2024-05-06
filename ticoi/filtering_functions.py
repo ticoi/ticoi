@@ -1,6 +1,6 @@
 import numpy as np
 import dask.array as da
-from scipy.ndimage import gaussian_filter1d, median_filter
+from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
 from scipy.signal import savgol_filter
 import xarray as xr
 
@@ -230,6 +230,21 @@ def z_score_filt(obs, z_thres=3, axis=2):
 
     return inlier_flag
 
+def z_score_rolling_filt(obs, z_thres=3, window_size=90, axis=2):
+    
+    # Compute rolling mean
+    mean = uniform_filter(obs, size=window_size, mode='mirror', axis=axis)
+
+    # Compute rolling standard deviation
+    obs_square = obs ** 2
+    mean_square = uniform_filter(obs_square, size=window_size, mode='mirror', axis=axis)
+    std_dev = np.sqrt(mean_square - mean ** 2)
+
+    z_scores = (obs - mean) / std_dev
+    inlier_flag = np.abs(z_scores) < z_thres
+
+    return inlier_flag
+
 def NVVC_angle_filt(obs_cpx, vvc_thres=0.1, angle_thres=45, axis=2):
     
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
@@ -309,3 +324,5 @@ def dask_filt_warpper(da_vx, da_vy, filt_method="median_angle", vvc_thres=0.3, a
     
     return inlier_mask.compute()
 
+
+# %%
