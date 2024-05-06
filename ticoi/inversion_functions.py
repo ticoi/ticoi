@@ -431,9 +431,9 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
 
     v = data[:, v_pos]
 
-    if (Weight == 1).all(): Weight = np.ones(v.shape[0])#equivalent to an Ordinary Least Square
+    if type(Weight) == int and Weight == 1: Weight = np.ones(v.shape[0]) # Equivalent to an Ordinary Least Square
 
-    if regu == '1accelnotnull':  # apriori on the acceleration
+    if regu == '1accelnotnull':  # Apriori on the acceleration
         D_regu = np.multiply(accel[v_pos - 2], coef)
     else:
         D_regu = np.zeros(mu.shape[0])
@@ -441,7 +441,7 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
     if linear_operator is None:
         F_regu = np.multiply(coef, mu)
     else:
-        v = linear_operator.update_from_weight(v, Weight)#update v, Weight,
+        v = linear_operator.update_from_weight(v, Weight) # Update v, Weight,
         A_l = sp.linalg.LinearOperator((v.shape[0] + len(dates_range) - 2, len(dates_range) - 1),
                                        matvec=linear_operator.matvecregu1, rmatvec=linear_operator.rmatvecregu1)
 
@@ -449,8 +449,7 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
         F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype('float32')
         D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype('float32')
         F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidian norme (i.e. 1)
-        X = sp.linalg.lsmr(F, D)[
-            0]  # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
+        X = sp.linalg.lsmr(F, D)[0]  # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
 
     elif solver == 'LSMR_ini':  # 50ms
         if ini is None: raise ValueError('Please provide an initalization for the solver LSMR_ini')

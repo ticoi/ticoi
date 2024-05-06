@@ -104,7 +104,7 @@ class cube_data_class:
             del i1, i2, j1, j2, buffer
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
-                                     verbose: bool = False) -> (int, int, int):
+                                     time_dim_name: str = 'mid_date', verbose: bool = False) -> (int, int, int):
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
@@ -112,6 +112,7 @@ class cube_data_class:
         :param variable_name: Name of the variable containing the time series array (default is "vx")
         :param x_dim: Name of the x dimension in the array (default is "x")
         :param y_dim: Name of the y dimension in the array (default is "y")
+        :param time_dim_name: Name of the z dimension within the original dataset self.ds (default is "mid_date")
         :param verbose: Boolean flag to control verbosity of output (default is True)
 
         :return tc: Chunk size along the time dimension
@@ -142,7 +143,7 @@ class cube_data_class:
         else:
 
             chunk_size_limit = 1000 * mb
-        time_axis = self.ds[variable_name].dims.index('mid_date')
+        time_axis = self.ds[variable_name].dims.index(time_dim_name)
         x_axis = self.ds[variable_name].dims.index(x_dim)
         y_axis = self.ds[variable_name].dims.index(y_dim)
         axis_sizes = {i: -1 if i == time_axis else "auto" for i in range(3)}
@@ -586,26 +587,17 @@ class cube_data_class:
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                if chunks == {}:  # rechunk with optimal chunk size
-                    tc, yc, xc = self.determine_optimal_chunk_size(
-                        variable_name="vx",
-                        x_dim="x",
-                        y_dim="y",
-                        verbose=True,
-                    )
+                if chunks == {}:  # Rechunk with optimal chunk size
+                    tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", 
+                                                                   time_dim_name=time_dim_name[self.ds.author], verbose=True)
                     self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
                 if chunks == {}:
-                    chunks = "auto"  # change the default value to auto
+                    chunks = "auto"  # Change the default value to auto
 
-                self.ds = xr.open_dataset(
-                    filepath,
-                    decode_timedelta=False,
-                    engine="zarr",
-                    consolidated=True,
-                    chunks=chunks,
-                )
+                self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
+                                          consolidated=True, chunks=chunks)
 
         if verbose:
             print("file open")
@@ -619,17 +611,10 @@ class cube_data_class:
             "E. Ducasse": self.load_ducasse,
             "S. Leinss, L. Charrier": self.load_charrier,
         }
-        dico_load[self.ds.author](
-            filepath,
-            pick_date=pick_date,
-            subset=subset,
-            conf=conf,
-            pick_sensor=pick_sensor,
-            pick_temp_bas=pick_temp_bas,
-            buffer=buffer,
-            proj=proj,
-        )
-        # reorder the coordinates to keep the consistency
+        dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
+                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj
+                                  )
+        # Reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
         # self.ds = self.ds.persist()
@@ -881,7 +866,7 @@ class cube_data_class:
                     proj: str = "EPSG:4326", velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
 
         """
-        Filter the orginal data with a spatio-temporal kernel
+        Filter the original data with a spatio-temporal kernel
         
         :param i: x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
         :param j: y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)

@@ -12,7 +12,7 @@ Reference:
 import time
 import os
 import numpy as np
-from ticoi.core import inversion, visualisation, interpolation_post
+from ticoi.core import inversion_core, visualisation, interpolation_core
 from ticoi.cube_data_classxr import cube_data_class
 
 
@@ -110,10 +110,10 @@ print(f'[ticoi_pixel_demo] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx},
 
 start.append(time.time())
 
-obs_filt = cube.preData_np(s_win=3, t_win=90, unit=unit, proj=proj, regu=regu, delete_outliers=delete_outliers, 
-                           velo_or_disp='velo', verbose=verbose)
+obs_filt = cube.filter_cube(s_win=3, t_win=90, unit=unit, proj=proj, regu=regu, delete_outliers=delete_outliers, 
+                             velo_or_disp='velo', verbose=verbose)
 data, mean, dates_range = cube.load_pixel(i, j, proj=proj, interp=load_interp, solver=solver, regu=regu, 
-                                          rolling_mean=obs_filt, merged=merged, visual=visual, verbose=verbose)
+                                          rolling_mean=obs_filt, visual=visual, verbose=verbose)
 
 cube2_date1 = cube.date1_().tolist()
 cube2_date1.remove(np.min(cube2_date1))
@@ -131,12 +131,11 @@ print(f'[ticoi_pixel_demo] Loading the pixel took {round((stop[1] - start[1]), 4
 # =========================================================================%% #
 
 start.append(time.time())
-A, result, dataf = inversion(data, i, j, dates_range=dates_range, solver=solver, coef=coef, weight=apriori_weight,
-                             visual=visual,
-                             verbose=verbose, unit=unit,
-                             conf=conf, regu=regu, mean=mean, visual_inversion=visual_inversion,
-                             detect_temporal_decorrelation=detect_temporal_decorrelation,
-                             linear_operator=None, result_quality=result_quality)
+A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, solver=solver, coef=coef, weight=apriori_weight,
+                                  unit=unit, conf=conf, regu=regu, mean=mean,
+                                  detect_temporal_decorrelation=detect_temporal_decorrelation,
+                                  linear_operator=None, result_quality=result_quality, 
+                                  visual=visual, verbose=verbose)
 
 stop.append(time.time())
 print(f'[ticoi_pixel_demo] Inversion took {round((stop[2] - start[2]), 4)} s')
@@ -154,7 +153,7 @@ start.append(time.time())
 if interpolation_bas == False: interpolation_bas = 1
 start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))
-dataf_lp = interpolation_post(result, interpolation_bas,
+dataf_lp = interpolation_core(result, interpolation_bas,
                               path_save, option_interpol=option_interpol,
                               first_date_interpol=start_date_interpol, last_date_interpol=last_date_interpol,
                               visual=visual, data=dataf, unit=unit, redundancy=redundancy,
