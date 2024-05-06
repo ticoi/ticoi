@@ -23,31 +23,39 @@ warnings.filterwarnings("ignore")
 
 # %%
 # Selection of data
-cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
-flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
+# cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
+# path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
+# flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
 
-result_fn = 'Hala_lake_velocity_LS7_block_test_median_filt'
+cube_name = 'nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc'
+path_save = 'nathan/Tests_MB/'
+
+result_fn = 'test'
+# result_fn = 'Hala_lake_velocity_LS7_block_test_median_filt'
 save = True
 merged = None  # Path to the second cube to merge with the first one
 sensor = None
 
-proj = 'EPSG:32647'  # EPSG system of the coordinates given
+proj = 'EPSG:32632'  # EPSG system of the coordinates given
 
-assign_flag = True
+assign_flag = False
+flags = None
 if assign_flag:
     flags = xr.open_dataset(flag_file)
     flags.load()
 
-coef = { 0: 100, 1: 150, 2:200}  # lambda : coef of the regularisation
-regu = {0: 1, 1: 2, 2: '1accelnotnull'}  # Type of regularisation : 1, 2'1accelnotnull'  # Type of regularisation : 1, 2,'1accelnotnull' : 1 is Tikhonov first order, 2 is Tikhonov second order and '1accelnotnull is Tikhonov first order with an apriori on the acceleration
+# coef = { 0: 100, 1: 150, 2:200}  # lambda : coef of the regularisation
+# regu = {0: 1, 1: 2, 2: '1accelnotnull'}  # Type of regularisation : 1, 2'1accelnotnull'  # Type of regularisation : 1, 2,'1accelnotnull' : 1 is Tikhonov first order, 2 is Tikhonov second order and '1accelnotnull is Tikhonov first order with an apriori on the acceleration
+
+regu = '1accelnotnull'
+coef = 100
 
 load_kwargs = {'filepath': cube_name, 
                'chunks': {}, 
                'conf': False, 
                'subset': None, 
                'buffer': None, 
-               'pick_date': ['1999-09-01', '2015-03-01'],
+               'pick_date': ['2015-01-01', '2023-01-01'],
                'pick_sensor': None, 
                'pick_temp_bas': None, 
                'proj': proj, 
