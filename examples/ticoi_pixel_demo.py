@@ -93,17 +93,12 @@ cube.load(cube_names[0], pick_date=dates_input, proj=proj, pick_temp_bas=temp_ba
 
 # Several cubes have to be merged together
 if len(cube_names) > 1:
-    merged = []
     for n in range(1, len(cube_names)):
-        merged.append(cube_data_class())
-        merged[n-1].load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
-                         buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
-        merged[n-1] = cube.align_cube(merged[n-1], reproj_vel=False, reproj_coord=True, interp_method='nearest')
-        cube.merge_cube(merged[n-1])
-else:
-    merged = None
-    
-merged = None
+        cube2 = cube_data_class()
+        cube2.load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
+                   buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
+        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
+        cube.merge_cube(cube2)
 
 stop = [time.time()]
 print(f'[ticoi_pixel_demo] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')

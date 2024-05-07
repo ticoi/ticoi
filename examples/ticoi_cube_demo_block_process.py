@@ -1,9 +1,14 @@
 '''
-Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method
-The implementation can be divided in three parts:
-    - Data Download : find and download the cube corresponding for the area pixel we want to study,
-    - Inversion & Interpolation: for each pixel of the cube: solving a system AX = Y to produce Irregular Leap Frog time series using the IRLS method, then interpolate the obtained ILF time series to Regular LF time series using interpolation
-    - Results saving: save the result in a new netdf file
+Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method for big data cube.
+This implementation divides the data in smaller data cubes processed one after the other in order to avoid memory overconsumption and kernel crashing.
+It can be divided in three parts:
+    - Data Download : Download the data cube eventually considering a given subset or buffer to limit its size.
+    - Inversion & Interpolation: For each pixel of the cube, solving a system AX = Y to produce Irregular Leap Frog time series using the IRLS method, 
+    then interpolate the obtained ILF time series to Regular LF time series using interpolation.
+    - Results saving: Save the result in a new netCDF file.
+/!\ This implementation uses asyncio which requires its own event loop to run : if you launch this code from a raw terminal, there should be no
+problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it in a raw terminal
+instead of the default console (which leads to a RuntimeError)
 
 Author : Laurane Charrier
 Reference:
@@ -12,17 +17,23 @@ Reference:
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 '''
-from ticoi.core import *
+
 import time
-from ticoi.cube_data_classxr import cube_data_class
 import os
 import xarray as xr
 import warnings
 
+from ticoi.core import *
+from ticoi.cube_data_classxr import cube_data_class
+
+
+# %%========================================================================= #
+#                                    PARAMETERS                               #
+# =========================================================================%% #
+
 warnings.filterwarnings("ignore")
 
-# %%
-# Selection of data
+## ------------------------------- Data selection -------------------------- ##
 # cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
 # path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
 # flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
@@ -36,7 +47,7 @@ save = True
 merged = None  # Path to the second cube to merge with the first one
 sensor = None
 
-proj = 'EPSG:32632'  # EPSG system of the coordinates given
+proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 assign_flag = False
 flags = None
@@ -53,7 +64,7 @@ coef = 100
 load_kwargs = {'filepath': cube_name, 
                'chunks': {}, 
                'conf': False, 
-               'subset': None, 
+               'subset': None,
                'buffer': None, 
                'pick_date': ['2015-01-01', '2023-01-01'],
                'pick_sensor': None, 
@@ -101,17 +112,20 @@ inversion_kwargs = {'solver': 'LSMR_ini',
                     'verbose': False
 }
 
-
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
-# lazy load the original data
-start_process = time.time()
+
+# %%========================================================================= #
+#                                 DATA DOWNLOAD                               #
+# =========================================================================%% #
+
+start = [time.time()]
 cube = cube_data_class()
 
 cube.load(cube_name, pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
-          pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], verbose=load_kwargs['verbose'])
-print(f'Time download cube {round((time.time() - start_process), 4)} sec')
+          pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
+          subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
 
 
 cube_date1 = cube.date1_().tolist()
@@ -121,15 +135,27 @@ last_date_interpol = np.max(cube.date2_())
 
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
-start = time.time()
-result = process_blocks_refine(cube, nb_cpu=40, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+stop = [time.time()]
+print(f'[ticoi_cube_demo_block_process] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[ticoi_cube_demo_block_process] Data loading took {round(stop[0] - start[0], 3)} s')
 
 
-print(f'Time inversion {round((time.time() - start), 4)} sec')
+# %%========================================================================= #
+#                                      TICOI                                  #
+# =========================================================================%% #
+
+start.append(time.time())
+result = process_blocks_refine(cube, nb_cpu=12, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+
+stop.append(time.time())
+print(f'[ticoi_cube_demo_block_process] TICOI processing took {round(stop[1] - start[1], 3)} s')
 
 
-# %% Initialisation of the cube to store the data
-start = time.time()
+# %%========================================================================= #
+#                                INITIALISATION                               #
+# =========================================================================%% #
+
+start.append(time.time())
 if save:
     sensor_array = np.unique(cube.ds['sensor'])
 
@@ -138,7 +164,7 @@ if save:
     if merged is None:
         source = f'Temporal inversion on cube {cube.filename} using TICOI with a selection of the dates between: {load_kwargs["pick_date"]}, with a selection of the temporal baselines {load_kwargs["pick_temp_bas"]}'
     else:
-        source = f'Temporal inversion on cube {cube.filename} & {cube2.filename} using TICOI with a selection of the dates: {load_kwargs["pick_date"]}, with a selection of the baseline {load_kwargs["pick_temp_bas"]}, and a temporal spacing every {inversion_kwargs["redundancy"]} days '
+        source = f'Temporal inversion on cube {cube.filename} using TICOI with a selection of the dates: {load_kwargs["pick_date"]}, with a selection of the baseline {load_kwargs["pick_temp_bas"]}, and a temporal spacing every {inversion_kwargs["redundancy"]} days '
     if inversion_kwargs['apriori_weight']:
         source += ' and apriori weight'
     source += f'. The Tikhonov coef is: {inversion_kwargs["coef"]}.'
@@ -148,12 +174,18 @@ if save:
             source += f'The interpolation baseline is: {inversion_kwargs["interpolation_bas"]} days.'
         source += f'The temporal spacing every {inversion_kwargs["redundancy"]} days.'
 
+stop.append(time.time())    
+print(f'[ticoi_cube_demo_block_process] Initialisation took {round(stop[2] - start[2], 3)} s')
 
 
-# %% save the res
-cube.write_result_ticoi(result, source, sensor, filename=result_fn,
-                        savepath=path_save, result_quality=inversion_kwargs['result_quality'], verbose=True)
-# cube.write_result_TICO(result, source, sensor, filename=name_result,
-#                         savepath=path_save, result_quality=result_quality, verbose=verbose)
-print(f'Total process {round((time.time() - start_process) / 60, 2)} min')
-print('Finished')
+# %%========================================================================= #
+#                                WRITING RESULTS                              #
+# =========================================================================%% #
+
+start.append(time.time())
+cube.write_result_ticoi(result, source, sensor, filename=result_fn, savepath=path_save, result_quality=inversion_kwargs['result_quality'], 
+                        verbose=inversion_kwargs['verbose'])
+
+stop.append(time.time())
+print(f'[ticoi_cube_demo_block_process] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
+print(f'[ticoi_cube_demo_block_process] Overall processing took {round(stop[3] - start[0], 0)} s')

@@ -769,6 +769,7 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
     return dataf_list
 
 def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
+    
     '''Loop over the blocks of the cube and process each block.
 
     :param cube: Class of the cube, e.g. Ticoi_cube
@@ -802,6 +803,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
 
     :return: pandas dataframe, time series of the velocity estimates
     '''
+    
     def chunk_to_block(cube, block_size=1, verbose=False):
         GB = 1073741824
         blocks = []
@@ -849,8 +851,11 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
         return block, flags_block, duration
     
     async def process_block(block, flags_block=None, nb_cpu=8, verbose=False):
-        obs_filt = block.filter_cube(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order,
-                            proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers, verbose=True, velo_or_disp=velo_or_disp)
+        obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
+                                     t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
+                                     proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'], 
+                                     delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
+                                     verbose=preData_kwargs['verbose'])
 
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
@@ -860,13 +865,18 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
 
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel,
-            iteration=iteration, interval_output=interval_output, first_date_interpol=first_date_interpol,
-            last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu,
-            interpolation_bas=interpolation_bas, option_interpol=option_interpol, redundancy=redundancy, proj=proj,
-            detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
-            nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers, interpolation=interpolation,
-            linear_operator=linear_operator, visual=visual, verbose=verbose)
+            i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'], 
+            obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
+            iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
+            first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
+            treshold_it=inversion_kwargs['treshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
+            regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
+            option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
+            proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
+            unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'], 
+            nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'], 
+            interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
+            visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
         for i, j in xy_values_tqdm)
 
         return result_block
@@ -894,7 +904,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
             # load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
             
             block, flags_block, duration = await future
             if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
@@ -902,7 +912,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n+1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
             block_result = await process_block(block, flags_block, nb_cpu, verbose)
 
@@ -916,7 +926,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
             del block_result, block, flags_block
 
         return dataf_list
-
+    
     dataf_list = asyncio.run(process_blocks_main(cube, nb_cpu, block_size, verbose, preData_kwargs, inversion_kwargs))
 
     return dataf_list

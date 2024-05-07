@@ -161,6 +161,7 @@ class cube_data_class:
             )
         return tc, yc, xc
 
+
     # %% ==================================================================== #
     #                         CUBE LOADING METHODS                            #
     # =====================================================================%% #
@@ -709,6 +710,7 @@ class cube_data_class:
          """
         return np.sqrt(self.ds['vx'] ** 2 + self.ds['vy'] ** 2)
 
+
     # %% ==================================================================== #
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
@@ -819,11 +821,11 @@ class cube_data_class:
         else:
             return data, mean, dates_range
 
+
     # %% ==================================================================== #
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    
     def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
         """
         Delete outliers according to a certain criterium
@@ -1229,8 +1231,9 @@ class cube_data_class:
                          for i in
                          range(self.nx) for j in range(self.ny)]).reshape(self.nx, self.ny)
 
+                                                                                                               
     # %% ======================================================================== #
-    #                             WRITING RESULTS In A NETCDF                     #
+    #                            WRITING RESULTS AS NETCDF                        #
     # =========================================================================%% #
 
     def write_result_ticoi(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
@@ -1251,6 +1254,7 @@ class cube_data_class:
         :return: new cube where the results are saved
         """
         # TODO: need to check the order of dimension: do we need to transpose?
+        print(type(result))
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
                             result[i * self.ny + j]['vx'].shape[
