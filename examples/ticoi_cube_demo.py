@@ -22,31 +22,15 @@ import warnings
 import geopandas
 import os
 import numpy as np
+import pandas as pd
 
 from joblib import Parallel, delayed
 from pyproj import CRS
 from tqdm import tqdm
-from shapely.geometry import Point
 
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.core import process
-
-def points_in_polygon(positions, poly):
-    
-    '''
-    Small function to compute the intersection between a scatter plot and a polygon.
-    
-    :param positions: List of the available points (scatter plot), each of those is made of two coordinates (longitude, latitude)
-    :param poly: Polygon object coming from a shapefile
-    
-    :return: Points in positions which also are inside poly (intersection between positions and poly)
-    '''
-    
-    points = [Point(positions[i][0], positions[i][1]) for i in range(len(positions))]
-    poly = poly.to_crs(epsg=32632)
-    polygon = poly.geometry[0]
-    
-    return [polygon.contains(points[i]) for i in range(len(points))]
+from ticoi.other_functions import points_in_polygon
 
 
 # %%========================================================================= #
@@ -62,6 +46,7 @@ cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_
               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
 path_save = 'nathan/Tests_MB/'
 name_save = 'test'
+poly_path = None
 poly_path = 'nathan/Tests_MB/Glaciers/Full_MB.shp'
 proj = 'EPSG:32632'  # EPSG system of the coordinates given
 # To select a specific period for the measurements, if you want to select all the dates put None, 
@@ -80,6 +65,8 @@ load_interp = 'nearest' # Interpolation used to select which data to use when th
 
 subset = None
 # subset = [333615, 334529, 5079318, 5081236] # Bossons upper central part (741 points)
+# subset = [331200, 334550, 5080000, 5084400]
+subset = [333250, 334250, 5083100, 5084200]
 
 ## -------------------------------- Inversion ------------------------------ ##
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
@@ -145,7 +132,7 @@ print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
 
 start.append(time.time())
 obs_filt = cube.filter_cube(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, proj=proj, regu=regu,
-                            delete_outliers=None, verbose=False, velo_or_disp='velo') # Compute the rolling mean
+                            delete_outliers=None, verbose=True, velo_or_disp='velo') # Compute the rolling mean
 
 # Borders of the temporal interpolation
 cube_date1 = cube.date1_().tolist()
@@ -153,6 +140,14 @@ cube_date1.remove(np.min(cube_date1))
 merged = None
 start_date_interpol = np.min(cube_date1)
 last_date_interpol = np.max(cube.date2_())
+
+# Positions of the points within the dataset
+positions = np.unique(np.array([(i, j) for i in cube.ds['x'].values for j in cube.ds['y'].values]), axis=0)
+original_len = len(positions)
+if poly_path is not None: # Apply a shp mask on those points
+    poly = geopandas.read_file(poly_path).to_crs(epsg=int(proj.split(':')[1]))
+    select = points_in_polygon(positions, poly.geometry[0])
+    positions = positions[select]
 
 stop.append(time.time())    
 print(f'[ticoi_cube_demo] Filtering the cube took {round(stop[1] - start[1], 3)} s')
@@ -184,12 +179,6 @@ if save:
 
 EPSG = f'EPSG:{CRS(cube.ds.proj4).to_epsg()}'
 
-# Positions of the points within the dataset
-positions = np.unique(np.array([(i, j) for i in cube.ds['x'].values for j in cube.ds['y'].values]), axis=0)
-if poly_path is not None: # Apply a shp mask on those points
-    poly = geopandas.read_file(poly_path)
-    positions = positions[points_in_polygon(positions, poly)]
-
 stop.append(time.time())    
 print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 
@@ -205,7 +194,7 @@ print(f'[ticoi_cube_demo] {nb_points} points to be computed within the given sub
 start.append(time.time())
 
 # Initialize the progress bar
-xy_values_tqdm = tqdm(positions, total=nb_points, mininterval=0.1)
+xy_values_tqdm = tqdm(positions, total=nb_points, mininterval=0.5)
 
 # With parallelization
 result = Parallel(n_jobs=nb_cpu, verbose=0)(
@@ -226,6 +215,16 @@ result = Parallel(n_jobs=nb_cpu, verbose=0)(
 #                           conf=conf, regu=regu, interpolation_bas=interpolation_bas, option_interpol=option_interpol, 
 #                           redundancy=redundancy, detect_temporal_decorrelation=detect_temporal_decorrelation, 
 #                           unit=unit, result_quality=result_quality, delete_outliers=delete_outliers, verbose=verbose))
+
+if poly_path is not None:
+    full_result = [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 
+                                       'dz': [], 'vz': [], 'x_countz': [], 'NormR': []}) for _ in range(original_len)]
+    j = 0
+    for i in range(original_len):
+        if select[i]:
+            full_result[i] = result[j]
+            j += 1
+    result = full_result
 
 stop.append(time.time())
 print(f'[ticoi_cube_demo] TICOI processing took {round(stop[3] - start[3], 3)} s')

@@ -8,20 +8,23 @@ Transactions on Geoscience and Remote Sensing. Charrier, L., Yan, Y., Colin Koen
 photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
 
 import os
-from ticoi.mjd2date import mjd2date  # /ST_RELEASE/UTILITIES/PYTHON/mjd2date.py
 import pandas as pd
 import dask
-from pyproj import Proj, Transformer, CRS
 import rasterio.enums
-from datetime import date
-from ticoi.interpolation_functions import reconstruct_common_ref
 import itertools
 import warnings
 import time
+
+from pyproj import Proj, Transformer, CRS
+from datetime import date
 from dask.diagnostics import ProgressBar
+from typing import Union
+from shapely import Point
+
+from ticoi.mjd2date import mjd2date  # /ST_RELEASE/UTILITIES/PYTHON/mjd2date.py
+from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.filtering_functions import *
-from typing import Union
 
 
 # %% ======================================================================== #
@@ -989,7 +992,7 @@ class cube_data_class:
         start = time.time()
         if delete_outliers is not None: 
             self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
-        print(f'Delete outlier took {round((time.time() - start), 1)} s')
+            if verbose: print(f'Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
 
@@ -1126,7 +1129,6 @@ class cube_data_class:
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
             # Update of cube_data_classxr attributes
             cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})
-            # cube2.ds = cube2.ds.rio.write_crs(cube2.proj4, inplace=True)
             cube.nx = cube.ds.dims['x']
             cube.ny = cube.ds.dims['y']
             cube.ds = cube.ds.assign_coords({"x": self.ds.x, "y": cube.ds.y})
@@ -1254,7 +1256,6 @@ class cube_data_class:
         :return: new cube where the results are saved
         """
         # TODO: need to check the order of dimension: do we need to transpose?
-        print(type(result))
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
                             result[i * self.ny + j]['vx'].shape[

@@ -22,6 +22,7 @@ import time
 import os
 import xarray as xr
 import warnings
+import geopandas
 
 from ticoi.core import *
 from ticoi.cube_data_classxr import cube_data_class
@@ -38,8 +39,10 @@ warnings.filterwarnings("ignore")
 # path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
 # flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
 
-cube_name = 'nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc'
+cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc']
 path_save = 'nathan/Tests_MB/'
+poly_path = None
+poly_path = 'nathan/Tests_MB/Glaciers/Full_MB.shp'
 
 result_fn = 'test'
 # result_fn = 'Hala_lake_velocity_LS7_block_test_median_filt'
@@ -61,10 +64,10 @@ if assign_flag:
 regu = '1accelnotnull'
 coef = 100
 
-load_kwargs = {'filepath': cube_name, 
+load_kwargs = {'filepath': None, 
                'chunks': {}, 
                'conf': False, 
-               'subset': None,
+               'subset': [333250, 334250, 5083100, 5084200],
                'buffer': None, 
                'pick_date': ['2015-01-01', '2023-01-01'],
                'pick_sensor': None, 
@@ -121,12 +124,23 @@ if not os.path.exists(path_save):
 # =========================================================================%% #
 
 start = [time.time()]
-cube = cube_data_class()
 
-cube.load(cube_name, pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
+cube = cube_data_class()
+cube.load(cube_names[0], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
           pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
           subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
 
+# Several cubes have to be merged together
+if len(cube_names) > 1:
+    for n in range(1, len(cube_names)):
+        cube2 = cube_data_class()
+        cube2.load(cube_names[n], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
+                   pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
+                   subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
+        # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
+        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
+        cube.merge_cube(cube2) # Merge the new cube to the main one
+    del cube2
 
 cube_date1 = cube.date1_().tolist()
 cube_date1.remove(np.min(cube_date1))
@@ -145,10 +159,15 @@ print(f'[ticoi_cube_demo_block_process] Data loading took {round(stop[0] - start
 # =========================================================================%% #
 
 start.append(time.time())
-result = process_blocks_refine(cube, nb_cpu=12, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+
+poly = None
+if poly_path is not None: # Apply a shp mask on those points
+    poly = geopandas.read_file(poly_path).to_crs(epsg=int(proj.split(':')[1])).geometry[0]
+
+result = process_blocks_refine(cube, nb_cpu=12, block_size=0.5, mask=poly, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo_block_process] TICOI processing took {round(stop[1] - start[1], 3)} s')
+print(f'[ticoi_cube_demo_block_process] TICOI processing took {round(stop[1] - start[1], 0)} s')
 
 
 # %%========================================================================= #

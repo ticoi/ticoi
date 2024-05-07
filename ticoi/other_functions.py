@@ -59,3 +59,17 @@ def find_granule_by_point(input_dict, input_point):  # [lon,lat]
         else:
             pass
     return target_granule_urls
+
+def points_in_polygon(positions, poly):
+    
+    '''
+    Small function to compute the intersection between a scatter plot and a polygon.
+    
+    :param positions: List of the available points (scatter plot), each of those is made of two coordinates (longitude, latitude)
+    :param poly: Polygon object coming from a shapefile
+    
+    :return: Points in positions which also are inside poly (intersection between positions and poly)
+    '''
+    
+    points = [Point(positions[i][0], positions[i][1]) for i in range(len(positions))]
+    return [poly.contains(points[i]) for i in range(len(points))]
