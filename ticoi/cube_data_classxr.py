@@ -737,7 +737,7 @@ class cube_data_class:
         return i, j
 
 
-    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:None | xr.Dataset=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
         """
 
         :param i: pixel coordinate for x
@@ -826,7 +826,7 @@ class cube_data_class:
     # =====================================================================%% #
 
     
-    def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
+    def delete_outliers(self, delete_outliers:str|float,flags:None | xr.Dataset=None):
         """
         Delete outliers according to a certain criterium
         :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector

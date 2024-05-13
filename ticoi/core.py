@@ -32,7 +32,7 @@ from ticoi.inversion_functions import construction_a_lf, class_linear_operator, 
 from ticoi.interpolation_functions import reconstruct_common_ref, set_function_for_interpolation, visualisation_interpolation
 from typing import Union
 import asyncio
-
+import xarray as xr
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -768,7 +768,7 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
 
     return dataf_list
 
-def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
+def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float=0.5, verbose:bool=False, preData_kwargs:None|dict=None, inversion_kwargs:None|dict=None):
     '''Loop over the blocks of the cube and process each block.
 
     :param cube: Class of the cube, e.g. Ticoi_cube
@@ -802,24 +802,35 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
 
     :return: pandas dataframe, time series of the velocity estimates
     '''
-    def chunk_to_block(cube, block_size=1, verbose=False):
+    def chunk_to_block(cube:"cube_data_class", block_size:float=1., verbose:bool=False)->list:
+        """
+        Split the data into block, so that each block as maximum size of block_size GB
+        :param cube: cube dataset
+        :param block_size: size of each block in GB
+        :param verbose:bool, if True print some information
+        :return: position of each blocks in the cube
+        """
         GB = 1073741824
         blocks = []
         if cube.ds.nbytes > block_size * GB:
-            num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
-            chunk_bytes = num_elements * cube.ds['vx'].dtype.itemsize
+            num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])#chunksize[x]*chunksize[y]*chunksize['mid_date'] = number of value inside one chunk
+            chunk_bytes = num_elements * cube.ds['vx'].dtype.itemsize #size of one chunk in byte (=number of values * size of each value, according to its dtype)
             
-            nchunks_block = int(block_size * GB // chunk_bytes)
-            
+            nchunks_block = int(block_size * GB // chunk_bytes) #number of chunk per block needed so that the block reach a size of approximatly block_size * GB
+
+            #number of chunks inside one block, in x and y
+            #to get approximatly a squared block, the number of chunks should be approximatly the same in x and y
             x_step = int(np.sqrt(nchunks_block))
             y_step = nchunks_block // x_step
-            
+
+            #number of blocks needed
             nblocks_x = int(np.ceil(len(cube.ds.chunks['x']) / x_step))
             nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
             
             nblocks = nblocks_x * nblocks_y
             if verbose: print(f'Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
 
+            #Save the position of each blocks in the cube
             for i in range(nblocks_y):
                 for j in range(nblocks_x):
                     x_start = j * x_step * cube.ds.chunks['x'][0]
@@ -833,7 +844,16 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
 
         return blocks
 
-    def load_block(block, x_start, x_end, y_start, y_end, flags):
+    def load_block(x_start:int, x_end:int, y_start:int, y_end:int, flags:None | xr.Dataset):
+        """
+        Persist a block in to memory, i.e. load it in a distributed way
+        :param x_start: position of the block in x, first element
+        :param x_end: position of the block in x, last element
+        :param y_start: position of the block in y, first element
+        :param y_end: position of the block in y, last element
+        :param flags:
+        :return:
+        """
         start = time.time()
         block = cube_data_class()
         block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
@@ -848,13 +868,23 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
 
         return block, flags_block, duration
     
-    async def process_block(block, flags_block=None, nb_cpu=8, verbose=False):
+    async def process_block(block:"cube_data_class", flags_block:None | xr.Dataset=None, nb_cpu:int=8, verbose:bool=False):
+        """
+
+        :param block: block of the cube
+        :param flags_block: flag of this block
+        :param nb_cpu: nb of CPUs used for the parallelization
+        :param verbose: if True print some information
+        :return:
+        """
         obs_filt = block.filter_cube(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order,
                             proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers, verbose=True, velo_or_disp=velo_or_disp)
 
+        #load in memory the observation cube data and the filtered cube
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
 
+        #parallelization over every pixels
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
@@ -871,7 +901,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
 
         return result_block
     
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
+    async def process_blocks_main(cube:"cube_data_class", nb_cpu:int=8, block_size:float=0.5, verbose:bool=False, preData_kwargs:None|dict=None, inversion_kwargs:None|dict=None):
         
         # get the parameters
         if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
@@ -882,9 +912,8 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, verbose=False, preData
         else:
             raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
-        # blocks = cube_split(cube, block_size=block_size, verbose=True)
-        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
-        dataf_list = [None] * ( cube.nx * cube.ny )
+        blocks = chunk_to_block(cube, block_size=block_size, verbose=True) #position of the blocks to use
+        dataf_list = [None] * ( cube.nx * cube.ny)
 
         loop = asyncio.get_event_loop()
         
