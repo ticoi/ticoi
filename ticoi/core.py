@@ -926,7 +926,7 @@ def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float
             # load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags,verbose=verbose_prepData)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
             
             block, flags_block, duration = await future
             if verbose_prepData: print(f'Block {n+1} loaded in {duration:.2f} s')
@@ -934,7 +934,7 @@ def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n+1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags,verbose=verbose_prepData)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
             block_result = await process_block(block, flags_block, nb_cpu, verbose)
 
