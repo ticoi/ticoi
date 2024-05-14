@@ -844,7 +844,7 @@ def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float
 
         return blocks
 
-    def load_block(x_start:int, x_end:int, y_start:int, y_end:int, flags:None | xr.Dataset,verbose=False):
+    def load_block(cube:"cube_data_class", x_start:int, x_end:int, y_start:int, y_end:int, flags:None | xr.Dataset):
         """
         Persist a block in to memory, i.e. load it in a distributed way
         :param x_start: position of the block in x, first element
@@ -865,8 +865,8 @@ def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float
         else:
             flags_block = None
         duration = time.time() - start
-        if verbose: print(f'Loading of the block took {duration} s')
-        return block, flags_block
+
+        return block, flags_block, duration
     
     async def process_block(block:"cube_data_class", flags_block:None | xr.Dataset=None, nb_cpu:int=8, verbose:bool=False):
         """
@@ -907,6 +907,9 @@ def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float
         if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
             for key, value in preData_kwargs.items():
                 globals()[key] = value
+            if 'verbose' in globals():
+                verbose_prepData = verbose
+                del verbose
             for key, value in inversion_kwargs.items():
                 globals()[key] = value
         else:
@@ -923,15 +926,15 @@ def process_blocks_refine(cube:"cube_data_class", nb_cpu:int=8, block_size:float
             # load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags,verbose=verbose)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags,verbose=verbose_prepData)
             
             block, flags_block, duration = await future
-            if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
+            if verbose_prepData: print(f'Block {n+1} loaded in {duration:.2f} s')
             
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n+1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags,verbose=verbose)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags,verbose=verbose_prepData)
 
             block_result = await process_block(block, flags_block, nb_cpu, verbose)
 

@@ -114,7 +114,7 @@ last_date_interpol = np.max(cube.date2_())
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 start = time.time()
-result = process_blocks_refine(cube, nb_cpu=40, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+result = process_blocks_refine(cube, nb_cpu=40, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs,verbose=True)
 
 
 print(f'Time inversion {round((time.time() - start), 4)} sec')
