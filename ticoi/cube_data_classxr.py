@@ -632,6 +632,7 @@ class cube_data_class:
         """
         Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist
         """
+        self.ds = self.ds.unify_chunks()
         if self.ds.chunksizes['mid_date'] != (self.nz,):
             self.ds = self.ds.chunk({'mid_date': self.nz})
         # create a variable for temporal_baseline,be
