@@ -864,7 +864,7 @@ class cube_data_class:
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
                     order: int = 3, unit: int = 365, delete_outliers: str | float | None = None,
                     flags: None | xr.Dataset = None, regu: int | str = 1, solver: str = 'LSMR_ini',
-                    proj: str = "EPSG:4326", velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
+                    proj: str = "EPSG:4326", velo_or_disp: str = "velo",select_baseline:int|None=None, verbose: bool = False) -> xr.Dataset:
 
         """
         Filter the original data with a spatio-temporal kernel
@@ -882,14 +882,15 @@ class cube_data_class:
         :param solver: solver used to invert the system
         :param proj: EPSG of i,j projection (default is 'EPSG:4326')
         :param velo_or_disp: 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
+        :param select_baseline: Treshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this treshold, it is increased by 30 days
         :param verbose: Print information throughout the process (default is False)
         
         :return: filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.DataArray, mid_dates: xr.DataArray, date_range: np.ndarray,
+        def loop_rolling(da_arr,mid_dates, date_range: np.ndarray,
                          smooth_method: str = "gaussian", s_win: int = 3, t_win: int = 90, sigma: int = 3, order=3,
-                         baseline: xr.DataArray | None = None, verbose: bool = False) -> (
+                         select_baseline: int | None = None, verbose: bool = False) -> (
                 np.ndarray, np.ndarray):
 
             """
@@ -915,14 +916,15 @@ class cube_data_class:
 
             # Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
+            da_arr = self.ds['vx']
+            mid_dates = self.ds['mid_date']
+
             if verbose: start = time.time()
 
-            if baseline is not None:
-                baseline = baseline.compute()
-                idx = np.where(baseline < 700)
-                t_thres = 120
-                idx = np.where(baseline < t_thres )
-                while len(idx[0]) < 3 * len(date_out):
+            if select_baseline is not None:
+                baseline = self.ds['temporal_baseline'].compute()
+                idx = np.where(baseline < select_baseline ) #take only the temporal baseline lower than the treshold selecr_baseline
+                while len(idx[0]) < 3 * len(date_out): #increase the treashold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     t_thres += 30
                     idx = np.where(baseline < t_thres )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
@@ -997,26 +999,24 @@ class cube_data_class:
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                self.ds["vx"],
-                self.ds["mid_date"],
+                self.ds['vx'],self.ds['mid_date'],
                 date_range,
                 smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
-                baseline=self.ds["temporal_baseline"]
+                select_baseline=select_baseline
             )
             vy_filtered, dates_uniq = loop_rolling(
-                self.ds["vy"],
-                self.ds["mid_date"],
+                self.ds['vy'],self.ds['mid_date'],
                 date_range,
                 smooth_method=smooth_method,
                 s_win=s_win,
                 t_win=t_win,
                 sigma=sigma,
                 order=order,
-                baseline=self.ds["temporal_baseline"]
+                select_baseline=select_baseline
             )
 
             # the time dimension of the smoothed velocity observations is different from the original,
@@ -1289,9 +1289,9 @@ class cube_data_class:
         long_name = ['velocity in the East/West direction [m/y]', 'velocity in the North/South direction [m/y]',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
-        short_name = ['x_velocity', 'y_velocity', 'x_countx', 'x_county']
+        short_name = ['x_velocity', 'y_velocity', 'xcount_x', 'xcount_y']
         if result_quality is not None and 'X_contribution' in result_quality:
-            variables = ['vx', 'vy', 'x_countx', 'x_county']
+            variables = ['vx', 'vy', 'xcount_x', 'xcount_y']
         else:
             variables = ['vx', 'vy']
         for i, var in enumerate(variables):
@@ -1395,7 +1395,7 @@ class cube_data_class:
                      'displacement in the East/West direction [m]', 'displacement in the North/South direction [d]',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
-        short_name = ['first_date', 'second_date', 'x_displacement', 'y_displacement', 'x_countx', 'x_county']
+        short_name = ['first_date', 'second_date', 'x_displacement', 'y_displacement', 'xcount_x', 'xcount_y']
         unit = ['days', 'days', 'm', 'm', 'no unit', 'no unit']
 
         # Build cumulative displacement time series

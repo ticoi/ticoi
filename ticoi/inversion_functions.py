@@ -367,7 +367,7 @@ class class_linear_operator:
 
 
     # %% ======================================================================== #
-    #                             PROPERTY THE SYSTEM                             #
+    #                             PROPERTY OF THE SYSTEM                             #
     # =========================================================================%% #
 
 
@@ -384,7 +384,7 @@ def is_convex(A:np.ndarray) -> bool:
     hessian_matrix = A.T @ A  # Compute the Hessian matrix
     return np.all(np.linalg.eigvals(hessian_matrix) >= 0)
 
-def matric_property(A:np.ndarray)->str:
+def matrix_property(A:np.ndarray)->str:
     """
     Evaluate if the matrix is under determined, over-determined and/or ill posed
     :param A: Design matrix to evaluate

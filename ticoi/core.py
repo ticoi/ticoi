@@ -164,7 +164,7 @@ def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.nd
 
     :return A: Design matrix in AX = Y
     :return result: pandas DataFrame with dates, computed displacements and number of observations used to compute each displacement
-    :return dataf: None or complete pandas DataFrame with dates, velocities, errors, residus, weights, x_count,normr... for further visual purposes (directly depends on param visual and result_quality)
+    :return dataf: None or complete pandas DataFrame with dates, velocities, errors, residus, weights, xcount_,normr... for further visual purposes (directly depends on param visual and result_quality)
     """
 
     if data[0].size:  # If there are available data on this pixel
@@ -306,10 +306,10 @@ def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.nd
 
         # compute the number of observations which have contributed to each estimated displacement
         if result_quality is not None and 'X_contribution' in result_quality:
-            X_countx = A.T.dot(weight_ix)
-            X_county = A.T.dot(weight_iy)
+            xcount_x = A.T.dot(weight_ix)
+            xcount_y = A.T.dot(weight_iy)
         else:
-            X_countx = X_county = np.ones(result_dx_i.shape[0])
+            xcount_x = xcount_y = np.ones(result_dx_i.shape[0])
 
         # propagate the error
         # TODO terminate propgation of errors
@@ -374,8 +374,8 @@ def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.nd
         'date2': dates_range[1:],
         'result_dx': result_dx_i,
         'result_dy': result_dy_i,
-        'X_countx': X_countx,
-        'X_county': X_county
+        'xcount_x': xcount_x,
+        'xcount_y': xcount_y
     })
     if residu_normx is not None:  # add the norm of the residual
         NormR = np.zeros(result.shape[0])
@@ -384,8 +384,8 @@ def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.nd
         del NormR
     if result_quality is not None:  # add the error propagation
         if 'Error_propagation' in result_quality:
-            result['Error_x'] = prop_wieght_diagx
-            result['Error_y'] = prop_wieght_diagy
+            result['error_x'] = prop_wieght_diagx
+            result['error_y'] = prop_wieght_diagy
             sigma = np.zeros(result.shape[0])
             sigma[:2] = np.hstack([sigma0_weightx, sigma0_weighty])
             result['sigma0'] = sigma
@@ -431,12 +431,12 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
 
     if len(x) <= 1:  # it is not possible to interpolate
         return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-             'vz': [], 'x_countz': [], 'NormR': []})
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+             'vz': [], 'xcount_z': [], 'NormR': []})
     elif np.isin('spline', option_interpol) and len(x) <= 3:
         return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-             'vz': [], 'x_countz': [], 'NormR': []})
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+             'vz': [], 'xcount_z': [], 'NormR': []})
 
     # Compute the functions used to interpolate
     fdx,fdy,fdx_xcount,fdy_xcount = set_function_for_interpolation(option_interpol, x, dataf, result_quality)
@@ -450,16 +450,16 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
 
     if len(x_regu) <= 1:  # no interpolation
         return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-             'vz': [], 'x_countz': [], 'NormR': []})
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+             'vz': [], 'xcount_z': [], 'NormR': []})
 
     ####  Reconstruct a time series with a given temporal sampling, and a given overlap
     step = interval_output if redundancy is None else int(interval_output / redundancy)
 
     if step >= len(x_regu):
         return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-             'vz': [], 'x_countz': [], 'NormR': []})
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+             'vz': [], 'xcount_z': [], 'NormR': []})
 
     x_shifted = x_regu[step:]
     dx = fdx(x_shifted) - fdx(
@@ -467,8 +467,8 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
     dy = fdy(x_shifted) - fdy(
         x_regu[:-step])  # equivalent to [fdy(x_regu[i + step]) - fdy(x_regu[i]) for i in range(len(x_regu) - step)]
     if result_quality is not None and 'X_contribution' in result_quality:
-        x_countx = fdx_xcount(x_shifted) - fdx_xcount(x_regu[:-step])
-        x_county = fdy_xcount(x_shifted) - fdy_xcount(x_regu[:-step])
+        xcount_x = fdx_xcount(x_shifted) - fdx_xcount(x_regu[:-step])
+        xcount_y = fdy_xcount(x_shifted) - fdy_xcount(x_regu[:-step])
     vx = dx * unit / interval_output  # convert to velocity in m/d or m/y
     vy = dy * unit / interval_output  # convert to velocity in m/d or m/
 
@@ -477,8 +477,8 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
     Second_date = start_date + pd.to_timedelta(x_shifted, unit='D')
 
     if result_quality is not None and 'X_contribution' in result_quality:
-        data_dict = {'First_date': First_date, 'Second_date': Second_date, 'vx': vx, 'vy': vy, 'x_countx': x_countx,
-                     'x_county': x_county}
+        data_dict = {'First_date': First_date, 'Second_date': Second_date, 'vx': vx, 'vy': vy, 'xcount_x': xcount_x,
+                     'xcount_y': xcount_y}
     else:
         data_dict = {'First_date': First_date, 'Second_date': Second_date, 'vx': vx, 'vy': vy}
     dataf_lp = pd.DataFrame(data_dict)
@@ -589,8 +589,8 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     else:
 
         return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-             'vz': [], 'x_countz': [], 'NormR': []})
+            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+             'vz': [], 'xcount_z': [], 'NormR': []})
 
 
 def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
@@ -1195,10 +1195,10 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
         if 'Y_contribution' in option_visual:
             fig, ax = plt.subplots(2, 1, figsize=figsize)
             ax[0].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['X_countx'], s=4,
+            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['xcount_x'], s=4,
                                  cmap='rainbow', label='Y_contribution')
             ax[1].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['X_county'], s=4,
+            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['xcount_y'], s=4,
                                  cmap='rainbow', label='Y_contribution')
             legend1 = ax[1].legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
                                    bbox_transform=fig.transFigure,
@@ -1212,7 +1212,7 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
                           2)  # compute the magnitude of the velocity
             fig, ax = plt.subplots(figsize=figsize)
             ax.set_ylabel(f'Velocity magnitude [{unit}]', fontsize=16)
-            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['X_countx'] + result['X_county']) / 2, s=4, vmin=0,
+            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['xcount_x'] + result['xcount_y']) / 2, s=4, vmin=0,
                               vmax=100,
                               cmap='viridis_r', label='Y_contribution')
             legend1 = ax.legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
@@ -1573,13 +1573,14 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
 
             print('RMSE y', sm.mean_squared_error(Y_reconstruct_x, dataf['vx'], squared=False))
             print('RMSE y', sm.mean_squared_error(Y_reconstruct_y, dataf['vy'], squared=False))
+
         if 'Error_propagation' in option_visual:
             fig, ax = plt.subplots(2, 1, figsize=figsize)
             ax[0].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['Error_x'] / delta_r * 365, s=4,
+            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['error_x'] / delta_r * 365, s=4,
                                  cmap='rainbow', label='errorx')
             ax[1].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['Error_y'] / delta_r * 365, s=4,
+            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['error_y'] / delta_r * 365, s=4,
                                  cmap='rainbow', label='errory')
             legend1 = ax[1].legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
                                    bbox_transform=fig.transFigure,
@@ -1593,7 +1594,7 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
                           2)  # compute the magnitude of the velocity
             fig, ax = plt.subplots(figsize=figsize)
             ax.set_ylabel(f'Velocity magnitude [{unit}]', fontsize=16)
-            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['X_countx'] + result['X_county']) / 2, s=4, vmin=0,
+            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['xcount_x'] + result['xcount_y']) / 2, s=4, vmin=0,
                               vmax=100,
                               cmap='viridis_r', label='Y_contribution')
             legend1 = ax.legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,

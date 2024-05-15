@@ -16,27 +16,21 @@ def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | None = N
     :return: Cumulative displacement time series in x and y component, pandas dataframe
     """
 
-    if result_dz is None:
-        if result_quality is None or 'X_contribution' not in result_quality:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy'])})
-        else:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy']),
-                 'xcountx': np.cumsum(result['X_countx']), 'xcounty': np.cumsum(result['X_county'])})
-    else:
-        if result_quality is None or 'X_contribution' not in result_quality:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result), 'dz': np.cumsum(result['dz'])})
-        else:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result), 'dz': np.cumsum(result['dz']),
-                 'xcountx': np.cumsum(result['X_countx']), 'xcounty': np.cumsum(result['X_county']),
-                 'xcountz': np.cumsum(result['X_countz'])})
+    data = pd.DataFrame(
+        {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
+         'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy'])})
+
+    if result_quality is not None and 'X_contribution' in result_quality :
+        data['xcount_x']=np.cumsum(result['xcount_x'])
+        data['xcount_y']=np.cumsum(result['xcount_y'])
+
+    if result_quality is not None and 'Error_propagation' in result_quality:
+        data['error_x'] = np.cumsum(result['error_x'])
+        data['error_y'] = np.cumsum(result['error_y'])
+
+    if result_dz is not None:
+        data['dz'] = np.cumsum(result['dz'])
+        if result_quality is not None and 'X_contribution' in result_quality :data['xcount_z']= np.cumsum(result['xcount_z'])
 
     return data
 
@@ -60,20 +54,20 @@ def set_function_for_interpolation(option_interpol: str, x: np.ndarray, dataf: p
         fdx = interpolate.UnivariateSpline(x, dataf['dx'], k=3)
         fdy = interpolate.UnivariateSpline(x, dataf['dy'], k=3)
         if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.UnivariateSpline(x, dataf['xcountx'], k=3)
-            fdy_xcount = interpolate.UnivariateSpline(x, dataf['xcounty'], k=3)
+            fdx_xcount = interpolate.UnivariateSpline(x, dataf['xcount_x'], k=3)
+            fdy_xcount = interpolate.UnivariateSpline(x, dataf['xcount_y'], k=3)
     elif option_interpol == 'spline':
         fdx = interpolate.interp1d(x, dataf['dx'], kind='cubic')
         fdy = interpolate.interp1d(x, dataf['dy'], kind='cubic')
         if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.interp1d(x, dataf['xcountx'], kind='cubic')
-            fdy_xcount = interpolate.interp1d(x, dataf['xcounty'], kind='cubic')
+            fdx_xcount = interpolate.interp1d(x, dataf['xcount_x'], kind='cubic')
+            fdy_xcount = interpolate.interp1d(x, dataf['xcount_y'], kind='cubic')
     elif option_interpol == 'nearest':
         fdx = interpolate.interp1d(x, dataf['dx'], kind='nearest')
         fdy = interpolate.interp1d(x, dataf['dy'], kind='nearest')
         if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.interp1d(x, dataf['xcountx'], kind='nearest')
-            fdy_xcount = interpolate.interp1d(x, dataf['xcounty'], kind='nearest')
+            fdx_xcount = interpolate.interp1d(x, dataf['xcount_x'], kind='nearest')
+            fdy_xcount = interpolate.interp1d(x, dataf['xcount_y'], kind='nearest')
     if result_quality is not None and 'X_contribution' in result_quality:
         return fdx, fdy, fdx_xcount, fdy_xcount
     else:
