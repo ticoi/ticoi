@@ -22,7 +22,7 @@ from dask.diagnostics import ProgressBar
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.filtering_functions import *
 from typing import Union
-
+from dask.array.lib.stride_tricks import sliding_window_view
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -888,35 +888,19 @@ class cube_data_class:
         :return: filtered dataset
         """
 
-        def loop_rolling(da_arr,mid_dates, date_range: np.ndarray,
-                         smooth_method: str = "gaussian", s_win: int = 3, t_win: int = 90, sigma: int = 3, order=3,
-                         select_baseline: int | None = None, verbose: bool = False) -> (
+        def loop_rolling(da_arr:xr.Dataset) -> (
                 np.ndarray, np.ndarray):
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
             :param da_arr: Original data
-            :param mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
-            :param date_range: 
-            :param smooth_method: Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
-            :param s_win: Window size for spatial average (default is 3)
-            :param t_win: Time window size for 'ewma' smoothing (default is 90)
-            :param sigma: Standard deviation for 'gaussian' filter (default is 3)
-            :param order: Order of the smoothing function (default is 3)
-            :param baseline:
-            :param time_axis: Optional parameter for time axis (default is 2)
-            :param verbose: Print information throughout the process (default is False)
-
             :return: exponential smoothed velocity
             :return: observed dates
             """
 
-            from dask.array.lib.stride_tricks import sliding_window_view
-
             # Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
-            da_arr = self.ds['vx']
             mid_dates = self.ds['mid_date']
 
             if verbose: start = time.time()
@@ -999,25 +983,9 @@ class cube_data_class:
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                self.ds['vx'],self.ds['mid_date'],
-                date_range,
-                smooth_method=smooth_method,
-                s_win=s_win,
-                t_win=t_win,
-                sigma=sigma,
-                order=order,
-                select_baseline=select_baseline
-            )
+                self.ds['vx'])
             vy_filtered, dates_uniq = loop_rolling(
-                self.ds['vy'],self.ds['mid_date'],
-                date_range,
-                smooth_method=smooth_method,
-                s_win=s_win,
-                t_win=t_win,
-                sigma=sigma,
-                order=order,
-                select_baseline=select_baseline
-            )
+                self.ds['vy'])
 
             # the time dimension of the smoothed velocity observations is different from the original,
             # which is because of the possible dublicate mid_date of different image pairs...
@@ -1290,10 +1258,13 @@ class cube_data_class:
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
         short_name = ['x_velocity', 'y_velocity', 'xcount_x', 'xcount_y']
-        if result_quality is not None and 'X_contribution' in result_quality:
-            variables = ['vx', 'vy', 'xcount_x', 'xcount_y']
-        else:
-            variables = ['vx', 'vy']
+        variables = ['vx', 'vy']
+        if result_quality is not None:
+            if 'X_contribution' in result_quality: variables + ['xcount_x', 'xcount_y']
+        # if result_quality is not None and 'X_contribution' in result_quality:
+        #     variables = ['vx', 'vy', 'xcount_x', 'xcount_y']
+        # else:
+
         for i, var in enumerate(variables):
             result_arr = np.array(
                 [result[i * self.ny + j][var] if result[i * self.ny + j][var].shape[

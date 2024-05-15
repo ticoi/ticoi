@@ -426,7 +426,7 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
     """
 
     # Total process : about 50ms
-    if verbose: matric_property(A) # Matrix A properties
+    if verbose: matrix_property(A) # Matrix A properties
 
 
     v = data[:, v_pos]

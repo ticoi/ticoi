@@ -29,7 +29,7 @@ import itertools
 from joblib import Parallel, delayed
 from ticoi.inversion_functions import construction_a_lf, class_linear_operator, find_date_obs, inversion_one_component, \
     inversion_two_components, TukeyBiweight, weight_for_inversion,mu_regularisation,construction_dates_range_np
-from ticoi.interpolation_functions import reconstruct_common_ref, set_function_for_interpolation, visualisation_interpolation
+from ticoi.interpolation_functions import reconstruct_common_ref, set_function_for_interpolation, visualisation_interpolation, full_with_nan
 from typing import Union
 import asyncio
 import xarray as xr
@@ -421,27 +421,22 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
 
     ##Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result, result_quality)  # build cumulative displacement time series
-    if first_date_interpol is None:
-        start_date = dataf['Ref_date'][0]  # first date at the considered pixel
-    else:
-        first_date_interpol = pd.to_datetime(first_date_interpol)
-        start_date = first_date_interpol
+
+    if first_date_interpol is None: start_date = dataf['Ref_date'][0]  # first date at the considered pixel
+    else: start_date = pd.to_datetime(first_date_interpol)
+
     x = np.array(
         (dataf['Second_date'] - np.datetime64(start_date)).dt.days)  # number of days according to the start_date
 
-    if len(x) <= 1:  # it is not possible to interpolate
-        return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
-             'vz': [], 'xcount_z': [], 'NormR': []})
-    elif np.isin('spline', option_interpol) and len(x) <= 3:
+    if len(x) <= 1 or (np.isin('spline', option_interpol) and len(x) <= 3):  # it is not possible to interpolate, because to few estimation
         return pd.DataFrame(
             {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
              'vz': [], 'xcount_z': [], 'NormR': []})
 
     # Compute the functions used to interpolate
-    fdx,fdy,fdx_xcount,fdy_xcount = set_function_for_interpolation(option_interpol, x, dataf, result_quality)
+    fdx,fdy,fdx_xcount,fdy_xcount, fdx_error,fdy_error = set_function_for_interpolation(option_interpol, x, dataf, result_quality)
 
-
+    #Temporal basis on which to interpolate
     if redundancy is None:  # No redundancy between two interpolated velocity
         x_regu = np.arange(np.min(x) + (interval_output - np.min(x) % interval_output), np.max(x), interval_output)
     else:  # The overlap between two velocities corresponds to redundancy
@@ -466,9 +461,13 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
         x_regu[:-step])  # equivalent to [fdx(x_regu[i + step]) - fdx(x_regu[i]) for i in range(len(x_regu) - step)]
     dy = fdy(x_shifted) - fdy(
         x_regu[:-step])  # equivalent to [fdy(x_regu[i + step]) - fdy(x_regu[i]) for i in range(len(x_regu) - step)]
-    if result_quality is not None and 'X_contribution' in result_quality:
-        xcount_x = fdx_xcount(x_shifted) - fdx_xcount(x_regu[:-step])
-        xcount_y = fdy_xcount(x_shifted) - fdy_xcount(x_regu[:-step])
+    if result_quality is not None:
+        if 'X_contribution' in result_quality:
+            xcount_x = fdx_xcount(x_shifted) - fdx_xcount(x_regu[:-step])
+            xcount_y = fdy_xcount(x_shifted) - fdy_xcount(x_regu[:-step])
+        if 'Error_propagation' in result_quality:
+            error_x = fdx_error(x_shifted) - fdx_error(x_regu[:-step])
+            error_y = fdy_error(x_shifted) - fdy_error(x_regu[:-step])
     vx = dx * unit / interval_output  # convert to velocity in m/d or m/y
     vy = dy * unit / interval_output  # convert to velocity in m/d or m/
 
@@ -476,33 +475,27 @@ def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, op
                                               unit='D')  # Equivalent to [start_date + pd.Timedelta(x_regu[i], 'D') for i in range(len(x_regu) - step)]
     Second_date = start_date + pd.to_timedelta(x_shifted, unit='D')
 
-    if result_quality is not None and 'X_contribution' in result_quality:
-        data_dict = {'First_date': First_date, 'Second_date': Second_date, 'vx': vx, 'vy': vy, 'xcount_x': xcount_x,
-                     'xcount_y': xcount_y}
-    else:
-        data_dict = {'First_date': First_date, 'Second_date': Second_date, 'vx': vx, 'vy': vy}
-    dataf_lp = pd.DataFrame(data_dict)
+    dataf_lp = pd.DataFrame({'First_date': First_date, 'Second_date': Second_date, 'vx': vx, 'vy': vy})
+    if result_quality is not None:
+        if 'X_contribution' in result_quality:
+            dataf_lp['xcount_x'] = xcount_x
+            dataf_lp['xcount_y'] = xcount_y
+        if 'Error_propagation' in result_quality:
+            dataf_lp['error_x'] = error_x
+            dataf_lp['error_y'] = error_y
 
-    del x_regu
-    del First_date, Second_date, vx, vy
+    del x_regu,First_date, Second_date, vx, vy
 
     # Fill with nan values if the first date of the cube which will be interpolated is lower than the first date interpolated for this pixel
     if first_date_interpol is not None and dataf_lp['First_date'].iloc[0] > pd.Timestamp(first_date_interpol):
         first_date = np.arange(first_date_interpol, dataf_lp['First_date'].iloc[0], np.timedelta64(redundancy, 'D'))
-        nul_df = pd.DataFrame(
-            {'First_date': first_date, 'Second_date': first_date + np.timedelta64(interval_output, 'D'),
-             'vx': np.full(len(first_date), np.nan), 'vy': np.full(len(first_date), np.nan)})
-        dataf_lp = pd.concat([nul_df, dataf_lp], ignore_index=True)
+        dataf_lp = full_with_nan(dataf_lp,first_date=first_date,second_date = first_date + np.timedelta64(interval_output, 'D'))
 
     # Fill with nan values if the last date of the cube which will be interpolated is higher than the last date interpolated for this pixel
     if last_date_interpol is not None and dataf_lp['Second_date'].iloc[-1] < pd.Timestamp(last_date_interpol):
         first_date = np.arange(dataf_lp['Second_date'].iloc[-1] + np.timedelta64(redundancy, 'D'), last_date_interpol,
                                np.timedelta64(redundancy, 'D'))
-
-        nul_df = pd.DataFrame(
-            {'First_date': first_date - np.timedelta64(interval_output, 'D'), 'Second_date': first_date,
-             'vx': np.full(len(first_date), np.nan), 'vy': np.full(len(first_date), np.nan)})
-        dataf_lp = pd.concat([dataf_lp, nul_df], ignore_index=True)
+        dataf_lp = full_with_nan(dataf_lp,first_date = (first_date - np.timedelta64(interval_output, 'D')),second_date=first_date)
 
     ####  Visualisation
     if visual: visualisation_interpolation(dataf_lp, data,path_save, show_temp=show_temp,figsize=figsize,vmax=vmax,interval_output=interval_output)
