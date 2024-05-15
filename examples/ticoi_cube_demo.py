@@ -23,10 +23,13 @@ import geopandas
 import os
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 from joblib import Parallel, delayed
 from pyproj import CRS
 from tqdm import tqdm
+from rasterio.features import rasterize
+from osgeo import gdal, osr
 
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.core import process
@@ -42,12 +45,14 @@ warnings.filterwarnings("ignore")
 ## ------------------------------- Data selection -------------------------- ##
 # cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_diaplacement_LS7_subset.nc'  # Path where the Sentinel-2 IGE cubes are stored
 # path_save = '/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-demo/'  # Path where to stored the results
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc', # Sentinel-2 cube
-              'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
+cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03920_all_filt-multi.nc',
+               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
+# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03920_all_filt-multi.nc',    
+#               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
 path_save = 'nathan/Tests_MB/'
 name_save = 'test'
-poly_path = None
-poly_path = 'nathan/Tests_MB/Glaciers/Full_MB.shp'
+path_mask = None
+path_mask = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp'
 proj = 'EPSG:32632'  # EPSG system of the coordinates given
 # To select a specific period for the measurements, if you want to select all the dates put None, 
 # else give an inteval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
@@ -64,9 +69,8 @@ delete_outliers = None
 load_interp = 'nearest' # Interpolation used to select which data to use when the pixel is not exactly a pixel of the dataset
 
 subset = None
-# subset = [333615, 334529, 5079318, 5081236] # Bossons upper central part (741 points)
-# subset = [331200, 334550, 5080000, 5084400]
-subset = [333250, 334250, 5083100, 5084200]
+# subset = [331200, 334550, 5080000, 5084400] # Bossons central part
+subset = [332700, 335200, 5071200, 5073000]
 
 ## -------------------------------- Inversion ------------------------------ ##
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
@@ -119,8 +123,10 @@ cube.load(cube_names[0], pick_date=dates_input, proj=proj, pick_temp_bas=temp_ba
 if len(cube_names) > 1:
     for n in range(1, len(cube_names)):
         cube2 = cube_data_class()
+        res = cube.ds['x'].values[1] - cube.ds['x'].values[0]
         cube2.load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
-                   subset=subset, conf=conf, pick_sensor=sensor, chunks={})
+                    subset=[subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res] if subset is not None else None, 
+                    conf=conf, pick_sensor=sensor, chunks={})
         # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
         cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
         cube.merge_cube(cube2) # Merge the new cube to the main one
@@ -131,8 +137,19 @@ print(f'[ticoi_cube_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx},
 print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
 
 start.append(time.time())
+
+mask = None
+if path_mask is not None:  
+    if path_mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile) 
+        polygon = geopandas.read_file(path_mask).to_crs(epsg=int(proj.split(':')[1]))
+        raster = rasterize([polygon.geometry[0]], out_shape=cube.ds.rio.shape, transform=cube.ds.rio.transform(), fill=0, dtype='int16')
+        mask = xr.DataArray(data=raster.T, dims=['x', 'y'], coords=cube.ds[['x', 'y']].coords)
+    else:
+        mask = xr.open_dataarray(path_mask)
+    mask.load()
+
 obs_filt = cube.filter_cube(smooth_method=smooth_method, s_win=3, t_win=90, sigma=3, order=3, proj=proj, regu=regu,
-                            delete_outliers=None, verbose=True, velo_or_disp='velo') # Compute the rolling mean
+                            delete_outliers=None, mask=mask, velo_or_disp='velo', verbose=True) # Compute the rolling mean
 
 # Borders of the temporal interpolation
 cube_date1 = cube.date1_().tolist()
@@ -140,14 +157,6 @@ cube_date1.remove(np.min(cube_date1))
 merged = None
 start_date_interpol = np.min(cube_date1)
 last_date_interpol = np.max(cube.date2_())
-
-# Positions of the points within the dataset
-positions = np.unique(np.array([(i, j) for i in cube.ds['x'].values for j in cube.ds['y'].values]), axis=0)
-original_len = len(positions)
-if poly_path is not None: # Apply a shp mask on those points
-    poly = geopandas.read_file(poly_path).to_crs(epsg=int(proj.split(':')[1]))
-    select = points_in_polygon(positions, poly.geometry[0])
-    positions = positions[select]
 
 stop.append(time.time())    
 print(f'[ticoi_cube_demo] Filtering the cube took {round(stop[1] - start[1], 3)} s')
@@ -187,14 +196,15 @@ print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 #                                      TICOI                                  #
 # =========================================================================%% #
 
-nb_points = len(positions)
+nb_points = mask.where(mask != 0).size if mask is not None else len(cube.ds['x'].values) * len(cube.ds['y'].values)
 print(f'[ticoi_cube_demo] Number of CPU : {nb_cpu}')
 print(f'[ticoi_cube_demo] {nb_points} points to be computed within the given subset')
 
 start.append(time.time())
 
 # Initialize the progress bar
-xy_values_tqdm = tqdm(positions, total=nb_points, mininterval=0.5)
+xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
+xy_values_tqdm = tqdm(xy_values, total=nb_points, mininterval=0.5)
 
 # With parallelization
 result = Parallel(n_jobs=nb_cpu, verbose=0)(
@@ -216,16 +226,6 @@ result = Parallel(n_jobs=nb_cpu, verbose=0)(
 #                           redundancy=redundancy, detect_temporal_decorrelation=detect_temporal_decorrelation, 
 #                           unit=unit, result_quality=result_quality, delete_outliers=delete_outliers, verbose=verbose))
 
-if poly_path is not None:
-    full_result = [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 
-                                       'dz': [], 'vz': [], 'x_countz': [], 'NormR': []}) for _ in range(original_len)]
-    j = 0
-    for i in range(original_len):
-        if select[i]:
-            full_result[i] = result[j]
-            j += 1
-    result = full_result
-
 stop.append(time.time())
 print(f'[ticoi_cube_demo] TICOI processing took {round(stop[3] - start[3], 3)} s')
 
@@ -237,8 +237,25 @@ print(f'[ticoi_cube_demo] TICOI processing took {round(stop[3] - start[3], 3)} s
 start.append(time.time())
 
 # Create a new netCDF file with TICOI results
-cube.write_result_ticoi(result, source, sensor, filename=name_save, savepath=path_save, 
+cubenew = cube.write_result_ticoi(result, source, sensor, filename=name_save, savepath=path_save, 
                         result_quality=result_quality, verbose=verbose)
+
+# Compute mean velocities as an example
+mean_vv = np.sqrt(cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy()
+mean_vv = mean_vv.astype(np.float32)
+
+driver = gdal.GetDriverByName('GTiff')
+srs = osr.SpatialReference()
+srs.SetWellKnownGeogCS('EPSG:32632')
+
+resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
+dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
+dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
+dst_ds_temp.GetRasterBand(1).WriteArray(np.flip(mean_vv, axis=0))
+dst_ds_temp.SetProjection(srs.ExportToWkt())
+
+dst_ds_temp = None
+driver = None
 
 stop.append(time.time())
 print(f'[ticoi_cube_demo] Writing cube to netCDF file took {round(stop[4] - start[4], 3)} s')

@@ -15,6 +15,7 @@ Reference:
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 '''
+
 import time, os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -134,12 +135,11 @@ def inversion_iteration(data:np.ndarray, A:np.ndarray, dates_range:np.ndarray, s
     return result_dx, result_dy, weightx, weighty, residu_normx, residu_normy
 
 
-def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.ndarray | None=None, solver:str= 'LSMR', coef:int=100, weight:bool=False, iteration:bool=True, treshold_it:float=0.1, unit:int=365,
-                   conf:bool=False, regu:int|str=1, mean:list|None=None,
-                   detect_temporal_decorrelation:bool=True, linear_operator:bool=False, result_quality:list|None=None,
-                   nb_max_iteration:int=10,
-                   visual:bool=True,
-                   verbose:bool=False)-> (np.ndarray,pd.DataFrame,pd.DataFrame):
+def inversion_core(data:list, i:float|int, j:float|int, dates_range:np.ndarray|None=None, solver:str='LSMR', coef:int=100, 
+                   weight:bool=False, iteration:bool=True, treshold_it:float=0.1, unit:int=365, conf:bool=False, regu:int|str=1, 
+                   mean:list|None=None, detect_temporal_decorrelation:bool=True, linear_operator:bool=False, result_quality:list|None=None,
+                   nb_max_iteration:int=10, visual:bool=True, verbose:bool=False) -> (np.ndarray,pd.DataFrame,pd.DataFrame):
+    
     """
     Computes A in AX = Y and does the inversion using a given solver
     
@@ -393,11 +393,10 @@ def inversion_core(data:list, i: float | int, j: float | int, dates_range: np.nd
     return A, result, dataf
 
 
-def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, option_interpol:str= 'spline',
-                       first_date_interpol:np.datetime64|None=None,
-                       last_date_interpol:np.datetime64|None=None, visual:bool=False,
-                       data:pd.DataFrame|None=False, unit:int=365, redundancy:int|None=None, vmax=[False, False], figsize=(12, 6),
-                       show_temp=True, result_quality=None, verbose=False):
+def interpolation_core(result:np.ndarray, interval_output:int, path_save:str, option_interpol:str='spline',
+                       first_date_interpol:np.datetime64|None=None, last_date_interpol:np.datetime64|None=None, 
+                       data:pd.DataFrame|None=False, unit:int=365, redundancy:int|None=None, vmax=[False, False],
+                       show_temp=True, result_quality=None, visual:bool=False, figsize=(12, 6), verbose=False):
     '''
     Interpolate Irregular Leap Frog time series (result of an inversion) to Regular LF time series using Cumulative Displacement times series.
 
@@ -769,7 +768,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
 
 #     return dataf_list
 
-def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwargs=None, inversion_kwargs=None, verbose=False):
+def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, inversion_kwargs=None, verbose=False):
     
     '''Loop over the blocks of the cube and process each block.
 
@@ -805,7 +804,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwa
     :return: pandas dataframe, time series of the velocity estimates
     '''
     
-    def chunk_to_block(cube, block_size=1, verbose=False):
+    def chunk_to_block(cube, block_size=0.5, verbose=False):
         GB = 1073741824
         blocks = []
         if cube.ds.nbytes > block_size * GB:
@@ -851,26 +850,23 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwa
 
         return block, flags_block, duration
     
-    async def process_block(block, flags_block=None, nb_cpu=8, mask=None, verbose=False):
+    async def process_block(block, flags_block=None, nb_cpu=8, verbose=False):        
         obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
                                      t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
                                      proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'], 
                                      delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                     verbose=preData_kwargs['verbose'])
+                                     mask=preData_kwargs['mask'], verbose=preData_kwargs['verbose'])
+        
+        xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
+        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
+        
+        # There is no data on the whole block (masked data)
+        if obs_filt is None:
+            return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
+                         'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
-        
-        positions = np.unique(np.array([(x, y) for x in block.ds['x'].values for y in block.ds['y'].values]), axis=0)
-        original_len = len(positions)
-        if mask is not None: # Apply a shp mask on those points
-            select = points_in_polygon(positions, mask)
-            positions = positions[select]
-            
-        xy_values_tqdm = tqdm(positions, total=len(positions), mininterval=0.5)
-        
-        # xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
-        # xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
@@ -887,21 +883,10 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwa
             interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
             visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
         for i, j in xy_values_tqdm)
-            
-        if mask is not None:
-            full_result_block = [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 
-                                               'dz': [], 'vz': [], 'x_countz': [], 'NormR': []}) for _ in range(original_len)]
-            j = 0
-            for i in range(original_len):
-                if select[i]:
-                    full_result_block[i] = result_block[j]
-                    j += 1
-                    
-            return full_result_block
 
         return result_block
     
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwargs=None, inversion_kwargs=None, verbose=False):
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, inversion_kwargs=None, verbose=False):
         
         # Get the parameters
         if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
@@ -934,7 +919,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwa
                 x_start, x_end, y_start, y_end = blocks[n+1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
-            block_result = await process_block(block, flags_block=flags_block, nb_cpu=nb_cpu, mask=mask, verbose=verbose)
+            block_result = await process_block(block, flags_block=flags_block, nb_cpu=nb_cpu, verbose=verbose)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
@@ -947,7 +932,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, mask=None, preData_kwa
         
         return dataf_list
     
-    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, mask=mask, preData_kwargs=preData_kwargs, 
+    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, preData_kwargs=preData_kwargs, 
                                            inversion_kwargs=inversion_kwargs, verbose=verbose))
 
 

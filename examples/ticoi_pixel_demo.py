@@ -28,7 +28,7 @@ from ticoi.cube_data_classxr import cube_data_class
 cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc', # Sentinel-2 cube
               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
 path_save = 'nathan/Tests_MB/useless/'
-i, j = 334571.3,5082898.8 # Point (pixel) where to carry on the computation
+i, j = 332100, 5080350 # Point (pixel) where to carry on the computation
 proj = 'EPSG:32632' # Projection of the given coordinates
 buffer_size = 500 # Size of the buffer to be loaded around the pixel
 # To select a specific period for the measurements, if you want to select all the dates put None, 
@@ -64,7 +64,7 @@ result_quality = None
 visual = True  # Plot some results or not
 verbose = False  # Print informations during the process or not
 save = True  # Save the results or not
-vmax = [0, 150]  # vmin and vmax of the legend
+vmax = [50, 170]  # vmin and vmax of the legend
 visual_inversion = False  # Visualize the different iterations of the inversion
 # Visualisation options
 option_visual = ['original_velocity_xy', 'original_magnitude',

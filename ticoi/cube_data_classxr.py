@@ -9,6 +9,7 @@ photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
 
 import os
 import pandas as pd
+import numpy as np
 import dask
 import rasterio.enums
 import itertools
@@ -866,7 +867,8 @@ class cube_data_class:
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
                     order: int = 3, unit: int = 365, delete_outliers: str | float | None = None,
                     flags: None | xr.Dataset = None, regu: int | str = 1, solver: str = 'LSMR_ini',
-                    proj: str = "EPSG:4326", velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
+                    mask: None | xr.Dataset = None, proj: str = "EPSG:4326", 
+                    velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
 
         """
         Filter the original data with a spatio-temporal kernel
@@ -882,6 +884,7 @@ class cube_data_class:
         :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers (defau)
         :param regu: Regularisation of the solver (default is 1)
         :param solver: solver used to invert the system
+        :param mask: Mask some of the data according to a raster (default is None)
         :param proj: EPSG of i,j projection (default is 'EPSG:4326')
         :param velo_or_disp: 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
         :param verbose: Print information throughout the process (default is False)
@@ -921,6 +924,9 @@ class cube_data_class:
 
             if baseline is not None:
                 baseline = baseline.compute()
+                if baseline.size > da_arr['mid_date'].size:
+                    baseline = np.nanmax(baseline, axis=(1,2))
+                
                 idx = np.where(baseline < 700)
                 t_thres = 120
                 idx = np.where(baseline < t_thres )
@@ -965,6 +971,16 @@ class cube_data_class:
 
             return spatial_mean.compute(), np.unique(date_out)
 
+        # Mask some of the values
+        if mask is not None:
+            self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
+                    .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                    .astype('float32')
+
+        if np.isnan(self.ds['date1'].values).all():
+            print('Empty sub-cube (masked data ?)')
+            return None
+            
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
             if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
@@ -972,7 +988,7 @@ class cube_data_class:
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # the rolling smooth should be carried on velocity, while we need displacement during inversion
+        # The rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide velocity values
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
@@ -996,7 +1012,8 @@ class cube_data_class:
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
 
-            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
+            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)], 
+                                                           self.ds['date2'].values[~np.isnan(self.ds['date2'].values)]), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
                 self.ds["vx"],
@@ -1125,22 +1142,36 @@ class cube_data_class:
             cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
             self.ds = self.ds.rio.write_crs(self.ds.proj4)
             cube.ds = cube.ds.transpose('mid_date', 'y', 'x')
+            # Reproject coordinates
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
+            # Reject abnormal data (when the cube sizes are not the same, the interpolation leads to infinite or nearly-infinite values)
+            cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((cube.ds['vx'] < 10000) | (cube.ds['vy'] < 10000), 0)
+            
             # Update of cube_data_classxr attributes
             cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})
             cube.nx = cube.ds.dims['x']
             cube.ny = cube.ds.dims['y']
-            cube.ds = cube.ds.assign_coords({"x": self.ds.x, "y": cube.ds.y})
+            cube.ds = cube.ds.assign_coords({"x": cube.ds.x, "y": cube.ds.y})
 
         cube.ds = cube.ds.assign_attrs({'author': f'{cube.ds.author} aligned'})
 
         return cube
 
-    def merge_cube(self, cube: "cube_data_class"):
+    def merge_cube(self, cube: 'cube_data_class'):
+        
+        '''
+        Merge another cube to the present one. It must have been aligned first (using align_cube)
+        
+        :param cube: cube_data_class, the cube to merge to self
+        '''
+        
         self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
         self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
         self.nz = self.ds['mid_date'].size
+        
+        if cube.author not in self.author.split('\n'):
+            self.author += f'\n{cube.author}'
 
     def average_cube(self):
         """
