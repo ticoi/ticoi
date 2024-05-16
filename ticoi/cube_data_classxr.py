@@ -1146,7 +1146,7 @@ class cube_data_class:
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
             # Reject abnormal data (when the cube sizes are not the same, the interpolation leads to infinite or nearly-infinite values)
-            cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((cube.ds['vx'] < 10000) | (cube.ds['vy'] < 10000), 0)
+            cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), 0)
             
             # Update of cube_data_classxr attributes
             cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})
