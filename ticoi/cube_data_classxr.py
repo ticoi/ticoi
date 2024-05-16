@@ -1256,14 +1256,14 @@ class cube_data_class:
 
         long_name = ['velocity in the East/West direction [m/y]', 'velocity in the North/South direction [m/y]',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
-                     'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
-        short_name = ['x_velocity', 'y_velocity', 'xcount_x', 'xcount_y']
+                     'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction','Error propagated for the displacement in the direction Est/West',
+                 'Error propagated for  the displacement in the direction North/South [m]']
+        short_name = ['x_velocity', 'y_velocity', 'xcount_x', 'xcount_y','error_x', 'error_y']
+
         variables = ['vx', 'vy']
         if result_quality is not None:
             if 'X_contribution' in result_quality: variables + ['xcount_x', 'xcount_y']
-        # if result_quality is not None and 'X_contribution' in result_quality:
-        #     variables = ['vx', 'vy', 'xcount_x', 'xcount_y']
-        # else:
+            if 'Error_propagation' in result_quality:variables + ['error_x', 'error_y']
 
         for i, var in enumerate(variables):
             result_arr = np.array(
@@ -1293,22 +1293,22 @@ class cube_data_class:
                 cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
                 cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
                                                    'long_name': long_name[k]}
-        if result_quality is not None and 'Error_propagation' in result_quality:
-            long_name = [
-                'Error propagated for the displacement in the direction Est/West',
-                'Error propagated for  the displacement in the direction North/South [m]']
-            short_name = ['Error_x', 'Error_y']
-            for var in short_name:
-                result_arr = np.array(
-                    [result[i * self.ny + j][var] if result[i * self.ny + j][var].shape[
-                                                         0] != 0 else np.nan for i in range(self.nx) for j in
-                     range(self.ny)])
-                result_arr = result_arr.reshape((self.nx, self.ny))
-                cubenew.ds[short_name[k]] = xr.DataArray(result_arr, dims=['x', 'y'],
-                                                         coords={'x': self.ds['x'], 'y': self.ds['y']})
-                cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
-                cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
-                                                   'long_name': long_name[k]}
+        # if result_quality is not None and 'Error_propagation' in result_quality:
+        #     long_name = [
+        #         'Error propagated for the displacement in the direction Est/West',
+        #         'Error propagated for  the displacement in the direction North/South [m]']
+        #     short_name = ['error_x', 'error_y']
+        #     for var in short_name:
+        #         result_arr = np.array(
+        #             [result[i * self.ny + j][var] if result[i * self.ny + j][var].shape[
+        #                                                  0] != 0 else np.nan for i in range(self.nx) for j in
+        #              range(self.ny)])
+        #         result_arr = result_arr.reshape((self.nx, self.ny))
+        #         cubenew.ds[short_name[k]] = xr.DataArray(result_arr, dims=['x', 'y'],
+        #                                                  coords={'x': self.ds['x'], 'y': self.ds['y']})
+        #         cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
+        #         cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
+        #                                            'long_name': long_name[k]}
 
         del non_null_el, long_name, result_arr
         cubenew.ds['x'] = self.ds['x']

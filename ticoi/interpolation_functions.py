@@ -77,6 +77,13 @@ def set_function_for_interpolation(option_interpol: str, x: np.ndarray, dataf: p
     return None, None, None, None  # Return default values if interpolation option is not valid
 
 def full_with_nan(dataf_lp:pd.DataFrame,first_date:pd.Series,second_date:pd.Series)->pd.DataFrame:
+    """
+
+    :param dataf_lp: interpolated results
+    :param first_date: list of first dates of the entire cube
+    :param second_date: list of second dates of the entire cube
+    :return: interpolated with row of name so when there is missing estimation in comparison with the entire cube
+    """
     nul_df = pd.DataFrame(
         {'First_date': first_date, 'Second_date': second_date,
          'vx': np.full(len(first_date), np.nan), 'vy': np.full(len(first_date), np.nan)})
@@ -88,6 +95,7 @@ def full_with_nan(dataf_lp:pd.DataFrame,first_date:pd.Series,second_date:pd.Seri
         nul_df['error_y'] = np.full(len(first_date), np.nan)
     dataf_lp = pd.concat([nul_df, dataf_lp], ignore_index=True)
     return dataf_lp
+
 def visualisation_interpolation(dataf_lp: pd.DataFrame, data: pd.DataFrame, path_save: str, show_temp: bool = True,
                                 unit='m/y',
                                 vmax=None, interval_output=30, figsize=(12, 6)):
