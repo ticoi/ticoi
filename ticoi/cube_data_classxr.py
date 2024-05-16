@@ -8,20 +8,27 @@ Transactions on Geoscience and Remote Sensing. Charrier, L., Yan, Y., Colin Koen
 photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
 
 import os
-from ticoi.mjd2date import mjd2date  # /ST_RELEASE/UTILITIES/PYTHON/mjd2date.py
-import pandas as pd
 import dask
-from pyproj import Proj, Transformer, CRS
 import rasterio.enums
-from datetime import date
-from ticoi.interpolation_functions import reconstruct_common_ref
 import itertools
 import warnings
 import time
+import geopandas
+import pandas as pd
+import numpy as np
+import xarray as xr
+import dask.array as da
+
+from pyproj import Proj, Transformer, CRS
+from datetime import date
 from dask.diagnostics import ProgressBar
-from ticoi.inversion_functions import construction_dates_range_np
-from ticoi.filtering_functions import *
 from typing import Union
+from rasterio.features import rasterize
+
+from ticoi.mjd2date import mjd2date
+from ticoi.interpolation_functions import reconstruct_common_ref
+from ticoi.inversion_functions import construction_dates_range_np
+from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 
 
 # %% ======================================================================== #
@@ -160,6 +167,7 @@ class cube_data_class:
                 "(" + str(round(chunksize, 1)) + "MB)",
             )
         return tc, yc, xc
+
 
     # %% ==================================================================== #
     #                         CUBE LOADING METHODS                            #
@@ -578,11 +586,9 @@ class cube_data_class:
             if filepath.split(".")[-1] == "nc":
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
-                except (
-                        NotImplementedError):  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
-                    self.ds = xr.open_dataset(
-                        filepath, engine="netcdf4", chunks=chunks)  # set no chunks
+                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
 
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
@@ -711,6 +717,7 @@ class cube_data_class:
          """
         return np.sqrt(self.ds['vx'] ** 2 + self.ds['vy'] ** 2)
 
+
     # %% ==================================================================== #
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
@@ -821,11 +828,11 @@ class cube_data_class:
         else:
             return data, mean, dates_range
 
+
     # %% ==================================================================== #
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    
     def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
         """
         Delete outliers according to a certain criterium
@@ -857,13 +864,28 @@ class cube_data_class:
                 self.ds[var] = self.ds[var].where(inlier_flag)
                 
         self.ds = self.ds.persist()
+        
+    def mask_cube(self, mask : xr.DataArray | str):
+        if type(mask) is str:
+            if mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile) 
+                polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
+                raster = rasterize([polygon.geometry[0]], out_shape=self.ds.rio.shape, transform=self.ds.rio.transform(), fill=0, dtype='int16')
+                mask = xr.DataArray(data=raster.T, dims=['x', 'y'], coords=self.ds[['x', 'y']].coords)
+            else:
+                mask = xr.open_dataarray(mask)
+            mask.load()
+        
+        # Mask the velocities and the errors
+        self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
+                .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                .astype('float32')
 
 
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
                     order: int = 3, unit: int = 365, delete_outliers: str | float | None = None,
                     flags: None | xr.Dataset = None, regu: int | str = 1, solver: str = 'LSMR_ini',
-                    proj: str = "EPSG:4326", velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
+                    proj: str = "EPSG:4326",  velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
 
         """
         Filter the original data with a spatio-temporal kernel
@@ -918,6 +940,9 @@ class cube_data_class:
 
             if baseline is not None:
                 baseline = baseline.compute()
+                # if baseline.size > da_arr['mid_date'].size:
+                #     baseline = np.nanmax(baseline, axis=(1,2))
+                
                 idx = np.where(baseline < 700)
                 t_thres = 120
                 idx = np.where(baseline < t_thres )
@@ -962,6 +987,10 @@ class cube_data_class:
 
             return spatial_mean.compute(), np.unique(date_out)
 
+        if np.isnan(self.ds['date1'].values).all():
+            print('Empty sub-cube (masked data ?)')
+            return None
+            
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
             if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
@@ -969,7 +998,7 @@ class cube_data_class:
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # the rolling smooth should be carried on velocity, while we need displacement during inversion
+        # The rolling smooth should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide velocity values
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
@@ -989,11 +1018,12 @@ class cube_data_class:
         start = time.time()
         if delete_outliers is not None: 
             self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
-        print(f'Delete outlier took {round((time.time() - start), 1)} s')
+            if verbose: print(f'Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
 
-            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values, self.ds['date2'].values), axis=0)))
+            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)], 
+                                                           self.ds['date2'].values[~np.isnan(self.ds['date2'].values)]), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
                 self.ds["vx"],
@@ -1122,23 +1152,36 @@ class cube_data_class:
             cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
             self.ds = self.ds.rio.write_crs(self.ds.proj4)
             cube.ds = cube.ds.transpose('mid_date', 'y', 'x')
+            # Reproject coordinates
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
+            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
+            cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), 0)
+            
             # Update of cube_data_classxr attributes
             cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})
-            # cube2.ds = cube2.ds.rio.write_crs(cube2.proj4, inplace=True)
             cube.nx = cube.ds.dims['x']
             cube.ny = cube.ds.dims['y']
-            cube.ds = cube.ds.assign_coords({"x": self.ds.x, "y": cube.ds.y})
+            cube.ds = cube.ds.assign_coords({"x": cube.ds.x, "y": cube.ds.y})
 
         cube.ds = cube.ds.assign_attrs({'author': f'{cube.ds.author} aligned'})
 
         return cube
 
-    def merge_cube(self, cube: "cube_data_class"):
+    def merge_cube(self, cube: 'cube_data_class'):
+        
+        '''
+        Merge another cube to the present one. It must have been aligned first (using align_cube)
+        
+        :param cube: (cube_data_class) The cube to be merged to self
+        '''
+        
         self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
         self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
         self.nz = self.ds['mid_date'].size
+        
+        if cube.author not in self.author.split('\n'):
+            self.author += f'\n{cube.author}'
 
     def average_cube(self):
         """
@@ -1231,8 +1274,9 @@ class cube_data_class:
                          for i in
                          range(self.nx) for j in range(self.ny)]).reshape(self.nx, self.ny)
 
+                                                                                                               
     # %% ======================================================================== #
-    #                             WRITING RESULTS In A NETCDF                     #
+    #                            WRITING RESULTS AS NETCDF                        #
     # =========================================================================%% #
 
     def write_result_ticoi(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
