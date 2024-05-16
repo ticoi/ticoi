@@ -30,7 +30,6 @@ from rasterio.features import rasterize
 
 from ticoi.core import process_blocks_refine
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.other_functions import points_in_polygon
 
 
 # %%========================================================================= #

@@ -196,12 +196,10 @@ def dask_smooth_wrapper(dask_array: da.array, dates: xr.DataArray, t_out: np.nda
 
     # Some mid_date could be exactly the same, this will raise error latter
     # Therefore we add very small values to it
-    c = 0
-    while np.unique(t_obs).size < t_obs.size and c < 10:
+    while np.unique(t_obs).size < t_obs.size:
         t_obs += np.random.uniform(
             low=0.01, high=0.09, size=t_obs.shape
         )  # Add a small value to make it unique, in case of non-monotonic time point
-        c += 1
     t_obs.sort()
 
     t_interp = np.arange(

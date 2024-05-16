@@ -36,7 +36,6 @@ from ticoi.cube_data_classxr import cube_data_class
 from ticoi.inversion_functions import construction_a_lf, class_linear_operator, find_date_obs, inversion_one_component, \
     inversion_two_components, TukeyBiweight, weight_for_inversion,mu_regularisation,construction_dates_range_np
 from ticoi.interpolation_functions import reconstruct_common_ref, set_function_for_interpolation, visualisation_interpolation
-from ticoi.other_functions import points_in_polygon
 
 
 warnings.filterwarnings("ignore")

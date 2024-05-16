@@ -924,8 +924,8 @@ class cube_data_class:
 
             if baseline is not None:
                 baseline = baseline.compute()
-                if baseline.size > da_arr['mid_date'].size:
-                    baseline = np.nanmax(baseline, axis=(1,2))
+                # if baseline.size > da_arr['mid_date'].size:
+                #     baseline = np.nanmax(baseline, axis=(1,2))
                 
                 idx = np.where(baseline < 700)
                 t_thres = 120
@@ -1145,7 +1145,7 @@ class cube_data_class:
             # Reproject coordinates
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
-            # Reject abnormal data (when the cube sizes are not the same, the interpolation leads to infinite or nearly-infinite values)
+            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
             cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), 0)
             
             # Update of cube_data_classxr attributes
