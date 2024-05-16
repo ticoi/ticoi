@@ -8,24 +8,27 @@ Transactions on Geoscience and Remote Sensing. Charrier, L., Yan, Y., Colin Koen
 photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
 
 import os
-import pandas as pd
-import numpy as np
 import dask
 import rasterio.enums
 import itertools
 import warnings
 import time
+import geopandas
+import pandas as pd
+import numpy as np
+import xarray as xr
+import dask.array as da
 
 from pyproj import Proj, Transformer, CRS
 from datetime import date
 from dask.diagnostics import ProgressBar
 from typing import Union
-from shapely import Point
+from rasterio.features import rasterize
 
-from ticoi.mjd2date import mjd2date  # /ST_RELEASE/UTILITIES/PYTHON/mjd2date.py
+from ticoi.mjd2date import mjd2date
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
-from ticoi.filtering_functions import *
+from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 
 
 # %% ======================================================================== #
@@ -861,6 +864,21 @@ class cube_data_class:
                 self.ds[var] = self.ds[var].where(inlier_flag)
                 
         self.ds = self.ds.persist()
+        
+    def mask_cube(self, mask : xr.DataArray | str):
+        if type(mask) is str:
+            if mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile) 
+                polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
+                raster = rasterize([polygon.geometry[0]], out_shape=self.ds.rio.shape, transform=self.ds.rio.transform(), fill=0, dtype='int16')
+                mask = xr.DataArray(data=raster.T, dims=['x', 'y'], coords=self.ds[['x', 'y']].coords)
+            else:
+                mask = xr.open_dataarray(mask)
+            mask.load()
+        
+        # Mask the velocities and the errors
+        self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
+                .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                .astype('float32')
 
 
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
@@ -970,12 +988,6 @@ class cube_data_class:
             # chunk size of spatial mean becomes after the pading: ((1, 9, 1, 1), (1, 20, 2, 1), (61366,))
 
             return spatial_mean.compute(), np.unique(date_out)
-
-        # Mask some of the values
-        if mask is not None:
-            self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
-                    .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
-                    .astype('float32')
 
         if np.isnan(self.ds['date1'].values).all():
             print('Empty sub-cube (masked data ?)')
@@ -1163,7 +1175,7 @@ class cube_data_class:
         '''
         Merge another cube to the present one. It must have been aligned first (using align_cube)
         
-        :param cube: cube_data_class, the cube to merge to self
+        :param cube: (cube_data_class) The cube to be merged to self
         '''
         
         self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')

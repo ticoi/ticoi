@@ -157,17 +157,10 @@ first_date_interpol = np.min(cube_date1)
 last_date_interpol = np.max(cube.date2_())
 
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
- 
-if path_mask is not None:  
-    if path_mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile) 
-        polygon = geopandas.read_file(path_mask).to_crs(epsg=int(proj.split(':')[1]))
-        raster = rasterize([polygon.geometry[0]], out_shape=cube.ds.rio.shape, transform=cube.ds.rio.transform(), fill=0, dtype='int16')
-        mask = xr.DataArray(data=raster.T, dims=['x', 'y'], coords=cube.ds[['x', 'y']].coords)
-    else:
-        mask = xr.open_dataarray(path_mask)
-    mask.load()
-    preData_kwargs['mask'] = mask
-    inversion_kwargs['mask'] = mask
+
+# Mask some of the data
+if path_mask is not None:
+    cube.mask_cube(path_mask)
 
 stop = [time.time()]
 print(f'[ticoi_cube_demo_block_process] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
