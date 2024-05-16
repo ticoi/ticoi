@@ -885,8 +885,7 @@ class cube_data_class:
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
                     order: int = 3, unit: int = 365, delete_outliers: str | float | None = None,
                     flags: None | xr.Dataset = None, regu: int | str = 1, solver: str = 'LSMR_ini',
-                    mask: None | xr.Dataset = None, proj: str = "EPSG:4326", 
-                    velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
+                    proj: str = "EPSG:4326",  velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
 
         """
         Filter the original data with a spatio-temporal kernel
@@ -902,7 +901,6 @@ class cube_data_class:
         :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers (defau)
         :param regu: Regularisation of the solver (default is 1)
         :param solver: solver used to invert the system
-        :param mask: Mask some of the data according to a raster (default is None)
         :param proj: EPSG of i,j projection (default is 'EPSG:4326')
         :param velo_or_disp: 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
         :param verbose: Print information throughout the process (default is False)

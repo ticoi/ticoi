@@ -148,7 +148,7 @@ def inversion_core(data:list, i:float|int, j:float|int, dates_range:np.ndarray|N
     :param interval_output: Temporal sampling of the leap frog time series, int
     :param solver: str, solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
     :param coef: Coef of Tikhonov regularisation, int
-    :param weight: bool, if True  use of aprori weight
+    :param weight: bool, if True use of aprori weight
     :param iteration: bool, if True, use of iterations
     :param treshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
     :param unit: str, m/d or m/y
@@ -854,7 +854,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, i
                                      t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
                                      proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'], 
                                      delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                     mask=preData_kwargs['mask'], verbose=preData_kwargs['verbose'])
+                                     verbose=preData_kwargs['verbose'])
         
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
@@ -873,7 +873,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, i
             obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
             iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
             first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
-            treshold_it=inversion_kwargs['treshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
+            treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
             regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
             option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
             proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 

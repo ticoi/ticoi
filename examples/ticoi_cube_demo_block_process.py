@@ -1,16 +1,13 @@
 '''
-Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method for big data cube.
-This implementation divides the data in smaller data cubes processed one after the other in order to avoid memory overconsumption and kernel crashing.
+Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method to compute entire data cubes.
 It can be divided in three parts:
-    - Data Download : Download the data cube eventually considering a given subset or buffer to limit its size.
-    - Inversion & Interpolation: For each pixel of the cube, solving a system AX = Y to produce Irregular Leap Frog time series using the IRLS method, 
-    then interpolate the obtained ILF time series to Regular LF time series using interpolation.
-    - Results saving: Save the result in a new netCDF file.
-/!\ This implementation uses asyncio which requires its own event loop to run : if you launch this code from a raw terminal, there should be no
-problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it in a raw terminal
-instead of the default console (which leads to a RuntimeError)
+    - Data Download : Download one or several data cube.s, eventually considering a given subset or buffer to limit its size. Additionnal data
+    cubes are aligned and merged to the main cube.
+    - TICOI : Compute TICOI on the selection of data using the given method (split in blocks or direct processing, think of reading the comments
+    about those methods) to get a list of the results.
+    - Save the results : Format the data to a new data cube, which can be saved to a netCDF file. The mean velocity can also be saved as an example.
 
-Author : Laurane Charrier
+Author : Laurane Charrier, Lei Guo, Nathan Lioret
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
     observation networks. IEEE Transactions on Geoscience and Remote Sensing.
@@ -22,38 +19,48 @@ import time
 import os
 import xarray as xr
 import warnings
-import geopandas
+import itertools
 import numpy as np
 
 from osgeo import gdal, osr
-from rasterio.features import rasterize
+from joblib import Parallel, delayed
+from tqdm import tqdm
 
-from ticoi.core import process_blocks_refine
+from ticoi.core import process_blocks_refine, process
 from ticoi.cube_data_classxr import cube_data_class
 
 
 # %%========================================================================= #
-#                                    PARAMETERS                               #
+#                                   PARAMETERS                                #
 # =========================================================================%% #
 
 warnings.filterwarnings("ignore")
 
-## ------------------------------- Data selection -------------------------- ##
-# cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
-# path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/ticoi_test/cube-with-flag-region-test/'  # Path where to stored the results
-flag_file = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc'  # Path where the flag file is stored
+## ------------------- Choose TICOI cube processing method ----------------- ##
+# Choose the TICOI cube processing method you want to use ('block_process' or 'direct_process')
+#    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
+# in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
+# than every other TICOI processing methods.
+#      /!\ This implementation uses asyncio (way faster) which recquires its own event loop to run : if you launch this code from a raw terminal, 
+# there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it 
+# in a raw terminal instead of the default console (which leads to a RuntimeError)
+#    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to important memory consumption and kernel crashes
+# if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
+# 'block_process', which is also faster. This method is essentially used for debug purposes.
 
+TICOI_process = 'block_process'
+
+save = True # If True, save TICOI results to a netCDF file
+save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
+
+## ------------------------------ Data selection --------------------------- ##
+# List of the paths where the data cubes are stored
 cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03920_all_filt-multi.nc',
-              'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
-path_save = 'nathan/Tests_MB/'
-path_mask = None
-path_mask = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp'
-
-result_fn = 'test'
-# result_fn = 'Hala_lake_velocity_LS7_block_test_median_filt'
-save = True
-merged = None  # Path to the second cube to merge with the first one
-sensor = None
+               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
+flag_file = None  # Path where the flag file is stored
+mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored
+path_save = 'nathan/Tests_MB/' # Path where to store the results
+result_fn = 'test'# Name of the netCDF file to be created
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
@@ -63,94 +70,106 @@ if assign_flag:
     flags = xr.open_dataset(flag_file)
     flags.load()
 
-# coef = { 0: 100, 1: 150, 2:200}  # lambda : coef of the regularisation
-# regu = {0: 1, 1: 2, 2: '1accelnotnull'}  # Type of regularisation : 1, 2'1accelnotnull'  # Type of regularisation : 1, 2,'1accelnotnull' : 1 is Tikhonov first order, 2 is Tikhonov second order and '1accelnotnull is Tikhonov first order with an apriori on the acceleration
-
 regu = '1accelnotnull'
 coef = 100
+solver = 'LSMR_ini'
 
-load_kwargs = {'filepath': None, 
-               'chunks': {}, 
-               'conf': False, 
-               'subset': None,
-               'buffer': None, 
-               'pick_date': ['2015-01-01', '2023-01-01'],
-               'pick_sensor': None, 
-               'pick_temp_bas': None, 
-               'proj': proj, 
-               'verbose': False}
+## ---------------------------- Loading parameters ------------------------- ##
+load_kwargs = {'chunks': {}, 
+               'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
+               'subset': [332700, 335200, 5071200, 5073000], # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
+               'pick_sensor': None, # Select sensors (None to select all)
+               'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
+               'proj': proj, # EPSG system of the given coordinates
+               'verbose': False # Print information throughout the loading process 
+               }
 
-preData_kwargs = {'smooth_method': 'gaussian', 
-                  's_win': 3,
-                  't_win': 90,
-                  'sigma': 3,
-                  'order': 3,
-                  'unit': 365,
-                  'delete_outliers': 'vvc_angle',
-                  'flags': flags,
-                  'regu': regu,
-                  'solver': 'LSMR_ini',
-                  'mask': path_mask,
-                  'proj': proj, 
-                  'velo_or_disp': 'velo',
-                  'verbose': True}
+## ----------------------- Data preparation parameters --------------------- ##
+preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+                  's_win': 3, # Size of the spatial window
+                  't_win': 90, # Time window size for 'ewma' smoothing
+                  'sigma': 3, # Standard deviation for 'gaussian' filter
+                  'order': 3, # Order of the smoothing function
+                  'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
+                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
+                  'flags': flags, # Divide the data in several areas where different methods should be used
+                  'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
+                  'solver': solver, # Solver for the inversion
+                  'proj': proj, # EPSG system of the given coordinates
+                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+                  'verbose': True # Print information throughout the filtering process 
+                  }
 
-inversion_kwargs = {'solver': 'LSMR_ini',
-                    'coef': coef,
-                    'apriori_weight': True,
-                    'path_save': path_save,
-                    'interpolation_load_pixel': 'nearest',
-                    'iteration': True,
-                    'interval_output': 1,
-                    'treshold_it': 0.1,
-                    'conf': False,
-                    'flags': flags,
-                    'regu': regu,
-                    'mask': path_mask,
-                    'interpolation_bas': 90,
-                    'option_interpol': 'spline',
-                    'redundancy': 30,
-                    'proj': proj,
-                    'detect_temporal_decorrelation': True,
-                    'unit': 365,
-                    'result_quality': ['X_contribution'],
-                    'nb_max_iteration': 10,
-                    'delete_outliers': 'vvc_angle',
-                    'interpolation': True,
-                    'linear_operator': None,
-                    'visual': False,
-                    'verbose': False}
+## ---------------- Inversion and interpolation parameters ----------------- ##
+inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
+                    'coef': coef, # # Regularization coefficient.s to be used (for each flag if flags is not None)
+                    'solver': solver, # Solver for the inversion
+                    'flags': flags, # Divide the data in several areas where different methods should be used
+                    'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
+                    'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
+                    'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
+                    'proj': proj, # EPSG system of the given coordinates
+                    'interpolation_load_pixel': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
+                    
+                    'iteration': True, # Allow the inversion process to make several iterations
+                    'nb_max_iteration': 10, # Maximum number of iteration during the inversion process
+                    'threshold_it': 0.1, # Threshold to test the stability of the results between each iteration, used to stop the process
+                    'apriori_weight': True, # If True, use apriori weights
+                    'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
+                    'linear_operator': None, # Perform the inversion using this specific linear operator
+                    
+                    'interpolation': True, # If True, perform the temporal interpolation step of TICOI
+                    'interval_output': 1, 
+                    'interpolation_bas': 90, # Temporal baseline of the time series resulting from TICOI (after interpolation)
+                    'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+                    'redundancy': 30, # Redundancy in the interpolated time series in number of days, no redundancy if None
+                    
+                    'result_quality': 'X_contribution', # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+                    'visual': False, # Plot results along the way
+                    'path_save': path_save, # Path where to store the results
+                    'verbose': False # Print information throughout TICOI processing
+                    }
+
+## ----------------------- Parallelization parameters ---------------------- ##
+nb_cpu = 12 # Number of CPU to be used for parallelization
+block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
 
 # %%========================================================================= #
-#                                 DATA DOWNLOAD                               #
+#                                 DATA LOADING                                #
 # =========================================================================%% #
 
 start = [time.time()]
 
+# Load the first cube
 cube = cube_data_class()
 cube.load(cube_names[0], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
           pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
           subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
 
 # Several cubes have to be merged together
+filenames = [cube.filename]
 if len(cube_names) > 1:
     for n in range(1, len(cube_names)):
         cube2 = cube_data_class()
         subset = load_kwargs['subset']
-        res = cube.ds['x'].values[1] - cube.ds['x'].values[0]
+        res = cube.ds['x'].values[1] - cube.ds['x'].values[0] # Resolution of the main data
         cube2.load(cube_names[n], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], 
                    conf=load_kwargs['conf'], pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], 
                    proj=load_kwargs['proj'], verbose=load_kwargs['verbose'],
                    subset=[subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res] if subset is not None else None)
+        filenames.append(cube2.filename)
         # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
         cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
         cube.merge_cube(cube2) # Merge the new cube to the main one
     del cube2
 
+# Prepare interpolation dates
 cube_date1 = cube.date1_().tolist()
 cube_date1.remove(np.min(cube_date1))
 first_date_interpol = np.min(cube_date1)
@@ -159,8 +178,8 @@ last_date_interpol = np.max(cube.date2_())
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 # Mask some of the data
-if path_mask is not None:
-    cube.mask_cube(path_mask)
+if mask_file is not None:
+    cube.mask_cube(mask_file)
 
 stop = [time.time()]
 print(f'[ticoi_cube_demo_block_process] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
@@ -173,7 +192,40 @@ print(f'[ticoi_cube_demo_block_process] Data loading took {round(stop[0] - start
 
 start.append(time.time())
 
-result = process_blocks_refine(cube, nb_cpu=12, block_size=0.5, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+# The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
+# TICOI computation is then parallelized among those cubes
+if TICOI_process == 'block_process':
+    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+
+# Direct computation of the whole TICOI cube
+elif TICOI_process == 'direct_process':
+    # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
+    obs_filt = cube.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
+                                t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
+                                proj=preData_kwargs['proj'], flags=preData_kwargs['flags'], regu=preData_kwargs['regu'], 
+                                delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
+                                verbose=preData_kwargs['verbose'])
+    
+    # Progression bar
+    xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
+    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
+    
+    # Main processing of the data with TICOI algorithm, individually for each pixel
+    result = Parallel(n_jobs=nb_cpu, verbose=0)(
+        delayed(process)(cube, i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], 
+            inversion_kwargs['path_save'], obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
+            iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
+            first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
+            treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
+            regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
+            option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
+            proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
+            unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'], 
+            nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'], 
+            interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
+            visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+        for i, j in xy_values_tqdm
+    )
 
 stop.append(time.time())
 print(f'[ticoi_cube_demo_block_process] TICOI processing took {round(stop[1] - start[1], 0)} s')
@@ -184,23 +236,28 @@ print(f'[ticoi_cube_demo_block_process] TICOI processing took {round(stop[1] - s
 # =========================================================================%% #
 
 start.append(time.time())
+
+# Write down some informations about the data and the TICOI processing performed
 if save:
     sensor_array = np.unique(cube.ds['sensor'])
-
     sensor_strings = [str(sensor) for sensor in sensor_array]
     sensor = ', '.join(sensor_strings)
-    if merged is None:
-        source = f'Temporal inversion on cube {cube.filename} using TICOI with a selection of the dates between: {load_kwargs["pick_date"]}, with a selection of the temporal baselines {load_kwargs["pick_temp_bas"]}'
+    
+    if len(cube_names) > 1:
+        source = f'Temporal inversion on cubes {", ".join(filenames)} using TICOI'
     else:
-        source = f'Temporal inversion on cube {cube.filename} using TICOI with a selection of the dates: {load_kwargs["pick_date"]}, with a selection of the baseline {load_kwargs["pick_temp_bas"]}, and a temporal spacing every {inversion_kwargs["redundancy"]} days '
+        source = f'Temporal inversion on cube {filenames[0]} using TICOI'
+    source += f' with a selection of dates among {load_kwargs["pick_date"]},' if load_kwargs['pick_date'] is not None else '' + \
+              f' with a selection of the temporal baselines among {load_kwargs["pick_temp_bas"]}' if load_kwargs['pick_temp_bas'] is not None else ''
+    
     if inversion_kwargs['apriori_weight']:
         source += ' and apriori weight'
-    source += f'. The Tikhonov coef is: {inversion_kwargs["coef"]}.'
+    source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
     if inversion_kwargs['interpolation']:
-        source += f'The interpolation option is: {inversion_kwargs["option_interpol"]}.'
+        source += f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
         if inversion_kwargs['interpolation_bas']:
-            source += f'The interpolation baseline is: {inversion_kwargs["interpolation_bas"]} days.'
-        source += f'The temporal spacing every {inversion_kwargs["redundancy"]} days.'
+            source += f'The interpolation baseline is {inversion_kwargs["interpolation_bas"]} days.'
+        source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
 
 stop.append(time.time())    
 print(f'[ticoi_cube_demo_block_process] Initialisation took {round(stop[2] - start[2], 3)} s')
@@ -211,26 +268,31 @@ print(f'[ticoi_cube_demo_block_process] Initialisation took {round(stop[2] - sta
 # =========================================================================%% #
 
 start.append(time.time())
-cubenew = cube.write_result_ticoi(result, source, sensor, filename=result_fn, savepath=path_save, result_quality=inversion_kwargs['result_quality'], 
-                        verbose=inversion_kwargs['verbose'])
+
+# Save TICOI results to a netCDF file, thus obtaining a new data cube
+cubenew = cube.write_result_ticoi(result, source, sensor, filename=result_fn, savepath=path_save if save else None, 
+                                  result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
 
 # Plot the mean velocity as an example
-mean_vv = np.sqrt(cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy()
-mean_vv = mean_vv.astype(np.float32)
-mean_vv = np.flip(mean_vv, axis=0)
-
-driver = gdal.GetDriverByName('GTiff')
-srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS('EPSG:32632')
-
-resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
-dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
-dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
-dst_ds_temp.GetRasterBand(1).WriteArray(mean_vv)
-dst_ds_temp.SetProjection(srs.ExportToWkt())
-
-dst_ds_temp = None
-driver = None
+if save_mean_velocity:
+    mean_vv = np.sqrt(cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(np.float32)
+    mean_vv = np.flip(mean_vv, axis=0)
+    
+    driver = gdal.GetDriverByName('GTiff')
+    srs = osr.SpatialReference()
+    srs.SetWellKnownGeogCS('EPSG:32632')
+    
+    resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
+    dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
+    dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
+    dst_ds_temp.GetRasterBand(1).WriteArray(mean_vv)
+    dst_ds_temp.SetProjection(srs.ExportToWkt())
+    
+    dst_ds_temp = None
+    driver = None
+        
+if save or save_mean_velocity:
+    print(f'[ticoi_cube_demo_block_process] Results saved at {path_save}')
 
 stop.append(time.time())
 print(f'[ticoi_cube_demo_block_process] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
