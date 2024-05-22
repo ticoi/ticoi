@@ -17,9 +17,9 @@ Reference:
 
 import time
 import os
-import xarray as xr
 import warnings
 import itertools
+import xarray as xr
 import numpy as np
 
 from osgeo import gdal, osr
@@ -41,10 +41,10 @@ warnings.filterwarnings("ignore")
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
 # than every other TICOI processing methods.
-#      /!\ This implementation uses asyncio (way faster) which recquires its own event loop to run : if you launch this code from a raw terminal, 
+#      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal, 
 # there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it 
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
-#    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to important memory consumption and kernel crashes
+#    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 
@@ -77,7 +77,7 @@ solver = 'LSMR_ini'
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': [332700, 335200, 5071200, 5073000], # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
                'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
                'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
@@ -182,8 +182,8 @@ if mask_file is not None:
     cube.mask_cube(mask_file)
 
 stop = [time.time()]
-print(f'[ticoi_cube_demo_block_process] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[ticoi_cube_demo_block_process] Data loading took {round(stop[0] - start[0], 3)} s')
+print(f'[ticoi_cube_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
 
 
 # %%========================================================================= #
@@ -228,7 +228,7 @@ elif TICOI_process == 'direct_process':
     )
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo_block_process] TICOI processing took {round(stop[1] - start[1], 0)} s')
+print(f'[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s')
 
 
 # %%========================================================================= #
@@ -260,7 +260,7 @@ if save:
         source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
 
 stop.append(time.time())    
-print(f'[ticoi_cube_demo_block_process] Initialisation took {round(stop[2] - start[2], 3)} s')
+print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 
 
 # %%========================================================================= #
@@ -292,8 +292,8 @@ if save_mean_velocity:
     driver = None
         
 if save or save_mean_velocity:
-    print(f'[ticoi_cube_demo_block_process] Results saved at {path_save}')
+    print(f'[ticoi_cube_demo] Results saved at {path_save}')
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo_block_process] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
-print(f'[ticoi_cube_demo_block_process] Overall processing took {round(stop[3] - start[0], 0)} s')
+print(f'[ticoi_cube_demo] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
+print(f'[ticoi_cube_demo] Overall processing took {round(stop[3] - start[0], 0)} s')
