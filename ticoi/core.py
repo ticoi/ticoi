@@ -497,9 +497,9 @@ def interpolation_core(result: np.ndarray, interval_output: int, path_save: str,
             dataf_lp['xcount_x'] = xcount_x
             dataf_lp['xcount_y'] = xcount_y
         if 'Error_propagation' in result_quality:
-            dataf_lp['error_x'] = error_x
-            dataf_lp['error_y'] = error_y
-
+            dataf_lp['error_x'] = error_x * unit / interval_output
+            dataf_lp['error_y'] = error_y * unit / interval_output
+            dataf_lp['sigma0'] = np.concatenate([result['sigma0'][:2],np.full(dataf_lp.shape[0]-2, np.nan)])
     del x_regu, First_date, Second_date, vx, vy
 
     # Fill with nan values if the first date of the cube which will be interpolated is lower than the first date interpolated for this pixel

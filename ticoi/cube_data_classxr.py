@@ -300,6 +300,7 @@ class cube_data_class:
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
+        self.update_dimension()
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'z': 'mid_date'})
         date1 = [mjd2date(date_str) for date_str in self.ds['date1'].values]  # convertion in date
@@ -409,6 +410,7 @@ class cube_data_class:
             self.subset(proj, subset)
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
+        self.update_dimension()
 
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'time': 'mid_date'})
@@ -494,6 +496,7 @@ class cube_data_class:
 
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
+        self.update_dimension()
 
         if pick_date is not None:  # Temporal subset between two dates
             self.ds = self.ds.where(
@@ -1262,8 +1265,8 @@ class cube_data_class:
 
         variables = ['vx', 'vy']
         if result_quality is not None:
-            if 'X_contribution' in result_quality: variables + ['xcount_x', 'xcount_y']
-            if 'Error_propagation' in result_quality:variables + ['error_x', 'error_y']
+            if 'X_contribution' in result_quality: variables +=  ['xcount_x', 'xcount_y']
+            if 'Error_propagation' in result_quality:variables += ['error_x', 'error_y']
 
         for i, var in enumerate(variables):
             result_arr = np.array(
@@ -1295,12 +1298,13 @@ class cube_data_class:
                                                    'long_name': long_name[k]}
         # if result_quality is not None and 'Error_propagation' in result_quality:
         #     long_name = [
-        #         'Error propagated for the displacement in the direction Est/West',
-        #         'Error propagated for  the displacement in the direction North/South [m]']
-        #     short_name = ['error_x', 'error_y']
-        #     for var in short_name:
+        #         'Sigma0 Est/West',
+        #         'Sigma0 North/South [m]']
+        #     short_name = ['sigma0_x', 'sigma0_y']
+        #     for k,var in enumerate(short_name):
+        # 
         #         result_arr = np.array(
-        #             [result[i * self.ny + j][var] if result[i * self.ny + j][var].shape[
+        #             [result[i * self.ny + j]['sigma0'][k] if result[i * self.ny + j]['sigma0'][k].shape[
         #                                                  0] != 0 else np.nan for i in range(self.nx) for j in
         #              range(self.ny)])
         #         result_arr = result_arr.reshape((self.nx, self.ny))
