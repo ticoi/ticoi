@@ -557,6 +557,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     # LOADING OF DATA OVER ONE PIXEL
     data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver,
                            coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
+    
     if flags is not None:
         regu, coef = data[3], data[4]
     # INVERSION
@@ -767,7 +768,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
 
 #     return dataf_list
 
-def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, inversion_kwargs=None, verbose=False):
+def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preData_kwargs=None, inversion_kwargs=None, verbose=False):
     
     '''Loop over the blocks of the cube and process each block.
 
@@ -849,7 +850,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, i
 
         return block, flags_block, duration
     
-    async def process_block(block, flags_block=None, nb_cpu=8, verbose=False):        
+    async def process_block(block, load_only=False, flags_block=None, nb_cpu=8, verbose=False):        
         obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
                                      t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
                                      proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'], 
@@ -866,26 +867,33 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, i
 
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
-
-        result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(block,
-            i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'], 
-            obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
-            iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
-            first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
-            treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
-            regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
-            option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
-            proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
-            unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'], 
-            nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'], 
-            interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
-            visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
-        for i, j in xy_values_tqdm)
+        
+        if load_only: # Only load the raw data
+            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+                              delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
+                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=obs_filt, 
+                                      visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+                              for i, j in xy_values_tqdm)
+        else: # Apply the whole TICOI process to the data
+            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(process)(block,
+                i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'], 
+                obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
+                iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
+                first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
+                treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
+                regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
+                option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
+                proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
+                unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'], 
+                nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'], 
+                interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
+                visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+            for i, j in xy_values_tqdm)
 
         return result_block
     
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, inversion_kwargs=None, verbose=False):
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, load_only=False, preData_kwargs=None, inversion_kwargs=None, verbose=False):
         
         # Get the parameters
         if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
@@ -918,7 +926,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, i
                 x_start, x_end, y_start, y_end = blocks[n+1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
-            block_result = await process_block(block, flags_block=flags_block, nb_cpu=nb_cpu, verbose=verbose)
+            block_result = await process_block(block, load_only=load_only, flags_block=flags_block, nb_cpu=nb_cpu, verbose=verbose)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
@@ -931,7 +939,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, preData_kwargs=None, i
         
         return dataf_list
     
-    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, preData_kwargs=preData_kwargs, 
+    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, load_only=load_only, preData_kwargs=preData_kwargs, 
                                            inversion_kwargs=inversion_kwargs, verbose=verbose))
 
 
