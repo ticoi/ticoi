@@ -15,6 +15,7 @@ Reference:
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 '''
+
 import time, os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -149,7 +150,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                    verbose: bool = False) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
     """
     Computes A in AX = Y and does the inversion using a given solver
-    
+
     :param data: An array where each line is (date1, date2, other elements ) for which a velocity is computed (correspond to the original displacements)
     :param i,j: Coordinates of the point in pixel, int
     :param dates_range: list of np.datetime64 [D], dates of the estimated displacement in X with an irregular temporal sampling (ILF)
@@ -452,7 +453,7 @@ def interpolation_core(result: np.ndarray, interval_output: int, path_save: str,
     fdx, fdy, fdx_xcount, fdy_xcount, fdx_error, fdy_error = set_function_for_interpolation(option_interpol, x, dataf,
                                                                                             result_quality)
 
-    # Temporal basis on which to interpolate
+
     if redundancy is None:  # No redundancy between two interpolated velocity
         x_regu = np.arange(np.min(x) + (interval_output - np.min(x) % interval_output), np.max(x), interval_output)
     else:  # The overlap between two velocities corresponds to redundancy
@@ -592,14 +593,14 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     # INVERSION
     if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
     result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
-                            visual=visual,
-                            verbose=verbose, unit=unit,
-                            conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=treshold_it,
-                            detect_temporal_decorrelation=detect_temporal_decorrelation,
-                            linear_operator=linear_operator, result_quality=result_quality,
-                            nb_max_iteration=nb_max_iteration)
+                       visual=visual,
+                       verbose=verbose, unit=unit,
+                       conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=treshold_it,
+                       detect_temporal_decorrelation=detect_temporal_decorrelation,
+                       linear_operator=linear_operator, result_quality=result_quality,
+                       nb_max_iteration=nb_max_iteration)
 
-    if not interpolation: return result[1]
+    if not interpolation: return result
 
     # INTERPOLATION
     if result[1] is not None:  # if inversion have been performed
@@ -622,7 +623,8 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
              'vz': [], 'xcount_z': [], 'NormR': []})
 
 
-def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
+def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preData_kwargs=None, inversion_kwargs=None, verbose=False):
+
     '''Loop over the blocks of the cube and process each block.
 
     :param cube: Class of the cube, e.g. Ticoi_cube
@@ -657,36 +659,7 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
     :return: pandas dataframe, time series of the velocity estimates
     '''
 
-    def cube_split(cube, block_size=1, verbose=False):
-        GB = 1073741824
-        blocks = []
-        if cube.ds.nbytes > block_size * GB:
-            nblocks = int(np.ceil(cube.ds.nbytes / (block_size * GB)))
-
-            # Determine the closest pair of nblocks in x and y direction
-            nblocks_x = int(np.sqrt(nblocks))
-            while nblocks % nblocks_x != 0:
-                nblocks_x -= 1
-            nblocks_y = nblocks // nblocks_x
-
-            x_step = cube.ds.dims['x'] // nblocks_x
-            y_step = cube.ds.dims['y'] // nblocks_y
-
-            if verbose: print(f'Divide into {nblocks} blocks\n blocks size: {x_step} x {y_step}')
-            for i in range(nblocks_y):
-                for j in range(nblocks_x):
-                    x_start = j * x_step
-                    y_start = i * y_step
-                    x_end = x_start + x_step if j != nblocks_x - 1 else cube.ds.dims['x']
-                    y_end = y_start + y_step if i != nblocks_y - 1 else cube.ds.dims['y']
-                    blocks.append([x_start, x_end, y_start, y_end])
-        else:
-            blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
-            if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
-
-        return blocks
-
-    def chunk_to_block(cube, block_size=1, verbose=False):
+    def chunk_to_block(cube, block_size=0.5, verbose=False):
         GB = 1073741824
         blocks = []
         if cube.ds.nbytes > block_size * GB:
@@ -695,191 +668,22 @@ def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs
 
             nchunks_block = int(block_size * GB // chunk_bytes)
 
-            nckunks_x = int(np.sqrt(nchunks_block))
-            nckunks_y = nchunks_block // nckunks_x
-            # while nchunks_block % nckunks_x != 0:
-            #     nckunks_x += 1
-            # nckunks_y = nchunks_block // nckunks_x
-
-            x_step, y_step = nckunks_x, nckunks_y
-
-            # if x_step / y_step > 2 or y_step / x_step > 2:
-
-            nblocks_x = int(np.ceil(len(cube.ds.chunks['x']) / x_step))
-            nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
-
-            nblocks = nblocks_x * nblocks_y
-            if verbose: print(
-                f'Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
-
-            for i in range(nblocks_y):
-                for j in range(nblocks_x):
-                    x_start = j * x_step * cube.ds.chunks['x'][0]
-                    y_start = i * y_step * cube.ds.chunks['y'][0]
-                    x_end = x_start + x_step * cube.ds.chunks['x'][0] if j != nblocks_x - 1 else cube.ds.dims['x']
-                    y_end = y_start + y_step * cube.ds.chunks['y'][0] if i != nblocks_y - 1 else cube.ds.dims['y']
-                    blocks.append([x_start, x_end, y_start, y_end])
-        else:
-            blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
-            if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
-
-        return blocks
-
-    # get the parameters
-    if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-        for key, value in preData_kwargs.items():
-            globals()[key] = value
-        for key, value in inversion_kwargs.items():
-            globals()[key] = value
-    else:
-        raise ValueError('preData_kwars and inversion_kwars must be a dict')
-
-    start_blocks = time.time()
-    # blocks = cube_split(cube, block_size=block_size, verbose=True)
-    blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
-    dataf_list = [None] * (cube.nx * cube.ny)
-
-    for n in range(len(blocks)):
-
-        print(f'Processing block {n + 1}/{len(blocks)}')
-
-        x_start, x_end, y_start, y_end = blocks[n]
-
-        start = time.time()
-        block = cube_data_class()
-        block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-        # rechunk will become slower...
-        # tc, xc, yc = block.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y")
-        # block.ds = block.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
-        block.ds = block.ds.persist()
-        block.update_dimension()
-
-        if flags is not None:
-            flags_block = flags.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-        else:
-            flags_block = None
-
-        print(f'Time for block loading: {round((time.time() - start), 2)} sec')
-
-        # noew calculate the rolling
-
-        obs_filt = block.filter_cube(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order,
-                                     proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers,
-                                     verbose=True, velo_or_disp=velo_or_disp)
-
-        # real loading to accelerate the inversion
-        obs_filt = obs_filt.load()
-        block.ds = block.ds.load()
-
-        xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
-        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
-
-        result_tmp = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(process)(block,
-                             i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt,
-                             interpolation_load_pixel=interpolation_load_pixel,
-                             iteration=iteration, interval_output=interval_output,
-                             first_date_interpol=first_date_interpol,
-                             last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags,
-                             regu=regu,
-                             interpolation_bas=interpolation_bas, option_interpol=option_interpol,
-                             redundancy=redundancy, proj=proj,
-                             detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit,
-                             result_quality=result_quality,
-                             nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers,
-                             interpolation=interpolation,
-                             linear_operator=linear_operator, visual=visual, verbose=verbose)
-            for i, j in xy_values_tqdm)
-
-        for i in range(len(result_tmp)):
-            row = i % block.ny + y_start
-            col = np.floor(i / block.ny) + x_start
-            idx = int(col * cube.ny + row)
-
-            dataf_list[idx] = result_tmp[i]
-        del block, result_tmp, obs_filt, xy_values, xy_values_tqdm
-
-    print("Process all blocks completed in {:.2f} seconds".format(time.time() - start_blocks))
-
-    return dataf_list
-
-
-def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: float = 0.5, verbose: bool = False,
-                          preData_kwargs: None | dict = None, inversion_kwargs: None | dict = None):
-    '''Loop over the blocks of the cube and process each block.
-
-    :param cube: Class of the cube, e.g. Ticoi_cube
-    :param solver: str, solver for the inversion
-    :param coef: float, coefficient for the L2 norm of the residuals
-    :param apriori_weight: float, apriori weight for the inversion
-    :param path_save: str, path where to save the figures
-    :param obs_filt: None or array, True where to apply a filter on the observations (usually to remove outliers)
-    :param interpolation_load_pixel: str, type of interpolation to load the previous pixel in the temporal interpolation (nearest or linear)
-    :param iteration: bool, if True the inversion is performed for each pixel in the block
-    :param interval_output: int, temporal interval of the output (in years)
-    :param first_date_interpol: str, first date of the interpolation
-    :param proj: str, projection of the cube
-    :param last_date_interpol: str, last date of the interpolation
-    :param treshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
-    :param conf: bool, if True set the confidence to the error in the observations
-    :param flags: None or list, which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
-    :param regu: int, type of regularisation
-    :param interpolation_bas: int, temporal sampling of the velocity time series
-    :param option_interpol: str, type of interpolation : 'spline', 'nearest' or 'spline_smooth' for smoothing spline
-    :param redundancy: int, overlap between two velocities in the interpolated time-series in days
-    :param detect_temporal_decorrelation: bool, if True detect temporal decorrelation by setting a weight of 0 at the beginning at the first inversion to all observation with a temporal baseline larger than 200
-    :param unit: str, m/y or m/d
-    :param result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :param nb_max_iteration: int, maximal number of iteration for the inversion
-    :param delete_outliers: None or str, if None no outlier is deleted, otherwise the outlier are deleted according to the method (median_angle for the moment)
-    :param interpolation: bool, if True perform the temporal interpolation
-    :param linear_operator: None or array, linear operator to use in the inversion (e.g. the covariance matrix of the observation errors)
-    :param visual: bool, if True plot the figures
-    :param verbose: bool, if True print some information
-
-    :return: pandas dataframe, time series of the velocity estimates
-    '''
-
-    def chunk_to_block(cube: "cube_data_class", block_size: float = 1., verbose: bool = False) -> list:
-        """
-        Split the data into block, so that each block as maximum size of block_size GB
-        :param cube: cube dataset
-        :param block_size: size of each block in GB
-        :param verbose:bool, if True print some information
-        :return: position of each blocks in the cube
-        """
-        GB = 1073741824
-        blocks = []
-        if cube.ds.nbytes > block_size * GB:
-            num_elements = np.prod([cube.ds.chunks[dim][0] for dim in
-                                    cube.ds.chunks.keys()])  # chunksize[x]*chunksize[y]*chunksize['mid_date'] = number of value inside one chunk
-            chunk_bytes = num_elements * cube.ds[
-                'vx'].dtype.itemsize  # size of one chunk in byte (=number of values * size of each value, according to its dtype)
-
-            nchunks_block = int(
-                block_size * GB // chunk_bytes)  # number of chunk per block needed so that the block reach a size of approximatly block_size * GB
-
-            # number of chunks inside one block, in x and y
-            # to get approximatly a squared block, the number of chunks should be approximatly the same in x and y
             x_step = int(np.sqrt(nchunks_block))
             y_step = nchunks_block // x_step
 
-            # number of blocks needed
             nblocks_x = int(np.ceil(len(cube.ds.chunks['x']) / x_step))
             nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
 
             nblocks = nblocks_x * nblocks_y
-            if verbose: print(
-                f'Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
+            if verbose: print(f'Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
 
-            # Save the position of each blocks in the cube
             for i in range(nblocks_y):
                 for j in range(nblocks_x):
                     x_start = j * x_step * cube.ds.chunks['x'][0]
                     y_start = i * y_step * cube.ds.chunks['y'][0]
                     x_end = x_start + x_step * cube.ds.chunks['x'][0] if j != nblocks_x - 1 else cube.ds.dims['x']
                     y_end = y_start + y_step * cube.ds.chunks['y'][0] if i != nblocks_y - 1 else cube.ds.dims['y']
-                    blocks.append([x_start, x_end, y_start, y_end])
+                    blocks.append([x_start, x_end, y_start,y_end])
         else:
             blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
             if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
@@ -911,74 +715,68 @@ def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: 
 
         return block, flags_block, duration
 
-    async def process_block(block: "cube_data_class", nb_cpu: int = 8,preData_kwargs=None,inversion_kwargs=None):
-        """
+    async def process_block(block, load_only=False, flags_block=None, nb_cpu=8, verbose=False):
+        obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'],
+                                     t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
+                                     proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'],
+                                     delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
+                                     verbose=preData_kwargs['verbose'])
 
-        :param block: block of the cube
-        :param flags_block: flag of this block
-        :param nb_cpu: nb of CPUs used for the parallelization
-        :param verbose: if True print some information
-        :return:
-        """
-        # obs_filt = block.filter_cube(smooth_method=smooth_method, s_win=s_win, t_win=t_win, sigma=sigma, order=order,
-        #                              proj=proj, flags=flags_block, regu=regu, delete_outliers=delete_outliers,
-        #                              verbose=True, velo_or_disp=velo_or_disp)
-        obs_filt = block.filter_cube(**preData_kwargs)
-
-        # load in memory the observation cube data and the filtered cube
-        obs_filt = obs_filt.load()
-        block.ds = block.ds.load()
-
-        # parallelization over every pixels
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
-        # result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-        #     delayed(process)(block,
-        #                      i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt,
-        #                      interpolation_load_pixel=interpolation_load_pixel,
-        #                      iteration=iteration, interval_output=interval_output,
-        #                      first_date_interpol=first_date_interpol,
-        #                      last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags,
-        #                      regu=regu,
-        #                      interpolation_bas=interpolation_bas, option_interpol=option_interpol,
-        #                      redundancy=redundancy, proj=proj,
-        #                      detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit,
-        #                      result_quality=result_quality,
-        #                      nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers,
-        #                      interpolation=interpolation,
-        #                      linear_operator=linear_operator, visual=visual, verbose=verbose)
-        #     for i, j in xy_values_tqdm)
+        # There is no data on the whole block (masked data)
+        if obs_filt is None:
+            return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
+                         'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
+        obs_filt = obs_filt.load()
+        block.ds = block.ds.load()
 
-        result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(process)(block,i,j,obs_filt=obs_filt,**inversion_kwargs)
+        if load_only: # Only load the raw data
+            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+                              delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
+                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=obs_filt,
+                                      visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+                              for i, j in xy_values_tqdm)
+        else: # Apply the whole TICOI process to the data
+            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(process)(block,
+                i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'],
+                obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
+                iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'],
+                first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'],
+                treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'],
+                regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'],
+                option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'],
+                proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'],
+                unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'],
+                nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'],
+                interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'],
+                visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
             for i, j in xy_values_tqdm)
+
         return result_block
 
-    async def process_blocks_main(cube: "cube_data_class", nb_cpu: int = 8, block_size: float = 0.5,
-                                  verbose: bool = False, preData_kwargs: None | dict = None,
-                                  inversion_kwargs: None | dict = None):
-        #
-        # # get the parameters
-        # if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-        #     for key, value in preData_kwargs.items():
-        #         globals()[key] = value
-        #     if 'verbose' in globals():
-        #         verbose_prepData = verbose
-        #         del verbose
-        #     for key, value in inversion_kwargs.items():
-        #         globals()[key] = value
-        # else:
-        #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, load_only=False, preData_kwargs=None, inversion_kwargs=None, verbose=False):
 
-        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # position of the blocks to use
-        dataf_list = [None] * (cube.nx * cube.ny)
+        # Get the parameters
+        if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+            for key, value in preData_kwargs.items():
+                globals()[key] = value
+            for key, value in inversion_kwargs.items():
+                globals()[key] = value
+        else:
+            raise ValueError('preData_kwars and inversion_kwars must be a dict')
+
+        # blocks = cube_split(cube, block_size=block_size, verbose=True)
+        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
+        dataf_list = [None] * ( cube.nx * cube.ny )
 
         loop = asyncio.get_event_loop()
 
         for n in range(len(blocks)):
-            print(f'Processing block {n + 1}/{len(blocks)}')
+            print(f'Processing block {n+1}/{len(blocks)}')
 
             # load the first block and start the loop
             if n == 0:
@@ -986,19 +784,19 @@ def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: 
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
             block, flags_block, duration = await future
-            if preData_kwargs['verbose']: print(f'Block {n + 1} loaded in {duration:.2f} s')
+            if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
-                x_start, x_end, y_start, y_end = blocks[n + 1]
+                x_start, x_end, y_start, y_end = blocks[n+1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
-            block_result = await process_block(block, nb_cpu,preData_kwargs=preData_kwargs,inversion_kwargs=inversion_kwargs)
+            block_result = await process_block(block, load_only=load_only, flags_block=flags_block, nb_cpu=nb_cpu, verbose=verbose)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
-                col = np.floor(i / block.ny) + blocks[n][0]
-                idx = int(col * cube.ny + row)
+                col = np.floor( i / block.ny ) + blocks[n][0]
+                idx = int( col * cube.ny + row )
 
                 dataf_list[idx] = block_result[i]
 
@@ -1006,14 +804,12 @@ def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: 
 
         return dataf_list
 
-    dataf_list = asyncio.run(process_blocks_main(cube, nb_cpu, block_size, verbose, preData_kwargs, inversion_kwargs))
+    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, load_only=load_only, preData_kwargs=preData_kwargs,
+                                           inversion_kwargs=inversion_kwargs, verbose=verbose))
 
-    return dataf_list
 
-
-def visualisation(data: pd.DataFrame | None, result: np.ndarray, option_visual: list, path_save: str,
-                  interval_output: int = 1, interval_inputMax: int | None = None, A: np.ndarray | None = None,
-                  dataf: pd.DataFrame | None = None, unit: str = 'm/y', figsize: tuple = (12, 6), show: bool = True):
+def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list, path_save:str, interval_output:int=1, interval_inputMax:int|None=None, A:np.ndarray|None=None,
+                  dataf:pd.DataFrame|None=None, unit:str='m/y',figsize:tuple=(12, 6), show:bool=True):
     """
     Visualize the data (original datas and results).
 
@@ -1253,10 +1049,10 @@ def visualisation(data: pd.DataFrame | None, result: np.ndarray, option_visual: 
         if 'Y_contribution' in option_visual:
             fig, ax = plt.subplots(2, 1, figsize=figsize)
             ax[0].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['xcount_x'], s=4,
+            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['X_countx'], s=4,
                                  cmap='rainbow', label='Y_contribution')
             ax[1].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['xcount_y'], s=4,
+            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['X_county'], s=4,
                                  cmap='rainbow', label='Y_contribution')
             legend1 = ax[1].legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
                                    bbox_transform=fig.transFigure,
@@ -1270,7 +1066,7 @@ def visualisation(data: pd.DataFrame | None, result: np.ndarray, option_visual: 
                           2)  # compute the magnitude of the velocity
             fig, ax = plt.subplots(figsize=figsize)
             ax.set_ylabel(f'Velocity magnitude [{unit}]', fontsize=16)
-            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['xcount_x'] + result['xcount_y']) / 2, s=4, vmin=0,
+            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['X_countx'] + result['X_county']) / 2, s=4, vmin=0,
                               vmax=100,
                               cmap='viridis_r', label='Y_contribution')
             legend1 = ax.legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
@@ -1631,14 +1427,13 @@ def visualisation(data: pd.DataFrame | None, result: np.ndarray, option_visual: 
 
             print('RMSE y', sm.mean_squared_error(Y_reconstruct_x, dataf['vx'], squared=False))
             print('RMSE y', sm.mean_squared_error(Y_reconstruct_y, dataf['vy'], squared=False))
-
         if 'Error_propagation' in option_visual:
             fig, ax = plt.subplots(2, 1, figsize=figsize)
             ax[0].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['error_x'] / delta_r * 365, s=4,
+            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['Error_x'] / delta_r * 365, s=4,
                                  cmap='rainbow', label='errorx')
             ax[1].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['error_y'] / delta_r * 365, s=4,
+            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['Error_y'] / delta_r * 365, s=4,
                                  cmap='rainbow', label='errory')
             legend1 = ax[1].legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
                                    bbox_transform=fig.transFigure,
@@ -1652,7 +1447,7 @@ def visualisation(data: pd.DataFrame | None, result: np.ndarray, option_visual: 
                           2)  # compute the magnitude of the velocity
             fig, ax = plt.subplots(figsize=figsize)
             ax.set_ylabel(f'Velocity magnitude [{unit}]', fontsize=16)
-            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['xcount_x'] + result['xcount_y']) / 2, s=4, vmin=0,
+            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['X_countx'] + result['X_county']) / 2, s=4, vmin=0,
                               vmax=100,
                               cmap='viridis_r', label='Y_contribution')
             legend1 = ax.legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
