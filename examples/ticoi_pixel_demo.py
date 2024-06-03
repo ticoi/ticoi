@@ -12,6 +12,7 @@ Reference:
 import time
 import os
 import numpy as np
+
 from ticoi.core import inversion_core, visualisation, interpolation_core
 from ticoi.cube_data_classxr import cube_data_class
 
@@ -27,7 +28,7 @@ from ticoi.cube_data_classxr import cube_data_class
 cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc', # Sentinel-2 cube
               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
 path_save = 'nathan/Tests_MB/useless/'
-i, j = 334571.3,5082898.8 # Point (pixel) where to carry on the computation
+i, j = 332100, 5080350 # Point (pixel) where to carry on the computation
 proj = 'EPSG:32632' # Projection of the given coordinates
 buffer_size = 500 # Size of the buffer to be loaded around the pixel
 # To select a specific period for the measurements, if you want to select all the dates put None, 
@@ -46,7 +47,7 @@ load_interp = 'nearest' # Interpolation used to select which data to use when th
 
 ####  Inversion
 # Type of regularisation : 1, 2,'1accelnotnull','regu01' (1: Tikhonov first order, 2: Tikhonov second order,
-# '1accelnotnull': minization of the difference between the acceleration of the time series and acceleration computed on a moving average
+# '1accelnotnull': minimisation of the difference between the acceleration of the time series and acceleration computed on a moving average
 regu = '1accelnotnull'
 coef = 100  # lambda : coef of the regularisation
 apriori_weight = True  # Add a weight in the first step of the inversion, True ou False
@@ -63,7 +64,7 @@ result_quality = None
 visual = True  # Plot some results or not
 verbose = False  # Print informations during the process or not
 save = True  # Save the results or not
-vmax = [0, 150]  # vmin and vmax of the legend
+vmax = [50, 170]  # vmin and vmax of the legend
 visual_inversion = False  # Visualize the different iterations of the inversion
 # Visualisation options
 option_visual = ['original_velocity_xy', 'original_magnitude',
@@ -92,17 +93,12 @@ cube.load(cube_names[0], pick_date=dates_input, proj=proj, pick_temp_bas=temp_ba
 
 # Several cubes have to be merged together
 if len(cube_names) > 1:
-    merged = []
     for n in range(1, len(cube_names)):
-        merged.append(cube_data_class())
-        merged[n-1].load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
-                         buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
-        merged[n-1] = cube.align_cube(merged[n-1], reproj_vel=False, reproj_coord=True, interp_method='nearest')
-        cube.merge_cube(merged[n-1])
-else:
-    merged = None
-    
-merged = None
+        cube2 = cube_data_class()
+        cube2.load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
+                   buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
+        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
+        cube.merge_cube(cube2)
 
 stop = [time.time()]
 print(f'[ticoi_pixel_demo] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
