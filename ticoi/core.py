@@ -598,7 +598,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
                        linear_operator=linear_operator, result_quality=result_quality,
                        nb_max_iteration=nb_max_iteration)
 
-    if not interpolation: return result
+    if not interpolation: return result[1]
 
     # INTERPOLATION
     if result[1] is not None:  # if inversion have been performed
@@ -888,21 +888,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
         return block, flags_block, duration
 
     async def process_block(block, load_only=False, flags_block=None, nb_cpu=8, verbose=False):
-        obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'],
-                                     t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
-                                     proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'],
-                                     delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                     verbose=preData_kwargs['verbose'])
-
-    async def process_block(block, load_only=False, flags_block=None, nb_cpu=8, verbose=False):
-        obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'],
-                                     t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
-                                     proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'],
-                                     delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                     verbose=preData_kwargs['verbose'])
-
-        xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
-        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
+        obs_filt = block.filter_cube(**preData_kwargs)
 
         # There is no data on the whole block (masked data)
         if obs_filt is None:
@@ -911,11 +897,6 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
-
-        # There is no data on the whole block (masked data)
-        if obs_filt is None:
-            return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-                         'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
@@ -943,41 +924,9 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
                 visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
             for i, j in xy_values_tqdm)
 
-        if load_only: # Only load the raw data
-            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-                              delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
-                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=obs_filt,
-                                      visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
-                              for i, j in xy_values_tqdm)
-        else: # Apply the whole TICOI process to the data
-            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(process)(block,
-                i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'],
-                obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
-                iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'],
-                first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'],
-                treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'],
-                regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'],
-                option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'],
-                proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'],
-                unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'],
-                nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'],
-                interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'],
-                visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
-            for i, j in xy_values_tqdm)
-
         return result_block
     
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
-        
-        # get the parameters
-        if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-            for key, value in preData_kwargs.items():
-                globals()[key] = value
-            for key, value in inversion_kwargs.items():
-                globals()[key] = value
-        else:
-            raise ValueError('preData_kwars and inversion_kwars must be a dict')
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, load_only=False, verbose=False, preData_kwargs=None, inversion_kwargs=None):
 
         # blocks = cube_split(cube, block_size=block_size, verbose=True)
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
