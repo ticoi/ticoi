@@ -541,7 +541,7 @@ def interpolation_core(result: np.ndarray, interval_output: int, path_save: str,
 def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, interpolation_load_pixel='nearest',
             iteration=True, interval_output=1,
             first_date_interpol=None, proj='EPSG:4326',
-            last_date_interpol=None, treshold_it=0.1, conf=True, flags=None, regu=1, interpolation_bas=False,
+            last_date_interpol=None, threshold_it=0.1, conf=True, flags=None, regu=1, interpolation_bas=False,
             option_interpol='spline', redundancy=False, detect_temporal_decorrelation=True, unit=365,
             result_quality=None, nb_max_iteration=10, delete_outliers=None, interpolation=True, linear_operator=None,
             visual=False, verbose=False):
@@ -562,7 +562,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     :param interval_output: Temporal sampling of the leap frog time series, int
     :param first_date_interpol: np.datetime64 object, first date at wich the time series is interpolated
     :param last_date_interpol: np.datetime64 object, last date at wich the time series is interpolated
-    :param treshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
+    :param threshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
     :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param regu : str, type of regularization
     :param interpolation_bas: int, temporal sampling of the interpolated leap frog time series
@@ -591,12 +591,12 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     # INVERSION
     if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
     result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
-                       visual=visual,
-                       verbose=verbose, unit=unit,
-                       conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=treshold_it,
-                       detect_temporal_decorrelation=detect_temporal_decorrelation,
-                       linear_operator=linear_operator, result_quality=result_quality,
-                       nb_max_iteration=nb_max_iteration)
+                            visual=visual,
+                            verbose=verbose, unit=unit,
+                            conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=threshold_it,
+                            detect_temporal_decorrelation=detect_temporal_decorrelation,
+                            linear_operator=linear_operator, result_quality=result_quality,
+                            nb_max_iteration=nb_max_iteration)
 
     if not interpolation: return result[1]
 
@@ -890,13 +890,13 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
     async def process_block(block, load_only=False, flags_block=None, nb_cpu=8, verbose=False):
         obs_filt = block.filter_cube(**preData_kwargs)
 
+        xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
+        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
+
         # There is no data on the whole block (masked data)
         if obs_filt is None:
             return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
                          'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
-
-        xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
-        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
         obs_filt = obs_filt.load()
         block.ds = block.ds.load()
@@ -910,18 +910,8 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
         else: # Apply the whole TICOI process to the data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
             delayed(process)(block,
-                i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'],
-                obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
-                iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'],
-                first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'],
-                treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'],
-                regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'],
-                option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'],
-                proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'],
-                unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'],
-                nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'],
-                interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'],
-                visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+                i, j,
+                obs_filt=obs_filt,**inversion_kwargs)
             for i, j in xy_values_tqdm)
 
         return result_block
