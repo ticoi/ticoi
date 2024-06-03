@@ -599,7 +599,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
                             linear_operator=linear_operator, result_quality=result_quality,
                             nb_max_iteration=nb_max_iteration)
 
-    if not interpolation: return result
+    if not interpolation: return result[1]
 
     # INTERPOLATION
     if result[1] is not None:  # if inversion have been performed
@@ -911,8 +911,7 @@ def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: 
 
         return block, flags_block, duration
 
-    async def process_block(block: "cube_data_class", flags_block: None | xr.Dataset = None, nb_cpu: int = 8,
-                            verbose: bool = False,preData_kwargs=None,inversion_kwargs=None):
+    async def process_block(block: "cube_data_class", nb_cpu: int = 8,preData_kwargs=None,inversion_kwargs=None):
         """
 
         :param block: block of the cube
@@ -953,7 +952,7 @@ def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: 
 
 
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(process)(block,**inversion_kwargs)
+            delayed(process)(block,i,j,obs_filt=obs_filt,**inversion_kwargs)
             for i, j in xy_values_tqdm)
         return result_block
 
@@ -984,17 +983,17 @@ def process_blocks_refine(cube: "cube_data_class", nb_cpu: int = 8, block_size: 
             # load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
             block, flags_block, duration = await future
-            if verbose_prepData: print(f'Block {n + 1} loaded in {duration:.2f} s')
+            if preData_kwargs['verbose']: print(f'Block {n + 1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n + 1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
 
-            block_result = await process_block(block, flags_block, nb_cpu, verbose,preData_kwargs=preData_kwargs,inversion_kwargs=inversion_kwargs)
+            block_result = await process_block(block, nb_cpu,preData_kwargs=preData_kwargs,inversion_kwargs=inversion_kwargs)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]

@@ -1360,7 +1360,7 @@ class cube_data_class:
         :param savepath: path where to save the file
         :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
         :param verbose: Print information throughout the process (default is False)
-        :return: new cube where the results are saved
+        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
         """
         cubenew = cube_data_class()
         cubenew.ds['x'] = self.ds['x']
@@ -1379,7 +1379,7 @@ class cube_data_class:
         unit = ['days', 'days', 'm', 'm', 'no unit', 'no unit']
 
         # Build cumulative displacement time series
-        df_list = [reconstruct_common_ref(df[1], result_quality) for df in result]
+        df_list = [reconstruct_common_ref(df, result_quality) for df in result]
 
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array(
@@ -1402,7 +1402,7 @@ class cube_data_class:
 
         # name of variable to store
         if result_quality is not None and 'X_contribution' in result_quality:
-            variables = ['dx', 'dy', 'xcountx', 'xcounty']
+            variables = ['dx', 'dy', 'xcount_x', 'xcount_y']
         else:
             variables = ['dx', 'dy']
 
