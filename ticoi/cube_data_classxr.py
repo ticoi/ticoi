@@ -39,6 +39,7 @@ class cube_data_class:
         self.author = ''
         self.source = ''
         self.ds = xr.Dataset({})
+        self.resolution = 50
 
     def update_dimension(self):
         """
@@ -48,6 +49,7 @@ class cube_data_class:
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
         self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.resolution = (self.ds['x'][1].values-self.ds['x'][0].values)
 
     def subset(self, proj: str, subset: list):
 
@@ -300,9 +302,11 @@ class cube_data_class:
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
-        self.update_dimension()
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'z': 'mid_date'})
+        
+        self.update_dimension()
+        
         date1 = [mjd2date(date_str) for date_str in self.ds['date1'].values]  # convertion in date
         date2 = [mjd2date(date_str) for date_str in self.ds['date2'].values]
         self.ds = self.ds.unify_chunks()
@@ -496,6 +500,7 @@ class cube_data_class:
 
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
+
         self.update_dimension()
 
         if pick_date is not None:  # Temporal subset between two dates
@@ -891,7 +896,7 @@ class cube_data_class:
         :return: filtered dataset
         """
 
-        def loop_rolling(da_arr:xr.Dataset) -> (
+        def loop_rolling(da_arr:xr.Dataset,t_thres:int=200) -> (
                 np.ndarray, np.ndarray):
 
             """
