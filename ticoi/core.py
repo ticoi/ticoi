@@ -598,7 +598,11 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
                             linear_operator=linear_operator, result_quality=result_quality,
                             nb_max_iteration=nb_max_iteration)
 
-    if not interpolation: return result[1]
+    if not interpolation: 
+        if result[1] is not None: return result[1]
+        else:
+            return pd.DataFrame(
+                {'date1': [], 'date2': [], 'result_dx': [], 'result_dy': [], 'xcount_x': [], 'xcount_y': []})
 
     # INTERPOLATION
     if result[1] is not None:  # if inversion have been performed

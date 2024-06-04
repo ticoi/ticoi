@@ -630,6 +630,12 @@ class cube_data_class:
         dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
                                   pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj
                                   )
+        
+        # rechunk again if the size of the cube is changed:
+        if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
+            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim_name=time_dim_name[self.ds.author], verbose=True)
+            self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
+            
         # Reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
