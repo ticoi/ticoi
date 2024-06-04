@@ -21,6 +21,7 @@ import warnings
 import itertools
 import xarray as xr
 import numpy as np
+import pandas as pd
 
 from osgeo import gdal, osr
 from joblib import Parallel, delayed
@@ -37,7 +38,7 @@ from ticoi.cube_data_classxr import cube_data_class
 warnings.filterwarnings("ignore")
 
 ## ------------------- Choose TICOI cube processing method ----------------- ##
-# Choose the TICOI cube processing method you want to use ('block_process' or 'direct_process')
+# Choose the TICOI cube processing method you want to use :
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
 # than every other TICOI processing methods.
@@ -233,7 +234,20 @@ elif TICOI_process == 'direct_process':
     )
 
 elif TICOI_process == 'load':
-    pass
+    cubenew = cube_data_class()
+    cubenew.load(load_file, pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
+                pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
+                subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
+    
+    # Mask some of the data
+    if mask_file is not None:
+        cubenew.mask_cube(mask_file)
+        
+    result = process_blocks_refine(cubenew, nb_cpu=nb_cpu, block_size=block_size, returned='raw', preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+    result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
+                                  'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
+                                  'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
+                                  'temporal_baseline': r[0][1][:, 4]}) for r in result]
 
 stop.append(time.time())
 print(f'[ticoi_cube_demo] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[1] - start[1], 0)} s')

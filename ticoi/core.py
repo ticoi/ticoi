@@ -868,7 +868,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
-        if 'raw' in returned and len(returned) == 1: # Only load the raw data
+        if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
                               delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
                                       solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None, 
