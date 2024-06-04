@@ -57,11 +57,24 @@ class Test_inversion:
         actual = mu_regularisation(regu, self.A, self.dates_range)
         np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-8, err_msg=f"mu_regularisation does not give the correct result for regu={regu}")
 
-    @pytest.mark.parametrize("solver, expected", [('LSMR',
-    np.array([  -7.55988695  , -8.47012557 ,  53.40071386 ,-118.09971264  , 52.38361652,   10.86749089   , 5.53293348 ,  -7.3502032 ]).astype('float32')),
-                                                  ('LS',np.array([  -7.5791097  , -8.460544   ,113.54745   ,-118.18973  ,   -7.585056,   10.759924   ,  5.560593   , -7.3482523]))])
-    def test_inversion_one_component(self,solver,expected):
-        actual = inversion_one_component(self.A, self.dates_range, 1, self.data, solver=solver, Weight=1, mu=self.mu1accelnotnull)[0]
+    @pytest.mark.parametrize(
+        "solver, expected, ini",
+        [
+            ('LSMR', np.array(
+                [-7.55988695, -8.47012557, 53.40071386, -118.09971264, 52.38361652, 10.86749089, 5.53293348,
+                 -7.3502032]).astype('float32'), None),
+            ('LS', np.array(
+                [-7.5791097, -8.460544, 113.54745, -118.18973, -7.585056, 10.759924, 5.560593, -7.3482523]).astype(
+                'float32'), None),
+            # ('LSMR_ini', np.array(
+                # [[ -7.577303  ,  -8.461302  , 108.19255 ,  -118.181625   , -2.2458465,  10.769561   ,  5.558176  ,  -7.348404 ]]).astype('float32'), np.array([-7, -8., 100., -110., -7., 10., 5., -10.]).astype('float32'))
+]
+    )
+
+
+
+    def test_inversion_one_component(self,solver, expected, ini):
+        actual = inversion_one_component(self.A, self.dates_range, 1, self.data, solver=solver, Weight=1,
+                                         mu=self.mu1accelnotnull, ini=ini)[0]
         print(actual)
-        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-4,
-                                   err_msg=f"inversion_one_component does not give the correct result for solver {solver}")
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-4)

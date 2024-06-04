@@ -367,7 +367,7 @@ class class_linear_operator:
 
 
     # %% ======================================================================== #
-    #                             PROPERTY THE SYSTEM                             #
+    #                             PROPERTY OF THE SYSTEM                             #
     # =========================================================================%% #
 
 
@@ -384,7 +384,7 @@ def is_convex(A:np.ndarray) -> bool:
     hessian_matrix = A.T @ A  # Compute the Hessian matrix
     return np.all(np.linalg.eigvals(hessian_matrix) >= 0)
 
-def matric_property(A:np.ndarray)->str:
+def matrix_property(A:np.ndarray)->str:
     """
     Evaluate if the matrix is under determined, over-determined and/or ill posed
     :param A: Design matrix to evaluate
@@ -426,7 +426,7 @@ def inversion_one_component(A:np.ndarray, dates_range:np.ndarray, v_pos:int, dat
     """
 
     # Total process : about 50ms
-    if verbose: matric_property(A) # Matrix A properties
+    if verbose: matrix_property(A) # Matrix A properties
 
 
     v = data[:, v_pos]

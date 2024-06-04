@@ -77,7 +77,7 @@ def gaussian_smooth(series: np.ndarray, t_obs: np.ndarray, t_interp: np.ndarray,
     series = series[~np.isnan(series)]
     try:
         # noinspection PyTypeChecker
-        series = median_filter(series, size=5, mode='reflect', axes=0)
+        # series = median_filter(series, size=5, mode='reflect', axes=0)
         series_interp = np.interp(t_interp, t_obs, series)
         series_smooth = gaussian_filter1d(series_interp, sigma, mode='reflect', truncate=4.0,
                                           radius=t_win)
