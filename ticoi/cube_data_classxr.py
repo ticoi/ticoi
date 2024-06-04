@@ -28,6 +28,9 @@ from rasterio.features import rasterize
 from ticoi.mjd2date import mjd2date
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
+from ticoi.filtering_functions import *
+from typing import Union
+from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 
 
@@ -46,6 +49,7 @@ class cube_data_class:
         self.author = ''
         self.source = ''
         self.ds = xr.Dataset({})
+        self.resolution = 50
 
     def update_dimension(self):
         """
@@ -55,6 +59,7 @@ class cube_data_class:
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
         self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.resolution = (self.ds['x'][1].values-self.ds['x'][0].values)
 
     def subset(self, proj: str, subset: list):
 
@@ -310,6 +315,7 @@ class cube_data_class:
 
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'z': 'mid_date'})
+                
         date1 = [mjd2date(date_str) for date_str in self.ds['date1'].values]  # convertion in date
         date2 = [mjd2date(date_str) for date_str in self.ds['date2'].values]
         self.ds = self.ds.unify_chunks()
@@ -417,6 +423,8 @@ class cube_data_class:
             self.subset(proj, subset)
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
+        
+        self.update_dimension()
 
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'time': 'mid_date'})
@@ -502,6 +510,8 @@ class cube_data_class:
 
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
+
+        self.update_dimension()
 
         if pick_date is not None:  # Temporal subset between two dates
             self.ds = self.ds.where(
@@ -638,6 +648,7 @@ class cube_data_class:
         """
         Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist
         """
+        self.ds = self.ds.unify_chunks()
         if self.ds.chunksizes['mid_date'] != (self.nz,):
             self.ds = self.ds.chunk({'mid_date': self.nz})
         # create a variable for temporal_baseline,be
@@ -744,7 +755,7 @@ class cube_data_class:
         return i, j
 
 
-    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:bool=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:None | xr.Dataset=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
         """
 
         :param i: pixel coordinate for x
@@ -833,7 +844,8 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    def delete_outliers(self, delete_outliers:str|float,flags:bool=None):
+    
+    def delete_outliers(self, delete_outliers:str|float,flags:None | xr.Dataset=None):
         """
         Delete outliers according to a certain criterium
         :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
@@ -885,7 +897,7 @@ class cube_data_class:
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
                     order: int = 3, unit: int = 365, delete_outliers: str | float | None = None,
                     flags: None | xr.Dataset = None, regu: int | str = 1, solver: str = 'LSMR_ini',
-                    proj: str = "EPSG:4326",  velo_or_disp: str = "velo", verbose: bool = False) -> xr.Dataset:
+                    proj: str = "EPSG:4326", velo_or_disp: str = "velo",select_baseline:int|None=None, verbose: bool = False) -> xr.Dataset:
 
         """
         Filter the original data with a spatio-temporal kernel
@@ -903,50 +915,33 @@ class cube_data_class:
         :param solver: solver used to invert the system
         :param proj: EPSG of i,j projection (default is 'EPSG:4326')
         :param velo_or_disp: 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
+        :param select_baseline: Treshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this treshold, it is increased by 30 days
         :param verbose: Print information throughout the process (default is False)
         
         :return: filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.DataArray, mid_dates: xr.DataArray, date_range: np.ndarray,
-                         smooth_method: str = "gaussian", s_win: int = 3, t_win: int = 90, sigma: int = 3, order=3,
-                         baseline: xr.DataArray | None = None, verbose: bool = False) -> (
+        def loop_rolling(da_arr:xr.Dataset,t_thres:int=200) -> (
                 np.ndarray, np.ndarray):
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
             :param da_arr: Original data
-            :param mid_dates: Time labels for input array, in datetime format, should have same length as array, central date of the data
-            :param date_range: 
-            :param smooth_method: Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol') (default is 'gaussian')
-            :param s_win: Window size for spatial average (default is 3)
-            :param t_win: Time window size for 'ewma' smoothing (default is 90)
-            :param sigma: Standard deviation for 'gaussian' filter (default is 3)
-            :param order: Order of the smoothing function (default is 3)
-            :param baseline:
-            :param time_axis: Optional parameter for time axis (default is 2)
-            :param verbose: Print information throughout the process (default is False)
-
             :return: exponential smoothed velocity
             :return: observed dates
             """
 
-            from dask.array.lib.stride_tricks import sliding_window_view
-
             # Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
+            mid_dates = self.ds['mid_date']
+
             if verbose: start = time.time()
 
-            if baseline is not None:
-                baseline = baseline.compute()
-                # if baseline.size > da_arr['mid_date'].size:
-                #     baseline = np.nanmax(baseline, axis=(1,2))
-                
-                idx = np.where(baseline < 700)
-                t_thres = 120
-                idx = np.where(baseline < t_thres )
-                while len(idx[0]) < 3 * len(date_out):
+            if select_baseline is not None:
+                baseline = self.ds['temporal_baseline'].compute()
+                idx = np.where(baseline < select_baseline ) #take only the temporal baseline lower than the treshold selecr_baseline
+                while len(idx[0]) < 3 * len(date_out): #increase the treashold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     t_thres += 30
                     idx = np.where(baseline < t_thres )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
@@ -990,7 +985,7 @@ class cube_data_class:
         if np.isnan(self.ds['date1'].values).all():
             print('Empty sub-cube (masked data ?)')
             return None
-            
+
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
             if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
@@ -1022,31 +1017,13 @@ class cube_data_class:
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
 
-            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)], 
+            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)],
                                                            self.ds['date2'].values[~np.isnan(self.ds['date2'].values)]), axis=0)))
             if verbose: start = time.time()
             vx_filtered, dates_uniq = loop_rolling(
-                self.ds["vx"],
-                self.ds["mid_date"],
-                date_range,
-                smooth_method=smooth_method,
-                s_win=s_win,
-                t_win=t_win,
-                sigma=sigma,
-                order=order,
-                baseline=self.ds["temporal_baseline"]
-            )
+                self.ds['vx'])
             vy_filtered, dates_uniq = loop_rolling(
-                self.ds["vy"],
-                self.ds["mid_date"],
-                date_range,
-                smooth_method=smooth_method,
-                s_win=s_win,
-                t_win=t_win,
-                sigma=sigma,
-                order=order,
-                baseline=self.ds["temporal_baseline"]
-            )
+                self.ds['vy'])
 
             # the time dimension of the smoothed velocity observations is different from the original,
             # which is because of the possible dublicate mid_date of different image pairs...
@@ -1155,9 +1132,9 @@ class cube_data_class:
             # Reproject coordinates
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
-            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
+            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)    
             cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), np.nan)
-            
+
             # Update of cube_data_classxr attributes
             cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})
             cube.nx = cube.ds.dims['x']
@@ -1169,17 +1146,17 @@ class cube_data_class:
         return cube
 
     def merge_cube(self, cube: 'cube_data_class'):
-        
+
         '''
         Merge another cube to the present one. It must have been aligned first (using align_cube)
-        
+
         :param cube: (cube_data_class) The cube to be merged to self
         '''
-        
+
         self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
         self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
         self.nz = self.ds['mid_date'].size
-        
+
         if cube.author not in self.author.split('\n'):
             self.author += f'\n{cube.author}'
 
@@ -1274,7 +1251,7 @@ class cube_data_class:
                          for i in
                          range(self.nx) for j in range(self.ny)]).reshape(self.nx, self.ny)
 
-                                                                                                               
+
     # %% ======================================================================== #
     #                            WRITING RESULTS AS NETCDF                        #
     # =========================================================================%% #
@@ -1331,12 +1308,15 @@ class cube_data_class:
 
         long_name = ['velocity in the East/West direction [m/y]', 'velocity in the North/South direction [m/y]',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
-                     'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
-        short_name = ['x_velocity', 'y_velocity', 'x_countx', 'x_county']
-        if result_quality is not None and 'X_contribution' in result_quality:
-            variables = ['vx', 'vy', 'x_countx', 'x_county']
-        else:
-            variables = ['vx', 'vy']
+                     'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction','Error propagated for the displacement in the direction Est/West',
+                 'Error propagated for  the displacement in the direction North/South [m]']
+        short_name = ['x_velocity', 'y_velocity', 'xcount_x', 'xcount_y','error_x', 'error_y']
+
+        variables = ['vx', 'vy']
+        if result_quality is not None:
+            if 'X_contribution' in result_quality: variables +=  ['xcount_x', 'xcount_y']
+            if 'Error_propagation' in result_quality:variables += ['error_x', 'error_y']
+
         for i, var in enumerate(variables):
             result_arr = np.array(
                 [result[i * self.ny + j][var] if result[i * self.ny + j][var].shape[
@@ -1365,22 +1345,23 @@ class cube_data_class:
                 cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
                 cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
                                                    'long_name': long_name[k]}
-        if result_quality is not None and 'Error_propagation' in result_quality:
-            long_name = [
-                'Error propagated for the displacement in the direction Est/West',
-                'Error propagated for  the displacement in the direction North/South [m]']
-            short_name = ['Error_x', 'Error_y']
-            for var in short_name:
-                result_arr = np.array(
-                    [result[i * self.ny + j][var] if result[i * self.ny + j][var].shape[
-                                                         0] != 0 else np.nan for i in range(self.nx) for j in
-                     range(self.ny)])
-                result_arr = result_arr.reshape((self.nx, self.ny))
-                cubenew.ds[short_name[k]] = xr.DataArray(result_arr, dims=['x', 'y'],
-                                                         coords={'x': self.ds['x'], 'y': self.ds['y']})
-                cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
-                cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
-                                                   'long_name': long_name[k]}
+        # if result_quality is not None and 'Error_propagation' in result_quality:
+        #     long_name = [
+        #         'Sigma0 Est/West',
+        #         'Sigma0 North/South [m]']
+        #     short_name = ['sigma0_x', 'sigma0_y']
+        #     for k,var in enumerate(short_name):
+        #
+        #         result_arr = np.array(
+        #             [result[i * self.ny + j]['sigma0'][k] if result[i * self.ny + j]['sigma0'][k].shape[
+        #                                                  0] != 0 else np.nan for i in range(self.nx) for j in
+        #              range(self.ny)])
+        #         result_arr = result_arr.reshape((self.nx, self.ny))
+        #         cubenew.ds[short_name[k]] = xr.DataArray(result_arr, dims=['x', 'y'],
+        #                                                  coords={'x': self.ds['x'], 'y': self.ds['y']})
+        #         cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
+        #         cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
+        #                                            'long_name': long_name[k]}
 
         del non_null_el, long_name, result_arr
         cubenew.ds['x'] = self.ds['x']
@@ -1423,7 +1404,7 @@ class cube_data_class:
         :param savepath: path where to save the file
         :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
         :param verbose: Print information throughout the process (default is False)
-        :return: new cube where the results are saved
+        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
         """
         cubenew = cube_data_class()
         cubenew.ds['x'] = self.ds['x']
@@ -1438,11 +1419,11 @@ class cube_data_class:
                      'displacement in the East/West direction [m]', 'displacement in the North/South direction [d]',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
-        short_name = ['first_date', 'second_date', 'x_displacement', 'y_displacement', 'x_countx', 'x_county']
+        short_name = ['first_date', 'second_date', 'x_displacement', 'y_displacement', 'xcount_x', 'xcount_y']
         unit = ['days', 'days', 'm', 'm', 'no unit', 'no unit']
 
         # Build cumulative displacement time series
-        df_list = [reconstruct_common_ref(df[1], result_quality) for df in result]
+        df_list = [reconstruct_common_ref(df, result_quality) for df in result]
 
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array(
@@ -1465,7 +1446,7 @@ class cube_data_class:
 
         # name of variable to store
         if result_quality is not None and 'X_contribution' in result_quality:
-            variables = ['dx', 'dy', 'xcountx', 'xcounty']
+            variables = ['dx', 'dy', 'xcount_x', 'xcount_y']
         else:
             variables = ['dx', 'dy']
 

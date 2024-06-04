@@ -16,27 +16,21 @@ def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | None = N
     :return: Cumulative displacement time series in x and y component, pandas dataframe
     """
 
-    if result_dz is None:
-        if result_quality is None or 'X_contribution' not in result_quality:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy'])})
-        else:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy']),
-                 'xcountx': np.cumsum(result['X_countx']), 'xcounty': np.cumsum(result['X_county'])})
-    else:
-        if result_quality is None or 'X_contribution' not in result_quality:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result), 'dz': np.cumsum(result['dz'])})
-        else:
-            data = pd.DataFrame(
-                {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
-                 'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result), 'dz': np.cumsum(result['dz']),
-                 'xcountx': np.cumsum(result['X_countx']), 'xcounty': np.cumsum(result['X_county']),
-                 'xcountz': np.cumsum(result['X_countz'])})
+    data = pd.DataFrame(
+        {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
+         'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy'])})
+
+    if result_quality is not None and 'X_contribution' in result_quality :
+        data['xcount_x']=np.cumsum(result['xcount_x'])
+        data['xcount_y']=np.cumsum(result['xcount_y'])
+
+    if result_quality is not None and 'Error_propagation' in result_quality:
+        data['error_x'] = np.cumsum(result['error_x'])
+        data['error_y'] = np.cumsum(result['error_y'])
+
+    if result_dz is not None:
+        data['dz'] = np.cumsum(result['dz'])
+        if result_quality is not None and 'X_contribution' in result_quality :data['xcount_z']= np.cumsum(result['xcount_z'])
 
     return data
 
@@ -55,30 +49,52 @@ def set_function_for_interpolation(option_interpol: str, x: np.ndarray, dataf: p
     :return fdx_xcount, fdx_ycount the functions which need to be used to interpolate the contributed values in X
     """
     # Compute the functions used to interpolate
-    if option_interpol == 'spline_smooth':
-        # print(len(dataf['dx']) - np.sqrt(2 * len(dataf['dx'])))
-        fdx = interpolate.UnivariateSpline(x, dataf['dx'], k=3)
-        fdy = interpolate.UnivariateSpline(x, dataf['dy'], k=3)
-        if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.UnivariateSpline(x, dataf['xcountx'], k=3)
-            fdy_xcount = interpolate.UnivariateSpline(x, dataf['xcounty'], k=3)
-    elif option_interpol == 'spline':
-        fdx = interpolate.interp1d(x, dataf['dx'], kind='cubic')
-        fdy = interpolate.interp1d(x, dataf['dy'], kind='cubic')
-        if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.interp1d(x, dataf['xcountx'], kind='cubic')
-            fdy_xcount = interpolate.interp1d(x, dataf['xcounty'], kind='cubic')
-    elif option_interpol == 'nearest':
-        fdx = interpolate.interp1d(x, dataf['dx'], kind='nearest')
-        fdy = interpolate.interp1d(x, dataf['dy'], kind='nearest')
-        if result_quality is not None and 'X_contribution' in result_quality:
-            fdx_xcount = interpolate.interp1d(x, dataf['xcountx'], kind='nearest')
-            fdy_xcount = interpolate.interp1d(x, dataf['xcounty'], kind='nearest')
-    if result_quality is not None and 'X_contribution' in result_quality:
-        return fdx, fdy, fdx_xcount, fdy_xcount
-    else:
-        return fdx, fdy, None, None
+    # Define the interpolation functions based on the interpolation option
+    interpolation_functions = {
+        'spline_smooth': lambda x, y: interpolate.UnivariateSpline(x, y, k=3),
+        'spline': lambda x, y: interpolate.interp1d(x, y, kind='cubic'),
+        'nearest': lambda x, y: interpolate.interp1d(x, y, kind='nearest')
+    }
 
+    # Compute the functions used to interpolate
+    if option_interpol in interpolation_functions:
+        interpolation_func = interpolation_functions[option_interpol]
+
+        fdx = interpolation_func(x, dataf['dx'])
+        fdy = interpolation_func(x, dataf['dy'])
+
+        fdx_xcount, fdy_xcount, fdx_error, fdy_error = None, None, None,None
+        if result_quality is not None:
+            if 'X_contribution' in result_quality:
+                fdx_xcount = interpolation_func(x, dataf['xcount_x'])
+                fdy_xcount = interpolation_func(x, dataf['xcount_y'])
+            if 'Error_propagation' in result_quality:
+                fdx_error = interpolation_func(x, dataf['error_x'])
+                fdy_error = interpolation_func(x, dataf['error_y'])
+
+        return fdx, fdy, fdx_xcount, fdy_xcount, fdx_error,fdy_error
+
+    return None, None, None, None  # Return default values if interpolation option is not valid
+
+def full_with_nan(dataf_lp:pd.DataFrame,first_date:pd.Series,second_date:pd.Series)->pd.DataFrame:
+    """
+
+    :param dataf_lp: interpolated results
+    :param first_date: list of first dates of the entire cube
+    :param second_date: list of second dates of the entire cube
+    :return: interpolated with row of name so when there is missing estimation in comparison with the entire cube
+    """
+    nul_df = pd.DataFrame(
+        {'First_date': first_date, 'Second_date': second_date,
+         'vx': np.full(len(first_date), np.nan), 'vy': np.full(len(first_date), np.nan)})
+    if 'xcount_x' in dataf_lp.columns:
+        nul_df['xcount_x'] = np.full(len(first_date), np.nan)
+        nul_df['xcount_y'] = np.full(len(first_date), np.nan)
+    if 'error_x' in dataf_lp.columns:
+        nul_df['error_x'] = np.full(len(first_date), np.nan)
+        nul_df['error_y'] = np.full(len(first_date), np.nan)
+    dataf_lp = pd.concat([nul_df, dataf_lp], ignore_index=True)
+    return dataf_lp
 
 def visualisation_interpolation(dataf_lp: pd.DataFrame, data: pd.DataFrame, path_save: str, show_temp: bool = True,
                                 unit='m/y',
