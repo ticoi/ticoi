@@ -795,7 +795,7 @@ class cube_data_class:
         if data_dates.dtype == '<M8[ns]':  # convert to days if needed
             data_dates = data_dates.astype('datetime64[D]')
 
-        if solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy':
+        if (solver == 'LSMR_ini' or regu == '1accelnotnull' or regu == 'directionxy') and rolling_mean is not None:
             if len(rolling_mean.sizes) == 3:  # if regu == 1accelnotnul, rolling_mean have a time dimesion
                 # Load rolling mean for the given pixel, only on the dates available
                 dates_range = construction_dates_range_np(
@@ -1156,7 +1156,7 @@ class cube_data_class:
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
             # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
-            cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), 0)
+            cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), np.nan)
             
             # Update of cube_data_classxr attributes
             cube.ds = cube.ds.assign_attrs({'proj4': self.ds.proj4})

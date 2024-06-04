@@ -1,6 +1,6 @@
 '''
 Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method
-For one cube of pixel
+for one pixel.
 Author: Laurane Charrier
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
@@ -26,7 +26,7 @@ from ticoi.cube_data_classxr import cube_data_class
 # cube_names = [f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc']
 # path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to store the results
 cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc', # Sentinel-2 cube
-              'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
+               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
 path_save = 'nathan/Tests_MB/useless/'
 i, j = 332100, 5080350 # Point (pixel) where to carry on the computation
 proj = 'EPSG:32632' # Projection of the given coordinates
