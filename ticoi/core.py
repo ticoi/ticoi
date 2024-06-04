@@ -887,7 +887,8 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
 
         return block, flags_block, duration
 
-    async def process_block(block, load_only=False, flags_block=None, nb_cpu=8, verbose=False):
+    async def process_block(block, load_only=False, nb_cpu=8, verbose=False):
+        
         obs_filt = block.filter_cube(**preData_kwargs)
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
@@ -908,6 +909,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
                                       visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
                               for i, j in xy_values_tqdm)
         else: # Apply the whole TICOI process to the data
+            
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
             delayed(process)(block,
                 i, j,
@@ -919,7 +921,9 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, load_only=False, verbose=False, preData_kwargs=None, inversion_kwargs=None):
 
         # blocks = cube_split(cube, block_size=block_size, verbose=True)
+        flags = preData_kwargs['flags']
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
+        
         dataf_list = [None] * ( cube.nx * cube.ny )
 
         loop = asyncio.get_event_loop()
@@ -930,17 +934,19 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
             # load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
             block, flags_block, duration = await future
+            preData_kwargs['flags'] = flags_block
+            inversion_kwargs['flags'] = flags_block
             if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n+1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
-            block_result = await process_block(block, load_only=load_only, flags_block=flags_block, nb_cpu=nb_cpu, verbose=verbose)
+            block_result = await process_block(block, load_only=load_only, nb_cpu=nb_cpu, verbose=verbose)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
