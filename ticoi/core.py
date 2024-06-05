@@ -609,8 +609,12 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
                            linear_operator=linear_operator, result_quality=result_quality,
                            nb_max_iteration=nb_max_iteration)
         
-        if 'invert' in returned:
-            returned_list.append(result)
+        if 'invert' in returned and 'interp' not in returned: 
+            if result[1] is not None:  
+                returned_list.append(result[1])
+            else:
+                returned_list.append(pd.DataFrame(
+                    {'date1': [], 'date2': [], 'result_dx': [], 'result_dy': [], 'xcount_x': [], 'xcount_y': []}))
 
         if 'interp' in returned:   
             # Interpolation
@@ -632,11 +636,6 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
                     returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'NormR': []}))
                 else:
                     returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []}))
-    else:
-        if result[1] is None:
-            returned_list.append(pd.DataFrame(
-                {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
-                 'vz': [], 'xcount_z': [], 'NormR': []}))
     
     if len(returned_list) == 1:
         return returned_list[0]
@@ -937,7 +936,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
  
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, obs_filt=obs_filt,**inversion_kwargs)
+            i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
         for i, j in xy_values_tqdm)
 
         return result_block
