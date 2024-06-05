@@ -588,9 +588,10 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
                            coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
     if flags is not None:
         regu, coef = data[3], data[4]
+    dates_range = data[2]
     # INVERSION
-    if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-    result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
+    # if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
+    result = inversion_core(data[0], i, j, dates_range=dates_range, solver=solver, coef=coef, weight=apriori_weight,
                             visual=visual,
                             verbose=verbose, unit=unit,
                             conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=threshold_it,
@@ -601,8 +602,9 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     if not interpolation: 
         if result[1] is not None: return result[1]
         else:
+            nanvalue = [np.nan] * (len(dates_range) - 1)
             return pd.DataFrame(
-                {'date1': [], 'date2': [], 'result_dx': [], 'result_dy': [], 'xcount_x': [], 'xcount_y': []})
+                {'date1': dates_range[:-1], 'date2': dates_range[1:], 'result_dx': nanvalue, 'result_dy': nanvalue, 'xcount_x': nanvalue, 'xcount_y': nanvalue})
 
     # INTERPOLATION
     if result[1] is not None:  # if inversion have been performed
@@ -903,8 +905,8 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
             return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
                          'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
-        obs_filt = obs_filt.load()
-        block.ds = block.ds.load()
+        # obs_filt = obs_filt.load()
+        # block.ds = block.ds.load()
 
         if load_only: # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
@@ -943,7 +945,8 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
             block, flags_block, duration = await future
             preData_kwargs['flags'] = flags_block
             inversion_kwargs['flags'] = flags_block
-            if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
+            print(f'Block {n+1} loaded in {duration:.2f} s')
+            # if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # load the next block while processing the current block

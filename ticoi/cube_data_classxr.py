@@ -1068,6 +1068,7 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
             self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
+        obs_filt.load()
         self.ds = self.ds.persist()  # crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
@@ -1430,7 +1431,14 @@ class cube_data_class:
 
         # Build cumulative displacement time series
         df_list = [reconstruct_common_ref(df, result_quality) for df in result]
+        
+        max_length_index = max(range(len(df_list)), key=lambda index: len(df_list[index]))
 
+        for i, df in enumerate(df_list):
+            if df.empty:
+                df_list[i] = df_list[max_length_index].copy()
+                df_list[i].loc[:, df_list[i].columns.difference(['Ref_date', 'Second_date'])] = np.nan
+        
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array(
             [df_list[i]['Ref_date'][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))

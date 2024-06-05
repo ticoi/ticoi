@@ -15,7 +15,9 @@ def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | None = N
     :param result_dz: vertical displacement component
     :return: Cumulative displacement time series in x and y component, pandas dataframe
     """
-
+    if result.empty:
+        return pd.DataFrame()
+    
     data = pd.DataFrame(
         {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
          'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy'])})
