@@ -632,6 +632,12 @@ class cube_data_class:
         }
         dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
                                   pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
+        
+        # rechunk again if the size of the cube is changed:
+        if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
+            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim_name=time_dim_name[self.ds.author], verbose=True)
+            self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
+            
         # Reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
@@ -1064,6 +1070,7 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
             self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
+        obs_filt.load()
         self.ds = self.ds.persist()  # crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
@@ -1426,7 +1433,14 @@ class cube_data_class:
 
         # Build cumulative displacement time series
         df_list = [reconstruct_common_ref(df, result_quality) for df in result]
+        
+        max_length_index = max(range(len(df_list)), key=lambda index: len(df_list[index]))
 
+        for i, df in enumerate(df_list):
+            if df.empty:
+                df_list[i] = df_list[max_length_index].copy()
+                df_list[i].loc[:, df_list[i].columns.difference(['Ref_date', 'Second_date'])] = np.nan
+        
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array(
             [df_list[i]['Ref_date'][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
