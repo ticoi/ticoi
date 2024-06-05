@@ -632,6 +632,11 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
                     returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'NormR': []}))
                 else:
                     returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []}))
+    else:
+        if result[1] is None:
+            returned_list.append(pd.DataFrame(
+                {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+                 'vz': [], 'xcount_z': [], 'NormR': []}))
     
     if len(returned_list) == 1:
         return returned_list[0]
@@ -905,7 +910,9 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
 
         return block, flags_block, duration
 
-    async def process_block(block, returned=returned, flags_block=None, nb_cpu=8, verbose=False): 
+
+    async def process_block(block, returned=returned, nb_cpu=8, verbose=False): 
+
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
@@ -917,34 +924,20 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
                               for i, j in xy_values_tqdm)
             return result_block
         
-        obs_filt = block.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
-                                     t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
-                                     proj=preData_kwargs['proj'], flags=flags_block, regu=preData_kwargs['regu'], 
-                                     delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                     verbose=preData_kwargs['verbose'])
+        obs_filt = block.filter_cube(**preData_kwargs)
         
         # There is no data on the whole block (masked data)
         if obs_filt is None and 'interp' in returned:
             return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
                          'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
-        obs_filt = obs_filt.load()
-        block.ds = block.ds.load()
+
+        # obs_filt = obs_filt.load()
+        # block.ds = block.ds.load()
  
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], inversion_kwargs['path_save'], 
-            returned=returned, obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
-            iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
-            first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
-            threshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
-            regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
-            option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
-            proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
-            unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'], 
-            nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'], 
-            interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
-            visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+            i, j, obs_filt=obs_filt,**inversion_kwargs)
         for i, j in xy_values_tqdm)
 
         return result_block
@@ -961,7 +954,9 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
             raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
         # blocks = cube_split(cube, block_size=block_size, verbose=True)
+        flags = preData_kwargs['flags']
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
+        
         dataf_list = [None] * ( cube.nx * cube.ny )
 
         loop = asyncio.get_event_loop()
@@ -972,17 +967,20 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
             # load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
             block, flags_block, duration = await future
-            if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
+            preData_kwargs['flags'] = flags_block
+            inversion_kwargs['flags'] = flags_block
+            print(f'Block {n+1} loaded in {duration:.2f} s')
+            # if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n+1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, preData_kwargs['flags'])
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
-            block_result = await process_block(block, returned=returned, flags_block=flags_block, nb_cpu=nb_cpu, verbose=verbose)
+            block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
