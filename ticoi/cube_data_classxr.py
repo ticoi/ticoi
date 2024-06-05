@@ -59,7 +59,7 @@ class cube_data_class:
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
         self.nz = self.ds['mid_date'].sizes['mid_date']
-        self.resolution = (self.ds['x'][1].values-self.ds['x'][0].values)
+        self.resolution = self.ds['x'].values[1] - self.ds['x'].values[0]
 
     def subset(self, proj: str, subset: list):
 
@@ -83,6 +83,9 @@ class cube_data_class:
         else:
             self.ds = self.ds.sel(x=slice(np.min([subset[0], subset[1]]), np.max([subset[0], subset[1]])),
                                   y=slice(np.max([subset[2], subset[3]]), np.min([subset[2], subset[3]])))
+        
+        if len(self.ds['x'].values) == 0 and len(self.ds['y'].values) == 0:
+            print(f'[Cube loading] The given subset is not part of cube {self.filename}')
 
     def buffer(self, proj: str, buffer: list):
 
@@ -114,6 +117,9 @@ class cube_data_class:
             self.ds = self.ds.sel(x=slice(np.min([i1, i2]), np.max([i1, i2])),
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
+            
+        if len(self.ds['x'].values) == 0 and len(self.ds['y'].values) == 0:
+            print(f'[Cube loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
                                      time_dim_name: str = 'mid_date', verbose: bool = False) -> (int, int, int):
@@ -198,7 +204,7 @@ class cube_data_class:
         """
 
         if verbose:
-            print(filepath)
+            print(f'[Cube loading] Path to cube file : {filepath}')
 
         self.filedir = os.path.dirname(filepath)  # Path were is stored the netcdf file
         self.filename = os.path.basename(filepath)  # Name of the netcdf file
@@ -224,7 +230,7 @@ class cube_data_class:
 
         date1 = np.array([np.datetime64(date_str, 'D') for date_str in self.ds['acquisition_date_img1'].values])
         date2 = np.array([np.datetime64(date_str, 'D') for date_str in self.ds['acquisition_date_img2'].values])
-        # np.char.strip is used to remove the null character ('�') from each elemen and np.core.defchararray.add to
+        # np.char.strip is used to remove the null character ('�') from each element and np.core.defchararray.add to
         # concatenate array of different types
         sensor = np.core.defchararray.add(np.char.strip(self.ds['mission_img1'].values.astype(str), '�'),
                                           np.char.strip(self.ds['satellite_img1'].values.astype(str), '�')
@@ -281,9 +287,8 @@ class cube_data_class:
         self.ds = self.ds.unify_chunks()
 
     def load_millan(self, filepath: str, conf: bool = False, subset: list | None = None, buffer: list | None = None,
-                    pick_date: list | None = None,
-                    pick_sensor: list | None = None, pick_temp_bas: list | None = None, proj: str = 'EPSG:4326',
-                    verbose: bool = False):
+                    pick_date: list | None = None, pick_sensor: list | None = None, pick_temp_bas: list | None = None, 
+                    proj: str = 'EPSG:4326', verbose: bool = False):
 
         """
         Load a cube dataset written by R. Millan et al.
@@ -300,17 +305,17 @@ class cube_data_class:
         """
 
         if verbose:
-            print(filepath)
+            print(f'[Cube loading] Path to cube file : {filepath}')
+            
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)  # name of the netcdf file
         self.author = 'IGE'  # name of the author
         self.source = self.ds.source
         del filepath
 
-        if subset is not None:  # crop according to 4 coordinates
+        if subset is not None:  # Crop according to 4 coordinates
             self.subset(proj, subset)
-
-        elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
+        elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
         # Uniformization of the name and format of the time coordinate
@@ -327,16 +332,15 @@ class cube_data_class:
         self.ds = self.ds.unify_chunks()
         del date1, date2
 
-        if pick_date is not None:  # Temporal subset between two dates
+        # Temporal subset between two dates
+        if pick_date is not None:
             self.ds = self.ds.where(
                 ((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
                         self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(),
                 drop=True)
         del pick_date
 
-        self.ds = self.ds.assign_coords(
-            mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
-
+        self.ds = self.ds.assign_coords(mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
         self.update_dimension()
 
         if conf and 'confx' not in self.ds.data_vars:  # convert the errors into confidence indicators between 0 and 1
@@ -391,12 +395,11 @@ class cube_data_class:
         self.ds = self.ds.unify_chunks()
 
     def load_ducasse(self, filepath: str, conf: bool = False, subset: list | None = None, buffer: list | None = None,
-                     pick_date: list | None = None,
-                     pick_sensor: list | None = None, pick_temp_bas: list | None = None, proj: str = 'EPSG:4326',
-                     verbose: bool = False):
+                     pick_date: list | None = None, pick_sensor: list | None = None, pick_temp_bas: list | None = None, 
+                     proj: str = 'EPSG:4326', verbose: bool = False):
 
         """
-        Load a cube dataset written by E. Ducasse et al.
+        Load a cube dataset written by E. Ducasse et al. (Pleiades data)
         
         :param filepath: Filepath of the dataset
         :param conf: If True convert the error in confidence between 0 and 1 (default is False)
@@ -410,11 +413,11 @@ class cube_data_class:
         """
 
         if verbose:
-            print(filepath)
+            print(f'[Cube loading] Path to cube file : {filepath}')
+            
         self.ds = self.ds.chunk({'x': 125, 'y': 125, 'time': 2000})  # set chunk
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)  # name of the netcdf file
-        # self.author = self.ds.author  # name of the author
         self.author = 'IGE'  # name of the author
         del filepath
 
@@ -423,11 +426,10 @@ class cube_data_class:
             self.subset(proj, subset)
         elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
-        
-        self.update_dimension()
 
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'time': 'mid_date'})
+        self.update_dimension()
         date1 = [date_str.split(' ')[0] for date_str in self.ds['mid_date'].values]
         date2 = [date_str.split(' ')[1] for date_str in self.ds['mid_date'].values]
         self.ds['date1'] = xr.DataArray(np.array(date1).astype('datetime64[ns]'), dims='mid_date').chunk(
@@ -436,17 +438,16 @@ class cube_data_class:
             chunks=self.ds.chunks['mid_date'])
         del date1, date2
 
-        if pick_date is not None:  # Temporal subset between two dates
+        # Temporal subset between two dates
+        if pick_date is not None:
             self.ds = self.ds.where(
                 ((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
                         self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(),
                 drop=True)
         del pick_date
 
-        self.ds = self.ds.assign_coords(
-            mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
-
-        self.update_dimension()  # update self.nx,self.ny,self.nz
+        self.ds = self.ds.assign_coords(mid_date=np.array(self.ds['date1'] + (self.ds['date2'] - self.ds['date1']) // 2))
+        self.update_dimension()  # update self.nx, self.ny and self.nz
 
         # Drop variables not in the specified list
         variables_to_keep = ['vx', 'vy', 'mid_date', 'x', 'y', 'date1', 'date2']
@@ -494,7 +495,8 @@ class cube_data_class:
         """
 
         if verbose:
-            print(filepath)
+            print(f'[Cube loading] Path to cube file : {filepath}')
+            
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)  # name of the netcdf file
         if self.ds.author == 'J. Mouginot, R.Millan, A.Derkacheva_aligned':
@@ -560,7 +562,7 @@ class cube_data_class:
     def load(self, filepath: str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
              buffer: str | None = None, pick_date: str | None = None,
              pick_sensor: str | None = None, pick_temp_bas: str | None = None, proj: str = 'EPSG:4326',
-             verbose: bool = False):
+             author: str | None = None, verbose: bool = False):
 
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
@@ -576,6 +578,7 @@ class cube_data_class:
         :param pick_sensor: A list of strings, pick only the corresponding sensors (default is None)
         :param pick_temp_bas: A list of 2 integer, pick only the data which have a temporal baseline between these two integers (default is None)
         :param proj: Projection of the buffer or subset which is given (default is 'EPSG:4326')
+        :param author: Author of the cube (to decide which loading method to use)
         :param verbose: Print information throughout the process (default is False)
         """
 
@@ -590,17 +593,17 @@ class cube_data_class:
         }
 
         self.__init__()
-        with dask.config.set(
-                **{"array.slicing.split_large_chunks": False}
-        ):  # To avoid creating the large chunks
-            if filepath.split(".")[-1] == "nc":
+        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
+            if filepath.split(".")[-1] == "nc":  
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
                 except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
-
-                if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
+                
+                if author is not None:
+                    self.ds.attrs["author"] = author
+                elif "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
                 if chunks == {}:  # Rechunk with optimal chunk size
@@ -616,7 +619,7 @@ class cube_data_class:
                                           consolidated=True, chunks=chunks)
 
         if verbose:
-            print("file open")
+            print('[Cube loading] File open')
 
         dico_load = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
@@ -628,8 +631,7 @@ class cube_data_class:
             "S. Leinss, L. Charrier": self.load_charrier,
         }
         dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
-                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj
-                                  )
+                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
         
         # rechunk again if the size of the cube is changed:
         if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):

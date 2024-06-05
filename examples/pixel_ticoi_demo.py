@@ -23,10 +23,11 @@ from ticoi.cube_data_classxr import cube_data_class
 
 ####  Selection of data
 # Paths to the data cubes
-# cube_names = [f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc']
-# path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to store the results
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc', # Sentinel-2 cube
-               'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
+# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc',] # Sentinel-2 cube
+# cube_names  = ['nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'] # Pleiade cube
+cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2_2022_2023/c_x01715_y03920_S2.nc']
+# cube_authors = "J. Mouginot, R.Millan, A.Derkacheva"
+cube_authors = None
 path_save = 'nathan/Tests_MB/useless/'
 i, j = 332100, 5080350 # Point (pixel) where to carry on the computation
 proj = 'EPSG:32632' # Projection of the given coordinates
@@ -89,20 +90,22 @@ start = [time.time()]
 
 cube = cube_data_class()
 cube.load(cube_names[0], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
-          buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
+          buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={}, 
+          author=cube_authors[0] if type(cube_authors) == list else cube_authors)
 
 # Several cubes have to be merged together
 if len(cube_names) > 1:
     for n in range(1, len(cube_names)):
         cube2 = cube_data_class()
         cube2.load(cube_names[n], pick_date=dates_input, proj=proj, pick_temp_bas=temp_baseline, 
-                   buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={})
+                   buffer=[i, j, buffer_size], conf=conf, pick_sensor=sensor, chunks={},
+                   author=cube_authors[n] if type(cube_authors) == list else cube_authors)
         cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
         cube.merge_cube(cube2)
 
 stop = [time.time()]
-print(f'[ticoi_pixel_demo] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
-print(f'[ticoi_pixel_demo] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[Data Download] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[Data Download] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
 
 start.append(time.time())
 
@@ -119,7 +122,7 @@ last_date_interpol = np.max(cube.date2_())
 date1 = None
 
 stop.append(time.time())
-print(f'[ticoi_pixel_demo] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
+print(f'[Data Download] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
 
 
 # %% ======================================================================== #
@@ -134,7 +137,7 @@ A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, solver=so
                                   visual=visual, verbose=verbose)
 
 stop.append(time.time())
-print(f'[ticoi_pixel_demo] Inversion took {round((stop[2] - start[2]), 4)} s')
+print(f'[Inversion] Inversion took {round((stop[2] - start[2]), 4)} s')
 
 if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=unit, show=True, figsize=(12, 6))
 if save: result.to_csv(f'{path_save}/ILF_result.csv')
@@ -157,8 +160,9 @@ dataf_lp = interpolation_core(result, interpolation_bas,
                               verbose=verbose, vmax=vmax)
 
 stop.append(time.time())
-print(f'[ticoi_pixel_demo] Interpolation took {round((stop[3] - start[3]), 4)} s')
+print(f'[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s')
 
-if save: dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
+if save: 
+    dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
 
-print(f'[ticoi_pixel_demo] Overall processing took {round((stop[3] - start[0]), 4)} s')
+print(f'[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s')
