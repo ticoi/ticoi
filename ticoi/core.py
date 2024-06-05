@@ -140,7 +140,7 @@ np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | 
 
 def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.ndarray | None = None,
                    solver: str = 'LSMR', coef: int = 100, weight: bool = False, iteration: bool = True,
-                   treshold_it: float = 0.1, unit: int = 365,
+                   threshold_it: float = 0.1, unit: int = 365,
                    conf: bool = False, regu: int | str = 1, mean: list | None = None,
                    detect_temporal_decorrelation: bool = True, linear_operator: bool = False,
                    result_quality: list | None = None,
@@ -158,7 +158,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
     :param coef: Coef of Tikhonov regularisation, int
     :param weight: bool, if True  use of aprori weight
     :param iteration: bool, if True, use of iterations
-    :param treshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
+    :param threshold_it: int, threshold to test the stability of the results between each iteration, use to stop the process
     :param unit: str, m/d or m/y
     :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param regu : str, type of regularization
@@ -275,11 +275,11 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                 regu=regu,
                 linear_operator=linear_operator, ini=None, accel=accel)
             # print('nb_max_iteration',nb_max_iteration)
-            # Continue to iterate until the difference between two results is lower than treshold_it or the number of iteration larger than 10
+            # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             # 6 sec
             i = 2
-            while (np.mean(abs(result_dx_i - result_dx)) > treshold_it or np.mean(
-                    abs(result_dy_i - result_dy)) > treshold_it) and i < nb_max_iteration:
+            while (np.mean(abs(result_dx_i - result_dx)) > threshold_it or np.mean(
+                    abs(result_dy_i - result_dy)) > threshold_it) and i < nb_max_iteration:
                 result_dx = result_dx_i
                 result_dy = result_dy_i
                 result_dx_i, result_dy_i, weight_ix, weight_iy, residu_normx, residu_normy = inversion_iteration(
@@ -538,7 +538,8 @@ def interpolation_core(result: np.ndarray, interval_output: int, path_save: str,
     return dataf_lp
 
 
-def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, interpolation_load_pixel='nearest',
+def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='interp',
+            obs_filt=None, interpolation_load_pixel='nearest',
             iteration=True, interval_output=1,
             first_date_interpol=None, proj='EPSG:4326',
             last_date_interpol=None, threshold_it=0.1, conf=True, flags=None, regu=1, interpolation_bas=False,
@@ -558,11 +559,12 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     :param coef: int, coefficients of the Tikhonov regularisation, int
     :param apriori_weight: bool, if True  use of aprori weight
     :param path_save: str, where to save the figures (if visual is true)
+    :param returned: str or list of str, what is to be returned ('interp' for TICOI results, 'raw' for raw data)
     :param iteration: bool, if True, use of iterations
     :param interval_output: Temporal sampling of the leap frog time series, int
     :param first_date_interpol: np.datetime64 object, first date at wich the time series is interpolated
     :param last_date_interpol: np.datetime64 object, last date at wich the time series is interpolated
-    :param threshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
+    :param threshold_it: int, threshold to test the stability of the results between each iteration, use to stop the process
     :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param regu : str, type of regularization
     :param interpolation_bas: int, temporal sampling of the interpolated leap frog time series
@@ -583,45 +585,62 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
     :return dataf_list: pandas dataframe, result of the temporal inversion + interpolation at point (i, j) if inversion was successful, an empty
     pd dataframe if not
     '''
-    # LOADING OF DATA OVER ONE PIXEL
+    
+    returned_list = []
+    
+    # Loading data at pixel location
     data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver,
                            coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
-    if flags is not None:
-        regu, coef = data[3], data[4]
-    # INVERSION
-    # if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-    result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
-                            visual=visual,
-                            verbose=verbose, unit=unit,
-                            conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=threshold_it,
-                            detect_temporal_decorrelation=detect_temporal_decorrelation,
-                            linear_operator=linear_operator, result_quality=result_quality,
-                            nb_max_iteration=nb_max_iteration)
 
-    if not interpolation: 
-        if result[1] is not None: return result[1]
-        else:
-            return pd.DataFrame(
-                {'date1': [], 'date2': [], 'result_dx': [], 'result_dy': [], 'xcount_x': [], 'xcount_y': []})
+    if 'raw' in returned:
+        returned_list.append(data)
+    
+    if 'invert' in returned or 'interp' in returned:
+        if flags is not None:
+            regu, coef = data[3], data[4]
+        
+        # Inversion
+        if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
+        result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
+                           visual=visual,
+                           verbose=verbose, unit=unit,
+                           conf=conf, regu=regu, mean=data[1], iteration=iteration, threshold_it=threshold_it,
+                           detect_temporal_decorrelation=detect_temporal_decorrelation,
+                           linear_operator=linear_operator, result_quality=result_quality,
+                           nb_max_iteration=nb_max_iteration)
+        
+        if 'invert' in returned:
+            returned_list.append(result)
 
-    # INTERPOLATION
-    if result[1] is not None:  # if inversion have been performed
-        if interpolation_bas == False: interpolation_bas = interval_output
-        dataf_list = interpolation_core(result[1],
-                                        interpolation_bas,
-                                        path_save, option_interpol=option_interpol,
-                                        first_date_interpol=first_date_interpol, last_date_interpol=last_date_interpol,
-                                        visual=visual, data=data, unit=unit, redundancy=redundancy,
-                                        result_quality=result_quality,
-                                        verbose=verbose)
-
-        if result_quality is not None and 'Norm_residual' in result_quality: dataf_list['NormR'] = result[1][
-            'NormR']  # store norm of the residual from the inversion
-        return dataf_list
+        if 'interp' in returned:   
+            # Interpolation
+            if result[1] is not None:  # if inversion have been performed
+                if interpolation_bas == False: interpolation_bas = interval_output
+                dataf_list = interpolation_core(result[1],
+                                                interpolation_bas,
+                                                path_save, option_interpol=option_interpol,
+                                                first_date_interpol=first_date_interpol, last_date_interpol=last_date_interpol,
+                                                visual=visual, data=data, unit=unit, redundancy=redundancy,
+                                                result_quality=result_quality,
+                                                verbose=verbose)
+        
+                if result_quality is not None and 'Norm_residual' in result_quality: 
+                    dataf_list['NormR'] = result[1]['NormR']  # store norm of the residual from the inversion
+                returned_list.append(dataf_list)
+            else:
+                if result_quality is not None and 'Norm_residual' in result_quality: 
+                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'NormR': []}))
+                else:
+                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []}))
     else:
-        return pd.DataFrame(
-            {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
-             'vz': [], 'xcount_z': [], 'NormR': []})
+        if result[1] is None:
+            returned_list.append(pd.DataFrame(
+                {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
+                 'vz': [], 'xcount_z': [], 'NormR': []}))
+    
+    if len(returned_list) == 1:
+        return returned_list[0]
+    return returned_list if len(returned_list) > 0 else None
 
 
 # def process_blocks(cube, nb_cpu=8, block_size=0.5, verbose=False, preData_kwargs=None, inversion_kwargs=None):
@@ -639,7 +658,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
 #     :param first_date_interpol: str, first date of the interpolation
 #     :param proj: str, projection of the cube
 #     :param last_date_interpol: str, last date of the interpolation
-#     :param treshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
+#     :param threshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
 #     :param conf: bool, if True set the confidence to the error in the observations
 #     :param flags: None or list, which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
 #     :param regu: int, type of regularisation
@@ -779,7 +798,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
 #         delayed(process)(block,
 #             i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel,
 #             iteration=iteration, interval_output=interval_output, first_date_interpol=first_date_interpol,
-#             last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu,
+#             last_date_interpol=last_date_interpol, threshold_it=threshold_it, conf=conf, flags=flags, regu=regu,
 #             interpolation_bas=interpolation_bas, option_interpol=option_interpol, redundancy=redundancy, proj=proj,
 #             detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
 #             nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers, interpolation=interpolation,
@@ -799,7 +818,8 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
 
 #     return dataf_list
 
-def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preData_kwargs=None, inversion_kwargs=None, verbose=False):
+
+def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
 
     '''Loop over the blocks of the cube and process each block.
 
@@ -815,7 +835,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
     :param first_date_interpol: str, first date of the interpolation
     :param proj: str, projection of the cube
     :param last_date_interpol: str, last date of the interpolation
-    :param treshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
+    :param threshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
     :param conf: bool, if True set the confidence to the error in the observations
     :param flags: None or list, which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
     :param regu: int, type of regularisation
@@ -890,38 +910,48 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
 
         return block, flags_block, duration
 
-    async def process_block(block, load_only=False, nb_cpu=8, verbose=False):
-        
-        obs_filt = block.filter_cube(**preData_kwargs)
+
+    async def process_block(block, returned=returned, nb_cpu=8, verbose=False): 
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
+        if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
+            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+                              delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
+                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None, 
+                                      visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+                              for i, j in xy_values_tqdm)
+            return result_block
+        
+        obs_filt = block.filter_cube(**preData_kwargs)
+        
         # There is no data on the whole block (masked data)
-        if obs_filt is None:
+        if obs_filt is None and 'interp' in returned:
             return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
                          'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
+
         # obs_filt = obs_filt.load()
         # block.ds = block.ds.load()
-
-        if load_only: # Only load the raw data
-            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-                              delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
-                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=obs_filt,
-                                      visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
-                              for i, j in xy_values_tqdm)
-        else: # Apply the whole TICOI process to the data
-            
-            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(process)(block,
-                i, j,
-                obs_filt=obs_filt,**inversion_kwargs)
-            for i, j in xy_values_tqdm)
+ 
+        result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+        delayed(process)(block,
+            i, j, obs_filt=obs_filt,**inversion_kwargs)
+        for i, j in xy_values_tqdm)
 
         return result_block
     
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, load_only=False, verbose=False, preData_kwargs=None, inversion_kwargs=None):
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
+        
+        # Get the parameters
+        if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+            for key, value in preData_kwargs.items():
+                globals()[key] = value
+            for key, value in inversion_kwargs.items():
+                globals()[key] = value
+        else:
+            raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
         # blocks = cube_split(cube, block_size=block_size, verbose=True)
         flags = preData_kwargs['flags']
@@ -950,7 +980,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
                 x_start, x_end, y_start, y_end = blocks[n+1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
-            block_result = await process_block(block, load_only=load_only, nb_cpu=nb_cpu, verbose=verbose)
+            block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose)
 
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
@@ -962,8 +992,8 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, load_only=False, preDa
             del block_result, block, flags_block
 
         return dataf_list
-
-    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, load_only=load_only, preData_kwargs=preData_kwargs,
+      
+    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs, 
                                            inversion_kwargs=inversion_kwargs, verbose=verbose))
 
 

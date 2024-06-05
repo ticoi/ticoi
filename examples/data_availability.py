@@ -46,7 +46,7 @@ to greatly limit the influence of some 'bad' years in terms of data availability
 
 Results are saved in a .tiff format to the specified path.
 
-Author : Nathan Lioret, Laurane Charrier, Lei Guo
+Authors : Nathan Lioret, Laurane Charrier, Lei Guo
 '''
 
 import time
@@ -64,128 +64,6 @@ from tqdm import tqdm
 
 from ticoi.core import process_blocks_refine
 from ticoi.cube_data_classxr import cube_data_class
-
-
-# %%========================================================================= #
-#                          INDICES USING RAW DATA ONLY                        #
-# =========================================================================%% #
-
-# Generate a .tiff file summarizing an index value for all pixels of the data
-# The indices using this function only use the raw data (not the monthly availability computed afterwards
-# nor the data availability maps)
-def generate_tiff_index_map(index, data, period, coord_data, driver, srs, path, parallel=True, nb_cpu=12, dtype='float32'):
-    # Generate index map according to the selected method
-    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype=dtype)
-    data_tqdm = tqdm(data, total=len(data), mininterval=0.5)
-    if parallel: # Use parallelization (for ressource-consuming indices)
-        index_map[coord_data['long_data'], coord_data['lat_data']] = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(index)(d, period=period) for d in data_tqdm)
-    else: # Direct process of the indices
-        index_map[coord_data['long_data'], coord_data['lat_data']] = [index(d) for d in data_tqdm]
-
-    # Generate tiff file
-    if dtype == 'float32':
-        tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Float32)
-    elif dtype == 'int16':
-        tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Int16)
-    tiff.SetGeoTransform([np.min(coord_data['longitude']), coord_data['resolution'], 0, 
-                          np.max(coord_data['latitude']), 0, -coord_data['resolution']])
-    tiff.GetRasterBand(1).WriteArray(index_map.T)
-    tiff.SetProjection(srs.ExportToWkt())
-    tiff = None
-
-# Just summing up all the available data at the point over the whole considered period
-def all_data(data, period=None):
-    return data.shape[0]
-
-# Median temporal baseline (gap in days between the two acquisition dates) of the data at the point
-def median_baseline(data, period=None):
-    return data['temporal_baseline'].median()
-
-# All the dates (start and end dates for each data) are concatenated in a single list, which is then sorted. This index returns the
-# maximum gap between two dates (leap frog) as an approximation of the lowest redundancy in the data.
-# This index can be computed periodically (see the definition in introduction) with the period parameter.
-def max_leap_frog(data, period=None):
-    if data.empty:
-        return 0
-
-    if period is not None:
-        data = data.copy()
-        data = data.set_index(data['date1'] + (data['date2'] - data['date1']) // 2).sort_index()
-        years = pd.date_range(start=data['date1'].min() - pd.DateOffset(years=1) if data['date1'].min().month < 6 else data['date1'].min(),
-                              end=data['date2'].max() + pd.DateOffset(years=1) if data['date2'].max().month > 6 else data['date2'].max(), 
-                              freq='YS', inclusive='neither')
-        season_indices = [max_leap_frog(data[(data.index >= years[i]) & (data.index <= years[i+period])]) for i in range(len(years)-period)]
-        return np.min(season_indices) if len(season_indices) > 0 else 0
-    
-    return np.max(np.diff(np.sort(np.concatenate([data['date1'], data['date2']])))
-                  .astype('timedelta64[D]').astype('int'))
-
-
-# %%========================================================================= #
-#         INDICES USING MONTHLY AVAILABILITY AND/OR AVAILABILITY MAPS         #
-# =========================================================================%% #
-
-## --------------- ------- Using monthly availability ---------------------- ## 
-# Generate a .tiff file summarizing an index value for all pixels of the data
-# The indices using this function require the monthly availability to be computed (but not any data availability map)
-def generate_tiff_index_map_from_monthly_availability(index, monthly, positions, n_month, coord_data, path):
-    index_map = index(monthly, positions, coord_data, n_month=n_month)
-    tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Float32)
-    tiff.SetGeoTransform([np.min(coord_data['longitude']), coord_data['resolution'], 0, 
-                          np.max(coord_data['latitude']), 0, -coord_data['resolution']])
-    tiff.GetRasterBand(1).WriteArray(index_map.T)
-    tiff.SetProjection(srs.ExportToWkt())
-    tiff = None
-
-# Minimum amount of data available on a sliding window of n months over the whole period of the measurements
-def mini_nmonth(monthly, positions, coord_data, n_month=1):
-    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype='float32')
-    if n_month > 1:
-        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month-1:]]
-    index_map[coord_data['long_data'], coord_data['lat_data']] = [monthly.loc[[(i, j)]].squeeze().min() for (i, j) in positions]
-    return index_map
-
-# Month (or selection of n months among the 12 months) with the lowest average of available data on the whole dataset
-def mean_nmonth(monthly, positions, coord_data, n_month=1):
-    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype='float32')
-    monthly = monthly.groupby(monthly.columns.month, axis=1).mean()
-    if n_month > 1:
-        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month-1:]]
-    index_map[coord_data['long_data'], coord_data['lat_data']] = monthly_map.min(axis=1).to_list()
-    return index_map
-
-# Month (or selection of n months among the 12 months) with the lowest median of available data on the whole dataset
-def median_nmonth(monthly, positions, coord_data, n_month=1):
-    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype='float32')
-    monthly = monthly.groupby(monthly.columns.month, axis=1).median()
-    if n_month > 1:
-        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month-1:]]
-    index_map[coord_data['long_data'], coord_data['lat_data']] = monthly_map.min(axis=1).to_list()
-    return index_map
-
-## ---------------------- Using data availability maps --------------------- ##
-# Generate a .tiff file summarizing an index value for all pixels of the data
-# The indices using this function require the data availability maps to be computed
-def generate_tiff_index_map_from_availability_map(index, maps, coord_data, driver, srs, path):
-    index_map = index(maps)
-    tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Float32)
-    tiff.SetGeoTransform([np.min(coord_data['longitude']), coord_data['resolution'], 0, 
-                          np.max(coord_data['latitude']), 0, -coord_data['resolution']])
-    tiff.GetRasterBand(1).WriteArray(index_map.T)
-    tiff.SetProjection(srs.ExportToWkt())
-    tiff = None
-
-# Each pixel take the value of the season with the lowest amount of available data
-def mini_season(maps):
-    winter, spring, summer, autumn = maps
-    return np.min(np.stack([winter, spring, summer, autumn]), axis=0)
-
-# Season with the least data / all data : index to evaluate the repartition of the data over the year
-def min_all_season(maps):
-    winter, spring, summer, autumn = maps
-    return np.nan_to_num(4 * np.min(np.stack([winter, spring, summer, autumn], axis=0), axis=0)
-                / (winter + spring + summer + autumn))
 
 
 # %%========================================================================= #
@@ -252,7 +130,7 @@ solver = 'LSMR_ini'
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': [331523, 336185, 5077653, 5084361] , # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'subset': [330200, 331000, 5075500, 5076800] , # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
                'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
                'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
@@ -292,7 +170,7 @@ block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI 
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
-
+    
 
 # %%========================================================================= #
 #                                 CUBE LOADING                                #
@@ -343,14 +221,7 @@ if load_pixel_process == 'block_process':
     result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, load_only=True, preData_kwargs=preData_kwargs, inversion_kwargs=load_pixel_kwargs)
 
 # Direct loading of the whole cube
-elif load_pixel_process == 'direct_process':
-    # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
-                                t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
-                                proj=preData_kwargs['proj'], flags=preData_kwargs['flags'], regu=preData_kwargs['regu'], 
-                                delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                verbose=preData_kwargs['verbose'])
-    
+elif load_pixel_process == 'direct_process':    
     # Progression bar
     xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
     xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
@@ -359,14 +230,14 @@ elif load_pixel_process == 'direct_process':
     print('[data_availability] Loading pixels...')
     result = Parallel(n_jobs=nb_cpu, verbose=0)(
                 delayed(cube.load_pixel)(i, j, proj=load_pixel_kwargs['proj'], interp=load_pixel_kwargs['interpolation_load_pixel'],
-                             solver=load_pixel_kwargs['solver'], regu=load_pixel_kwargs['regu'], rolling_mean=obs_filt, 
+                             solver=load_pixel_kwargs['solver'], regu=load_pixel_kwargs['regu'], rolling_mean=None, 
                              visual=load_pixel_kwargs['visual'], verbose=load_pixel_kwargs['verbose'])
                 for i, j in xy_values_tqdm)
 
 result = [pd.DataFrame(data={'date1': r[0][0][:, 0], 'date2': r[0][0][:, 1],
                              'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
                              'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
-                             'temporal_baseline': r[0][1][:, 4]},) for r in result]
+                             'temporal_baseline': r[0][1][:, 4]}) for r in result]
 
 # Pixel filtering
 if len(index) > 0:
@@ -397,6 +268,58 @@ print(f'[data_availability] Pixel loading and filtering took {round(stop[1] - st
 # %%========================================================================= #
 #                          INDICES USING ONLY RAW DATA                        #
 # =========================================================================%% #
+
+# Generate a .tiff file summarizing an index value for all pixels of the data
+# The indices using this function only use the raw data (not the monthly availability computed afterwards
+# nor the data availability maps)
+def generate_tiff_index_map(index, data, period, coord_data, driver, srs, path, parallel=True, nb_cpu=12, dtype='float32'):
+    # Generate index map according to the selected method
+    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype=dtype)
+    data_tqdm = tqdm(data, total=len(data), mininterval=0.5)
+    if parallel: # Use parallelization (for ressource-consuming indices)
+        index_map[coord_data['long_data'], coord_data['lat_data']] = Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(index)(d, period=period) for d in data_tqdm)
+    else: # Direct process of the indices
+        index_map[coord_data['long_data'], coord_data['lat_data']] = [index(d) for d in data_tqdm]
+
+    # Generate tiff file
+    if dtype == 'float32':
+        tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Float32)
+    elif dtype == 'int16':
+        tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Int16)
+    tiff.SetGeoTransform([np.min(coord_data['longitude']), coord_data['resolution'], 0, 
+                          np.max(coord_data['latitude']), 0, -coord_data['resolution']])
+    tiff.GetRasterBand(1).WriteArray(index_map.T)
+    tiff.SetProjection(srs.ExportToWkt())
+    tiff = None
+
+# Just summing up all the available data at the point over the whole considered period
+def all_data(data, period=None):
+    return data.shape[0]
+
+# Median temporal baseline (gap in days between the two acquisition dates) of the data at the point
+def median_baseline(data, period=None):
+    return data['temporal_baseline'].median()
+
+# All the dates (start and end dates for each data) are concatenated in a single list, which is then sorted. This index returns the
+# maximum gap between two dates (leap frog) as an approximation of the lowest redundancy in the data.
+# This index can be computed periodically (see the definition in introduction) with the period parameter.
+def max_leap_frog(data, period=None):
+    if data.empty:
+        return 0
+
+    if period is not None:
+        data = data.copy()
+        data = data.set_index(data['date1'] + (data['date2'] - data['date1']) // 2).sort_index()
+        years = pd.date_range(start=data['date1'].min() - pd.DateOffset(years=1) if data['date1'].min().month < 6 else data['date1'].min(),
+                              end=data['date2'].max() + pd.DateOffset(years=1) if data['date2'].max().month > 6 else data['date2'].max(), 
+                              freq='YS', inclusive='neither')
+        season_indices = [max_leap_frog(data[(data.index >= years[i]) & (data.index <= years[i+period])]) for i in range(len(years)-period)]
+        return np.min(season_indices) if len(season_indices) > 0 else 0
+    
+    return np.max(np.diff(np.sort(np.concatenate([data['date1'], data['date2']])))
+                  .astype('timedelta64[D]').astype('int'))
+
 
 # To generate GeoTiff files
 driver = gdal.GetDriverByName('GTiff')
@@ -558,7 +481,67 @@ if 'availability_maps' in index:
 #         INDICES USING MONTHLY AVAILABILITY AND/OR AVAILABILITY MAPS         #
 # =========================================================================%% #
 
-index.append('min_all_season')
+## --------------- ------- Using monthly availability ---------------------- ## 
+# Generate a .tiff file summarizing an index value for all pixels of the data
+# The indices using this function require the monthly availability to be computed (but not any data availability map)
+def generate_tiff_index_map_from_monthly_availability(index, monthly, positions, n_month, coord_data, path):
+    index_map = index(monthly, positions, coord_data, n_month=n_month)
+    tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Float32)
+    tiff.SetGeoTransform([np.min(coord_data['longitude']), coord_data['resolution'], 0, 
+                          np.max(coord_data['latitude']), 0, -coord_data['resolution']])
+    tiff.GetRasterBand(1).WriteArray(index_map.T)
+    tiff.SetProjection(srs.ExportToWkt())
+    tiff = None
+
+# Minimum amount of data available on a sliding window of n months over the whole period of the measurements
+def mini_nmonth(monthly, positions, coord_data, n_month=1):
+    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype='float32')
+    if n_month > 1:
+        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month-1:]]
+    index_map[coord_data['long_data'], coord_data['lat_data']] = [monthly.loc[[(i, j)]].squeeze().min() for (i, j) in positions]
+    return index_map
+
+# Month (or selection of n months among the 12 months) with the lowest average of available data on the whole dataset
+def mean_nmonth(monthly, positions, coord_data, n_month=1):
+    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype='float32')
+    monthly = monthly.groupby(monthly.columns.month, axis=1).mean()
+    if n_month > 1:
+        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month-1:]]
+    index_map[coord_data['long_data'], coord_data['lat_data']] = monthly_map.min(axis=1).to_list()
+    return index_map
+
+# Month (or selection of n months among the 12 months) with the lowest median of available data on the whole dataset
+def median_nmonth(monthly, positions, coord_data, n_month=1):
+    index_map = np.zeros([coord_data['nb_long_data'], coord_data['nb_lat_data']], dtype='float32')
+    monthly = monthly.groupby(monthly.columns.month, axis=1).median()
+    if n_month > 1:
+        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month-1:]]
+    index_map[coord_data['long_data'], coord_data['lat_data']] = monthly_map.min(axis=1).to_list()
+    return index_map
+
+## ---------------------- Using data availability maps --------------------- ##
+# Generate a .tiff file summarizing an index value for all pixels of the data
+# The indices using this function require the data availability maps to be computed
+def generate_tiff_index_map_from_availability_map(index, maps, coord_data, driver, srs, path):
+    index_map = index(maps)
+    tiff = driver.Create(path, index_map.shape[0], index_map.shape[1], 1, gdal.GDT_Float32)
+    tiff.SetGeoTransform([np.min(coord_data['longitude']), coord_data['resolution'], 0, 
+                          np.max(coord_data['latitude']), 0, -coord_data['resolution']])
+    tiff.GetRasterBand(1).WriteArray(index_map.T)
+    tiff.SetProjection(srs.ExportToWkt())
+    tiff = None
+
+# Each pixel take the value of the season with the lowest amount of available data
+def mini_season(maps):
+    winter, spring, summer, autumn = maps
+    return np.min(np.stack([winter, spring, summer, autumn]), axis=0)
+
+# Season with the least data / all data : index to evaluate the repartition of the data over the year
+def min_all_season(maps):
+    winter, spring, summer, autumn = maps
+    return np.nan_to_num(4 * np.min(np.stack([winter, spring, summer, autumn], axis=0), axis=0)
+                / (winter + spring + summer + autumn))
+
 
 # To generate GeoTiff files
 driver = gdal.GetDriverByName('GTiff')
