@@ -56,16 +56,16 @@ save_mean_velocity = True # Save a .tiff file with the mean reulting velocities,
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc',]
-# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03920_all_filt-multi.nc',]
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01470_y03430_all_filt-multi.nc',]
+cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc']
+# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03920_all_filt-multi.nc']
+# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01470_y03430_all_filt-multi.nc']
 # cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01470_y03675_all_filt-multi.nc']
               # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
 flag_file = None  # Path where the flag file is stored
 mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored
 # mask_file = None
 path_save = 'nathan/Tests_MB/' # Path where to store the results
-result_fn = 'c_x01470_y03430'# Name of the netCDF file to be created
+result_fn = 'c_x01225_y03675'# Name of the netCDF file to be created
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
@@ -75,7 +75,7 @@ if assign_flag:
     flags = xr.open_dataset(flag_file)
     flags.load()
 
-regu = '1accelnotnull'
+regu = 1
 coef = 100
 solver = 'LSMR_ini'
 
@@ -244,7 +244,7 @@ elif TICOI_process == 'direct_process':
             obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
             iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
             first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
-            treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
+            threshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
             regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
             option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
             proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 

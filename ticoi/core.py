@@ -140,7 +140,7 @@ np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | 
 
 def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.ndarray | None = None,
                    solver: str = 'LSMR', coef: int = 100, weight: bool = False, iteration: bool = True,
-                   treshold_it: float = 0.1, unit: int = 365,
+                   threshold_it: float = 0.1, unit: int = 365,
                    conf: bool = False, regu: int | str = 1, mean: list | None = None,
                    detect_temporal_decorrelation: bool = True, linear_operator: bool = False,
                    result_quality: list | None = None,
@@ -158,7 +158,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
     :param coef: Coef of Tikhonov regularisation, int
     :param weight: bool, if True  use of aprori weight
     :param iteration: bool, if True, use of iterations
-    :param treshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
+    :param threshold_it: int, threshold to test the stability of the results between each iteration, use to stop the process
     :param unit: str, m/d or m/y
     :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param regu : str, type of regularization
@@ -275,11 +275,11 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                 regu=regu,
                 linear_operator=linear_operator, ini=None, accel=accel)
             # print('nb_max_iteration',nb_max_iteration)
-            # Continue to iterate until the difference between two results is lower than treshold_it or the number of iteration larger than 10
+            # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             # 6 sec
             i = 2
-            while (np.mean(abs(result_dx_i - result_dx)) > treshold_it or np.mean(
-                    abs(result_dy_i - result_dy)) > treshold_it) and i < nb_max_iteration:
+            while (np.mean(abs(result_dx_i - result_dx)) > threshold_it or np.mean(
+                    abs(result_dy_i - result_dy)) > threshold_it) and i < nb_max_iteration:
                 result_dx = result_dx_i
                 result_dy = result_dy_i
                 result_dx_i, result_dy_i, weight_ix, weight_iy, residu_normx, residu_normy = inversion_iteration(
@@ -564,7 +564,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
     :param interval_output: Temporal sampling of the leap frog time series, int
     :param first_date_interpol: np.datetime64 object, first date at wich the time series is interpolated
     :param last_date_interpol: np.datetime64 object, last date at wich the time series is interpolated
-    :param threshold_it: int, treshold to test the stability of the results between each iteration, use to stop the process
+    :param threshold_it: int, threshold to test the stability of the results between each iteration, use to stop the process
     :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param regu : str, type of regularization
     :param interpolation_bas: int, temporal sampling of the interpolated leap frog time series
@@ -604,7 +604,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
         result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight,
                            visual=visual,
                            verbose=verbose, unit=unit,
-                           conf=conf, regu=regu, mean=data[1], iteration=iteration, treshold_it=treshold_it,
+                           conf=conf, regu=regu, mean=data[1], iteration=iteration, threshold_it=threshold_it,
                            detect_temporal_decorrelation=detect_temporal_decorrelation,
                            linear_operator=linear_operator, result_quality=result_quality,
                            nb_max_iteration=nb_max_iteration)
@@ -628,8 +628,10 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
                     dataf_list['NormR'] = result[1]['NormR']  # store norm of the residual from the inversion
                 returned_list.append(dataf_list)
             else:
-                returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
-                     'vz': [], 'x_countz': [], 'NormR': []}))
+                if result_quality is not None and 'Norm_residual' in result_quality: 
+                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'NormR': []}))
+                else:
+                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []}))
     
     if len(returned_list) == 1:
         return returned_list[0]
@@ -651,7 +653,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
 #     :param first_date_interpol: str, first date of the interpolation
 #     :param proj: str, projection of the cube
 #     :param last_date_interpol: str, last date of the interpolation
-#     :param treshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
+#     :param threshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
 #     :param conf: bool, if True set the confidence to the error in the observations
 #     :param flags: None or list, which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
 #     :param regu: int, type of regularisation
@@ -791,7 +793,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
 #         delayed(process)(block,
 #             i, j, solver, coef, apriori_weight, path_save, obs_filt=obs_filt, interpolation_load_pixel=interpolation_load_pixel,
 #             iteration=iteration, interval_output=interval_output, first_date_interpol=first_date_interpol,
-#             last_date_interpol=last_date_interpol, treshold_it=treshold_it, conf=conf, flags=flags, regu=regu,
+#             last_date_interpol=last_date_interpol, threshold_it=threshold_it, conf=conf, flags=flags, regu=regu,
 #             interpolation_bas=interpolation_bas, option_interpol=option_interpol, redundancy=redundancy, proj=proj,
 #             detect_temporal_decorrelation=detect_temporal_decorrelation, unit=unit, result_quality=result_quality,
 #             nb_max_iteration=nb_max_iteration, delete_outliers=delete_outliers, interpolation=interpolation,
@@ -828,7 +830,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
     :param first_date_interpol: str, first date of the interpolation
     :param proj: str, projection of the cube
     :param last_date_interpol: str, last date of the interpolation
-    :param treshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
+    :param threshold_it: float, threshold on the improvement of the L2 norm of the residuals between two inversion to stop the iteration
     :param conf: bool, if True set the confidence to the error in the observations
     :param flags: None or list, which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
     :param regu: int, type of regularisation
@@ -935,7 +937,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
             returned=returned, obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
             iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
             first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
-            treshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
+            threshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
             regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
             option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
             proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
