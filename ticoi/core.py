@@ -619,7 +619,6 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, obs_filt=None, 
             'NormR']  # store norm of the residual from the inversion
         return dataf_list
     else:
-
         return pd.DataFrame(
             {'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
              'vz': [], 'xcount_z': [], 'NormR': []})
