@@ -533,25 +533,25 @@ print(f'[ticoi_cube_demo] Overall processing took {round(stop[4] - start[0], 0)}
 
 #%%
 
-# import numpy as np
-# from osgeo import gdal, osr
+import numpy as np
+from osgeo import gdal, osr
 
-# proj='EPSG:32632'
+proj='EPSG:32632'
 
-# driver = gdal.GetDriverByName('GTiff')
-# srs = osr.SpatialReference()
-# srs.SetWellKnownGeogCS(proj)
+driver = gdal.GetDriverByName('GTiff')
+srs = osr.SpatialReference()
+srs.SetWellKnownGeogCS(proj)
 
-# tiff = gdal.Open('nathan/Tests_MB/Areas/Full_MB/S2/Fourier/1accelnotnull_100.tif', gdal.GA_Update)
-# a = tiff.GetRasterBand(1).ReadAsArray()
-# b = tiff.GetRasterBand(2).ReadAsArray()
-# c = tiff.GetRasterBand(3).ReadAsArray()
-# null = (a == 0.) & (b == 0.) & (c == 0.)
-# a[null] = np.nan
-# b[null] = np.nan
-# c[null] = np.nan
-# tiff.GetRasterBand(1).WriteArray(a)
-# tiff.GetRasterBand(2).WriteArray(b)
-# tiff.GetRasterBand(3).WriteArray(c)
-# tiff = None
-# driver = None
+tiff = gdal.Open('nathan/Tests_MB/Areas/Full_MB/S2/Fourier/1_100.tif', gdal.GA_Update)
+a = tiff.GetRasterBand(1).ReadAsArray()
+b = tiff.GetRasterBand(2).ReadAsArray()
+c = tiff.GetRasterBand(3).ReadAsArray()
+null = (a == 0.) & (b == 0.) & (c == 0.)
+a[null] = np.nan
+b[null] = np.nan
+c[null] = np.nan
+tiff.GetRasterBand(1).WriteArray(a)
+tiff.GetRasterBand(2).WriteArray(b)
+tiff.GetRasterBand(3).WriteArray(c)
+tiff = None
+driver = None

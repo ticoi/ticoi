@@ -218,7 +218,7 @@ start.append(time.time())
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 if load_pixel_process == 'block_process': 
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, load_only=True, preData_kwargs=preData_kwargs, inversion_kwargs=load_pixel_kwargs)
+    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', preData_kwargs=preData_kwargs, inversion_kwargs=load_pixel_kwargs)
 
 # Direct loading of the whole cube
 elif load_pixel_process == 'direct_process':    
