@@ -28,7 +28,6 @@ from rasterio.features import rasterize
 from ticoi.mjd2date import mjd2date
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
-from ticoi.filtering_functions import *
 from typing import Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -122,7 +121,7 @@ class cube_data_class:
             print(f'[Cube loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
-                                     time_dim_name: str = 'mid_date', verbose: bool = False) -> (int, int, int):
+                                     time_dim: str = 'mid_date', verbose: bool = False) -> (int, int, int):
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
@@ -159,9 +158,9 @@ class cube_data_class:
         elif time_series_array_size < 1e8:
             chunk_size_limit = 200 * mb
         else:
-
             chunk_size_limit = 1000 * mb
-        time_axis = self.ds[variable_name].dims.index(time_dim_name)
+            
+        time_axis = self.ds[variable_name].dims.index(time_dim)
         x_axis = self.ds[variable_name].dims.index(x_dim)
         y_axis = self.ds[variable_name].dims.index(y_dim)
         axis_sizes = {i: -1 if i == time_axis else "auto" for i in range(3)}
@@ -608,7 +607,7 @@ class cube_data_class:
 
                 if chunks == {}:  # Rechunk with optimal chunk size
                     tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", 
-                                                                   time_dim_name=time_dim_name[self.ds.author], verbose=True)
+                                                                   time_dim=time_dim_name[self.ds.author], verbose=True)
                     self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
             elif filepath.split(".")[-1] == "zarr":
@@ -635,8 +634,8 @@ class cube_data_class:
         
         # rechunk again if the size of the cube is changed:
         if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim_name=time_dim_name[self.ds.author], verbose=True)
-            self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
+            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim='mid_date', verbose=True)
+            self.ds = self.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
             
         # Reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
@@ -763,7 +762,7 @@ class cube_data_class:
         return i, j
 
 
-    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:None | xr.Dataset=None, solver:str='LSMR', interp:str='nearest',proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
+    def load_pixel(self, i:int|float, j:int|float, unit:int=365, regu:int|str=1, coef:int=1, flags:None | xr.Dataset=None, solver:str='LSMR', interp:str='nearest', proj:str='EPSG:4326', visual:bool=False, rolling_mean:np.array=None, verbose=False):
         """
 
         :param i: pixel coordinate for x

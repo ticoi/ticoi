@@ -30,7 +30,6 @@ from tqdm import tqdm
 from ticoi.core import process_blocks_refine, process
 from ticoi.cube_data_classxr import cube_data_class
 
-
 # %%========================================================================= #
 #                                   PARAMETERS                                #
 # =========================================================================%% #
@@ -57,7 +56,7 @@ save_mean_velocity = True # Save a .tiff file with the mean reulting velocities,
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01470_y03430_all_filt-multi.nc',]
+cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2_2022_2023/c_x01225_y03675.nc',]
                # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
 flag_file = None  # Path where the flag file is stored
 mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored
