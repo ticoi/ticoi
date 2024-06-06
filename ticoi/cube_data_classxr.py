@@ -1,11 +1,13 @@
 """
 Class object to store and manipulate velocity observation data
 
-Author : Laurane Charrier Reference: Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021).
-Extraction of velocity time series with an optimal temporal sampling from displacement observation networks. IEEE
-Transactions on Geoscience and Remote Sensing. Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R.,
-& Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations. ISPRS annals of the
-photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
+Author : Laurane Charrier, Lei Guo, Nathan Lioret
+Reference:
+    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
+    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
+    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+"""
 
 import os
 import dask
@@ -15,16 +17,10 @@ import warnings
 import time
 import geopandas
 import pandas as pd
-import numpy as np
-import xarray as xr
-import dask.array as da
-
 from pyproj import Proj, Transformer, CRS
 from datetime import date
 from dask.diagnostics import ProgressBar
-from typing import Union
 from rasterio.features import rasterize
-
 from ticoi.mjd2date import mjd2date
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
@@ -84,6 +80,8 @@ class cube_data_class:
             self.ds = self.ds.sel(x=slice(np.min([subset[0], subset[1]]), np.max([subset[0], subset[1]])),
                                   y=slice(np.max([subset[2], subset[3]]), np.min([subset[2], subset[3]])))
 
+        if self.ds['x'].sizes['x'] == 0 or self.ds['y'].sizes['y'] == 0: raise ValueError ('Please check the subset provided, your dataset is now empty...')
+
     def buffer(self, proj: str, buffer: list):
 
         """
@@ -114,6 +112,8 @@ class cube_data_class:
             self.ds = self.ds.sel(x=slice(np.min([i1, i2]), np.max([i1, i2])),
                                   y=slice(np.max([j1, j2]), np.min([j1, j2])))
             del i1, i2, j1, j2, buffer
+        if self.ds['x'].sizes['x'] == 0 or self.ds['y'].sizes['y'] == 0: raise ValueError(
+            'Please check the buffer provided, your dataset is now empty...')
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
                                      time_dim_name: str = 'mid_date', verbose: bool = False) -> (int, int, int):
@@ -903,10 +903,13 @@ class cube_data_class:
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
                     order: int = 3, unit: int = 365, delete_outliers: str | float | None = None,
                     flags: None | xr.Dataset = None, regu: int | str = 1, solver: str = 'LSMR_ini',
-                    proj: str = "EPSG:4326", velo_or_disp: str = "velo",select_baseline:int|None=None, verbose: bool = False) -> xr.Dataset:
+                    proj: str = "EPSG:4326", velo_or_disp: str = "velo",select_baseline:int|None=200, verbose: bool = False) -> xr.Dataset:
 
         """
-        Filter the original data with a spatio-temporal kernel
+        Filter the original data before the inversion:
+        -delete outliers according to the provided criterium
+        -compute a spatio-temporal kernel of the data, which can be used as apriori for the inversion (for "1accelnotnull" or "directionxy" )
+        -compute mean velocity along x and y ( for solver = 'LSMR_ini' if regu is not "1accelnotnull" or "directionxy" )
         
         :param i: x-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
         :param j: y-coordinate of the considered pixel, if None, compute over the whole dataset (default is None)
@@ -916,12 +919,12 @@ class cube_data_class:
         :param sigma: Standard deviation for 'gaussian' filter (default is 3)
         :param order: Order of the smoothing function (default is 3)
         :param unit: 365 if the unit is m/y, 1 if the unit is m/d (default is 365)
-        :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers (defau)
+        :param delete_outliers: If int delete all velocities which a quality indicator higher than delete_outliers (default is None)
         :param regu: Regularisation of the solver (default is 1)
         :param solver: solver used to invert the system
         :param proj: EPSG of i,j projection (default is 'EPSG:4326')
         :param velo_or_disp: 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity (default is 'velo')
-        :param select_baseline: Treshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this treshold, it is increased by 30 days
+        :param select_baseline: Threshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this treshold, it is increased by 30 days (default is 200)
         :param verbose: Print information throughout the process (default is False)
         
         :return: filtered dataset
@@ -1167,15 +1170,38 @@ class cube_data_class:
         if cube.author not in self.author.split('\n'):
             self.author += f'\n{cube.author}'
 
-    def average_cube(self):
+    def average_cube(self,return_format = 'tiff', return_variable='vv'):
         """
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
         """
+
+        vx_mean = self.ds['vx'].mean(dim='mid_date')
+        vy_mean = self.ds['vy'].mean(dim='mid_date')
         ds_mean = xr.Dataset({})
         coords = {'y': self.ds.y, 'x': self.ds.x}
-        ds_mean['vx_mean'] = xr.DataArray(self.ds['vx'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
+        ds_mean['vx_mean'] = xr.DataArray(, dims=['y', 'x'], coords=coords)
         ds_mean['vy_mean'] = xr.DataArray(self.ds['vy'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
+
+        mean_vv = np.sqrt(
+            cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(
+            np.float32)
+        mean_vv = np.flip(mean_vv, axis=0)
+
+        driver = gdal.GetDriverByName('GTiff')
+        srs = osr.SpatialReference()
+        srs.SetWellKnownGeogCS('EPSG:32632')
+
+        resolution = cube.resolution
+        dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1,
+                                    gdal.GDT_Float32)
+        dst_ds_temp.SetGeoTransform(
+            [np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
+        dst_ds_temp.GetRasterBand(1).WriteArray(mean_vv)
+        dst_ds_temp.SetProjection(srs.ExportToWkt())
+
+        dst_ds_temp = None
+        driver = None
         return ds_mean
 
     def compute_heatmap_moving(self, points_heatmap: pd.DataFrame, variable: str = 'vv', method_interp: str = 'linear',
@@ -1440,6 +1466,7 @@ class cube_data_class:
                                                     coords={'x': self.ds['x'], 'y': self.ds['y']})
         cubenew.ds['reference_date'].attrs = {'standard_name': 'reference_date', 'unit': 'days',
                                               'description': 'first date of the cumulative displacement time series'}
+
 
         # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
         second_date_list = list(set(list(

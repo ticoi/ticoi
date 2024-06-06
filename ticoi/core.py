@@ -1653,3 +1653,36 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
 
     else:
         print(f'NO DATA')
+
+
+def save_cube_parameters(cube:"ticoi.cube_data_classxr.cube_data_class",load_kwargs:dict,preData_kwargs:dict,inversion_kwargs:dict):
+    """
+
+    :param cube:
+    :param load_kwargs:
+    :param prep_kwargs:
+    :param inversion_kwargs:
+    :return:
+    """
+    sensor_array = np.unique(cube.ds['sensor'])
+    sensor_strings = [str(sensor) for sensor in sensor_array]
+    sensor = ', '.join(sensor_strings)
+
+    source = f'Temporal inversion on cube {cube.filename} using TICOI'
+    source += f' with a selection of dates among {load_kwargs["pick_date"]},' if load_kwargs['pick_date'] is not None else '' + \
+              f' with a selection of the temporal baselines among {load_kwargs["pick_temp_bas"]}' if load_kwargs['pick_temp_bas'] is not None else ('' +
+                                                                                                                                                    f' with a subset of {load_kwargs["subset"]}') if \
+    load_kwargs['subset'] is not None else ''
+
+
+    if inversion_kwargs['apriori_weight']:
+        source += ' and apriori weight'
+    source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
+    if inversion_kwargs['interpolation']:
+        source += f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
+        if inversion_kwargs['interpolation_bas']:
+            source += f'The interpolation baseline is {inversion_kwargs["interpolation_bas"]} days.'
+        source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
+
+    source += f'The preparation are argument are: {preData_kwargs}'
+    return source, sensor

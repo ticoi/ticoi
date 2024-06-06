@@ -1,3 +1,12 @@
+"""
+Author : Laurane Charrier, Lei Guo, Nathan Lioret
+Reference:
+    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
+    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
+    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+"""
+
 import numpy as np
 import dask.array as da
 from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
@@ -220,7 +229,14 @@ def dask_smooth_wrapper(dask_array: da.array, dates: xr.DataArray, t_out: np.nda
 
     return da_smooth
 
-def z_score_filt(obs, z_thres=3, axis=2):
+def z_score_filt(obs:da.array, z_thres:int=3, axis:int=2):
+    """
+
+    :param obs: cube data to filter
+    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
     
     mean = np.nanmean(obs, axis=axis, keepdims=True)
     std_dev = np.nanstd(obs, axis=axis, keepdims=True)
@@ -230,35 +246,32 @@ def z_score_filt(obs, z_thres=3, axis=2):
 
     return inlier_flag
 
-def z_score_rolling_filt(obs, z_thres=3, window_size=90, axis=2):
-    
-    # Compute rolling mean
-    mean = uniform_filter(obs, size=window_size, mode='mirror', axis=axis)
-
-    # Compute rolling standard deviation
-    obs_square = obs ** 2
-    mean_square = uniform_filter(obs_square, size=window_size, mode='mirror', axis=axis)
-    std_dev = np.sqrt(mean_square - mean ** 2)
-
-    z_scores = (obs - mean) / std_dev
-    inlier_flag = np.abs(z_scores) < z_thres
-
-    return inlier_flag
-
-def NVVC_angle_filt(obs_cpx, vvc_thres=0.1, angle_thres=45, axis=2):
+def NVVC_angle_filt(obs_cpx:np.array, vvc_thres:float=0.1, angle_thres:int=45,z_thres:int=3, axis:int=2)-> (np.array):
+    """
+    Combine angle filter and zscore
+    If the VVC is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
+    i.e. pixels are filtered out if the angle with the observation is angle_thres away from the median vector
+    :param obs_cpx: cube data to filter
+    :param vvc_thres: threshold to combine zscore and median_angle filter
+    :param angle_thres:  threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
     
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
     vx_mean = np.nanmedian(vx, axis=axis, keepdims=True)
     vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
-    mean_magnitude = np.hypot(vx_mean, vy_mean)
+    mean_magnitude = np.hypot(vx_mean, vy_mean) #compute the averaged norm of the observations
     
     
-    velo_magnitude = np.hypot(vx, vy)
+    velo_magnitude = np.hypot(vx, vy)#compute the norm of each observations
     x_component = np.nansum(vx / velo_magnitude, axis=axis)
     y_component = np.nansum(vy / velo_magnitude, axis=axis)
     
     nz = velo_magnitude.shape[axis]
-    VVC = np.hypot(x_component, y_component) / nz
+    VVC = np.hypot(x_component, y_component) / nz #velocity coherence as defined in   Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    # ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
     VVC = np.expand_dims(VVC, axis=axis)
     
     vvc_cond = (VVC > vvc_thres)
@@ -267,12 +280,19 @@ def NVVC_angle_filt(obs_cpx, vvc_thres=0.1, angle_thres=45, axis=2):
     
     angle_filter = dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
     
-    inlier_flag = np.where(vvc_cond, angle_filter, z_score_filt(velo_magnitude, z_thres=3, axis=axis))
+    inlier_flag = np.where(vvc_cond, angle_filter, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     
     return inlier_flag
 
 
-def median_angle_filt(obs_cpx, angle_thres=45, axis=2):
+def median_angle_filt(obs_cpx:np.array, angle_thres:int=45, axis:int=2):
+    """
+    Remove the observation if it is angle_thres away from the median vector
+    :param obs_cpx: cube data to filter
+    :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
     
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
     
@@ -282,39 +302,48 @@ def median_angle_filt(obs_cpx, angle_thres=45, axis=2):
     mean_magnitude = np.hypot(vx_mean, vy_mean)
     velo_magnitude = np.hypot(vx, vy)
     
-    # Check if magnitudes are greater than a threshold (tolerance) to avoid division by zero
-    # bis_cond = (velo_magnitude > 1e-6)
-    
     dot_product = vx_mean * vx + vy_mean * vy
     angle_filter = dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
-    # inlier_flag = np.where(bis_cond, (dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)), False)
-    
+
     bis_cond = (mean_magnitude > 10)
     inlier_flag = np.where(bis_cond, angle_filter, z_score_filt(velo_magnitude, z_thres=3, axis=axis))
-    # inlier_flag = np.where(bis_cond, True, inlier_flag)
-    
+
     return inlier_flag
 
 
-def dask_filt_warpper(da_vx, da_vy, filt_method="median_angle", vvc_thres=0.3, angle_thres=45, z_thres=3, magnitude_thres=1000, error_thres=100, axis=2):
+def dask_filt_warpper(da_vx:xr.DataArray, da_vy:xr.DataArray, filt_method:str="median_angle", vvc_thres:float=0.3, angle_thres:int=45, z_thres:int=3, magnitude_thres:int=1000, error_thres:int=100, axis:int=2):
+    """
+
+    :param da_vx: vx observations
+    :param da_vy: vy observations
+    :param filt_method: filtering method
+    :param vvc_thres: threshold to combine zscore and median_angle filter
+    :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param magnitude_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 1000)
+    :param error_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 100)
+    :param axis: axis on which to perform the zscore computation (default is 2)
+    :return:
+    """
     
-    if filt_method == 'median_angle':
+    if filt_method == 'median_angle':#delete according to a treshold in angle between observations and median vector
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
     
-    elif filt_method == 'vvc_angle':
+    elif filt_method == 'vvc_angle':#combination between z_score and median_angle
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
-    elif filt_method == 'z_score':
+
+    elif filt_method == 'z_score': #treshold according to the zscore
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
         
-    elif filt_method == 'magnitude':
+    elif filt_method == 'magnitude':#delete according to a treshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)
         inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
         
-    elif filt_method == 'error':
+    elif filt_method == 'error': #delete according to a treshold in error
         inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(lambda x: x < error_thres, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)

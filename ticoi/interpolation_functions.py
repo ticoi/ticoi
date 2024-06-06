@@ -1,10 +1,32 @@
+"""
+Auxillary functions to process the temporal interpolation.
+
+Author : Laurane Charrier, Lei Guo, Nathan Lioret
+Reference:
+    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
+    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
+    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+"""
+
 import numpy as np
-import pandas as pd
 from scipy import interpolate
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
+def prepare_interpolation_date(cube:"ticoi.cube_data_classxr.cube_data_class")-> (np.datetime64,np.datetime64):
+    """
+    Define the first and last date required for the interpolation, as the first date and last in the observations.
+    The purpose is to have homogenized results
+    :param cube: dataset
+    :return: first and last date required for the interpolation
+    """
+    # Prepare interpolation dates
+    cube_date1 = cube.date1_().tolist()
+    cube_date1.remove(np.min(cube_date1))
+    first_date_interpol = np.min(cube_date1)
+    last_date_interpol = np.max(cube.date2_())
+    return first_date_interpol,last_date_interpol
 def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | None = None,
                            result_dz: pd.DataFrame | None = None) -> pd.DataFrame:
     """

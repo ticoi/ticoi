@@ -1,7 +1,7 @@
 """
 Auxillary functions to process the temporal inversion.
 
-Author : Laurane Charrier
+Author : Laurane Charrier, Lei Guo, Nathan Lioret
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
     observation networks. IEEE Transactions on Geoscience and Remote Sensing.
