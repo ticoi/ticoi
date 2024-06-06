@@ -1302,7 +1302,7 @@ class cube_data_class:
             print('Same time dimension for every pixels')
         else:
             print('Not the same time dimension for every pixels')
-            raise ValueError('Not the same time dimension for every pixels')
+            raise ValueError('Not the same time dimension for every pixels, cannot save cube')
 
         cubenew = cube_data_class()
         time_variable = non_null_el['First_date'] + (non_null_el['Second_date'] - non_null_el['First_date']) // 2
@@ -1433,7 +1433,7 @@ class cube_data_class:
         # Build cumulative displacement time series
         df_list = [reconstruct_common_ref(df, result_quality) for df in result]
 
-        max_length_index = max(range(len(df_list)), key=lambda index: len(df_list[index]))
+        max_length_index = max(range(len(df_list)), key=lambda index: len(df_list[index])) #maximal length of the inverted results
 
         for i, df in enumerate(df_list):
             if df.empty:
@@ -1494,3 +1494,28 @@ class cube_data_class:
             if verbose: print(f'Saved to {savepath}/{filename}.nc')
 
         return cubenew
+
+
+    def write_results_ticoi_or_tico(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
+                          savepath: str | None = None, result_quality: list | None = None,verbose: bool = False) -> Union["cube_data_class", str]:
+        """
+        Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
+        It reconize whatever the results are irregular or regular
+        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
+        units has been changed to unit, since it was producing an error while wirtting the netcdf file
+        :param result: list of pd xarray, resulut from the TICOI method
+        :param source: name of the source
+        :param sensor: sensors which have been used
+        :param filename:  filename of file to saved
+        :param savepath: path where to save the file
+        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
+        :param verbose: Print information throughout the process (default is False)
+        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
+        """
+        if result[0].columns[0] == 'First_date':
+            self.write_result_ticoi(result=result, source=source, sensor=sensor, filename= filename,
+                          savepath=savepath, result_quality=result_quality,verbose=verbose)
+        else:
+            self.write_result_tico(result=result, source=source, sensor=sensor, filename= filename,
+                          savepath=savepath, result_quality=result_quality,verbose=verbose)
+

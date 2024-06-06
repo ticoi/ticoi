@@ -148,30 +148,29 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                    visual: bool = True,
                    verbose: bool = False) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
     """
-    Computes A in AX = Y and does the inversion using a given solver
+    Computes A in AX = Y, invert the system using a given solver
 
     :param data: An array where each line is (date1, date2, other elements ) for which a velocity is computed (correspond to the original displacements)
     :param i,j: Coordinates of the point in pixel, int
-    :param dates_range: list of np.datetime64 [D], dates of the estimated displacement in X with an irregular temporal sampling (ILF)
-    :param interval_output: Temporal sampling of the leap frog time series, int
-    :param solver: str, solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
+    :param dates_range: List of np.datetime64 [D], dates of the estimated displacement in X with an irregular temporal sampling (ILF)
+    :param solver: Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
     :param coef: Coef of Tikhonov regularisation, int
-    :param weight: bool, if True  use of aprori weight
-    :param iteration: bool, if True, use of iterations
-    :param threshold_it: int, threshold to test the stability of the results between each iteration, use to stop the process
-    :param unit: str, m/d or m/y
-    :param conf: bool, if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
-    :param regu : str, type of regularization
-    :param mean, list or None, apriori on the average
-    :param detect_temporal_decorrelation: bool, if True the first inversion is solved using only velocity observations with small temporal baselines, to detect temporal decorelation
-    :param linear_operator: linear operator or None, if linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
-    :param result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+    :param weight: if True  use of aprori weight
+    :param iteration: if True, use of iterations
+    :param threshold_it: Threshold to test the stability of the results between each iteration, use to stop the process
+    :param unit: 1 if m/d or 365 if m/y
+    :param conf: if True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
+    :param regu : Type of regularization
+    :param mean: Apriori on the average
+    :param detect_temporal_decorrelation:if True the first inversion is solved using only velocity observations with small temporal baselines, to detect temporal decorelation
+    :param linear_operator: if linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
+    :param result_quality: list which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param nb_max_iteration: int, maximal number of iterations
     :param visual:
     :param verbose:
 
     :return A: Design matrix in AX = Y
-    :return result: pandas DataFrame with dates, computed displacements and number of observations used to compute each displacement
+    :return result: pandas DataFrame with dates, computed displacements and number of observations used to compute each displacement, in the form   'date1', 'date2', 'result_dx', 'result_dy','xcount_x','xcount_y'
     :return dataf: None or complete pandas DataFrame with dates, velocities, errors, residus, weights, xcount_,normr... for further visual purposes (directly depends on param visual and result_quality)
     """
 
@@ -273,7 +272,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                 result_dy, mu=mu,
                 verbose=verbose,
                 regu=regu,
-                linear_operator=linear_operator, ini=None, accel=accel)
+                linear_operator=linear_operator, ini=None, accel=accel,result_quality=result_quality)
             # print('nb_max_iteration',nb_max_iteration)
             # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             # 6 sec
@@ -290,7 +289,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                     result_dx,
                     result_dy, mu,
                     verbose=verbose, regu=regu,
-                    linear_operator=linear_operator, ini=None, accel=accel)
+                    linear_operator=linear_operator, ini=None, accel=accel,result_quality=result_quality)
 
                 i += 1
 
@@ -306,7 +305,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                 weight_ix = weight_2x
 
             del result_dx, result_dy
-            if not visual and (result_quality is not None and 'GCV' in result_quality): del data_values, data_dates
+            if not visual: del data_values, data_dates
 
         else:  # If not iteration
             result_dy_i = result_dy
@@ -389,10 +388,13 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
         'xcount_y': xcount_y
     })
     if residu_normx is not None:  # add the norm of the residual
-        NormR = np.zeros(result.shape[0])
-        NormR[:4] = np.hstack([residu_normx, residu_normy])
-        result['NormR'] = NormR
-        del NormR
+        normr = np.zeros(result.shape[0])
+        if normr.shape[0]>3:
+            normr[:4] = np.hstack([residu_normx, residu_normy])
+        else:
+            normr[:normr.shape[0]]= np.full(normr.shape[0],np.nan)
+        result['NormR'] = normr
+        del normr
     if result_quality is not None:  # add the error propagation
         if 'Error_propagation' in result_quality:
             result['error_x'] = prop_wieght_diagx
@@ -609,8 +611,8 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
                            linear_operator=linear_operator, result_quality=result_quality,
                            nb_max_iteration=nb_max_iteration)
         
-        if 'invert' in returned and 'interp' not in returned: 
-            if result[1] is not None:  
+        if 'invert' in returned and 'interp' not in returned:
+            if result[1] is not None:
                 returned_list.append(result[1])
             else:
                 returned_list.append(pd.DataFrame(
@@ -918,7 +920,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
         if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
                               delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
-                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None, 
+                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None,
                                       visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
                               for i, j in xy_values_tqdm)
             return result_block
@@ -936,21 +938,23 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
  
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+            i, j, obs_filt=obs_filt,returned=returned,**inversion_kwargs)
         for i, j in xy_values_tqdm)
 
+        # result_block = [process(block, i, j, obs_filt=obs_filt,**inversion_kwargs)
+        #                 for i, j in xy_values_tqdm]
         return result_block
     
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
         
         # Get the parameters
-        if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-            for key, value in preData_kwargs.items():
-                globals()[key] = value
-            for key, value in inversion_kwargs.items():
-                globals()[key] = value
-        else:
-            raise ValueError('preData_kwars and inversion_kwars must be a dict')
+        # if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+        #     for key, value in preData_kwargs.items():
+        #         globals()[key] = value
+        #     for key, value in inversion_kwargs.items():
+        #         globals()[key] = value
+        # else:
+        #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
         # blocks = cube_split(cube, block_size=block_size, verbose=True)
         flags = preData_kwargs['flags']
