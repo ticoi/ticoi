@@ -1433,13 +1433,6 @@ class cube_data_class:
         # Build cumulative displacement time series
         df_list = [reconstruct_common_ref(df, result_quality) for df in result]
 
-        max_length_index = max(range(len(df_list)), key=lambda index: len(df_list[index])) #maximal length of the inverted results
-
-        for i, df in enumerate(df_list):
-            if df.empty:
-                df_list[i] = df_list[max_length_index].copy()
-                df_list[i].loc[:, df_list[i].columns.difference(['Ref_date', 'Second_date'])] = np.nan
-
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array(
             [df_list[i]['Ref_date'][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
@@ -1448,8 +1441,9 @@ class cube_data_class:
         cubenew.ds['reference_date'].attrs = {'standard_name': 'reference_date', 'unit': 'days',
                                               'description': 'first date of the cumulative displacement time series'}
 
-        # Retrieve the list a second date in the whole data cube
-        second_date_list = list(set(list(itertools.chain.from_iterable([df['Second_date'].values for df in df_list]))))
+        # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
+        second_date_list = list(set(list(
+            itertools.chain.from_iterable([df['Second_date'].values for df in df_list if not np.isnan(df['dx'].iloc[0])]))))
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size

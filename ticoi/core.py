@@ -561,7 +561,7 @@ def process(cube, i, j, solver, coef, apriori_weight, path_save, returned='inter
     :param coef: int, coefficients of the Tikhonov regularisation, int
     :param apriori_weight: bool, if True  use of aprori weight
     :param path_save: str, where to save the figures (if visual is true)
-    :param returned: str or list of str, what is to be returned ('interp' for TICOI results, 'raw' for raw data)
+    :param returned: str or list of str, what is to be returned ('interp' for TICOI results, 'raw' for raw data, invert for irregular velocity time series, i.e. without interpolation)
     :param iteration: bool, if True, use of iterations
     :param interval_output: Temporal sampling of the leap frog time series, int
     :param first_date_interpol: np.datetime64 object, first date at wich the time series is interpolated
