@@ -320,7 +320,7 @@ class cube_data_class:
 
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'z': 'mid_date'})
-                
+
         date1 = [mjd2date(date_str) for date_str in self.ds['date1'].values]  # convertion in date
         date2 = [mjd2date(date_str) for date_str in self.ds['date2'].values]
         self.ds = self.ds.unify_chunks()
@@ -429,6 +429,7 @@ class cube_data_class:
 
         # Uniformization of the name and format of the time coordinate
         self.ds = self.ds.rename({'time': 'mid_date'})
+        
         self.update_dimension()
         date1 = [date_str.split(' ')[0] for date_str in self.ds['mid_date'].values]
         date2 = [date_str.split(' ')[1] for date_str in self.ds['mid_date'].values]
@@ -631,13 +632,13 @@ class cube_data_class:
             "S. Leinss, L. Charrier": self.load_charrier,
         }
         dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
-                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
-        
+                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj
+                                  )
         # rechunk again if the size of the cube is changed:
         if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim_name=time_dim_name[self.ds.author], verbose=True)
-            self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
-            
+            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim_name='mid_date', verbose=True)
+            self.ds = self.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
+
         # Reorder the coordinates to keep the consistency
         self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
         self.standardize_cube_for_processing()
@@ -884,17 +885,17 @@ class cube_data_class:
                 self.ds[var] = self.ds[var].where(inlier_flag)
                 
         self.ds = self.ds.persist()
-        
+
     def mask_cube(self, mask : xr.DataArray | str):
         if type(mask) is str:
-            if mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile) 
+            if mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile)
                 polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
                 raster = rasterize([polygon.geometry[0]], out_shape=self.ds.rio.shape, transform=self.ds.rio.transform(), fill=0, dtype='int16')
                 mask = xr.DataArray(data=raster.T, dims=['x', 'y'], coords=self.ds[['x', 'y']].coords)
             else:
                 mask = xr.open_dataarray(mask)
             mask.load()
-        
+
         # Mask the velocities and the errors
         self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
@@ -1141,7 +1142,7 @@ class cube_data_class:
             # Reproject coordinates
             if interp_method == 'nearest':
                 cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
-            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)    
+            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
             cube.ds[['vx', 'vy']] = cube.ds[['vx', 'vy']].where((np.abs(cube.ds['vx'].values) < 10000) | (np.abs(cube.ds['vy'].values) < 10000), np.nan)
 
             # Update of cube_data_classxr attributes
@@ -1304,7 +1305,7 @@ class cube_data_class:
             print('Same time dimension for every pixels')
         else:
             print('Not the same time dimension for every pixels')
-            raise ValueError('Not the same time dimension for every pixels')
+            raise ValueError('Not the same time dimension for every pixels, cannot save cube')
 
         cubenew = cube_data_class()
         time_variable = non_null_el['First_date'] + (non_null_el['Second_date'] - non_null_el['First_date']) // 2
@@ -1354,23 +1355,24 @@ class cube_data_class:
                 cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
                 cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
                                                    'long_name': long_name[k]}
-        # if result_quality is not None and 'Error_propagation' in result_quality:
-        #     long_name = [
-        #         'Sigma0 Est/West',
-        #         'Sigma0 North/South [m]']
-        #     short_name = ['sigma0_x', 'sigma0_y']
-        #     for k,var in enumerate(short_name):
-        #
-        #         result_arr = np.array(
-        #             [result[i * self.ny + j]['sigma0'][k] if result[i * self.ny + j]['sigma0'][k].shape[
-        #                                                  0] != 0 else np.nan for i in range(self.nx) for j in
-        #              range(self.ny)])
-        #         result_arr = result_arr.reshape((self.nx, self.ny))
-        #         cubenew.ds[short_name[k]] = xr.DataArray(result_arr, dims=['x', 'y'],
-        #                                                  coords={'x': self.ds['x'], 'y': self.ds['y']})
-        #         cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
-        #         cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
-        #                                            'long_name': long_name[k]}
+
+        if result_quality is not None and 'Error_propagation' in result_quality:
+            long_name = [
+                'Sigma0 Est/West',
+                'Sigma0 North/South [m]']
+            short_name = ['sigma0_x', 'sigma0_y']
+            for k,var in enumerate(short_name):
+
+                result_arr = np.array(
+                    [result[i * self.ny + j]['sigma0'][~np.isnan(result[i * self.ny + j]['sigma0'])].iloc[k] if result[i * self.ny + j]['sigma0'].shape[
+                                                         0] != 0 else np.nan for i in range(self.nx) for j in
+                     range(self.ny)])
+                result_arr = result_arr.reshape((self.nx, self.ny))
+                cubenew.ds[short_name[k]] = xr.DataArray(result_arr, dims=['x', 'y'],
+                                                         coords={'x': self.ds['x'], 'y': self.ds['y']})
+                cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
+                cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
+                                                   'long_name': long_name[k]}
 
         del non_null_el, long_name, result_arr
         cubenew.ds['x'] = self.ds['x']
@@ -1433,14 +1435,7 @@ class cube_data_class:
 
         # Build cumulative displacement time series
         df_list = [reconstruct_common_ref(df, result_quality) for df in result]
-        
-        max_length_index = max(range(len(df_list)), key=lambda index: len(df_list[index]))
 
-        for i, df in enumerate(df_list):
-            if df.empty:
-                df_list[i] = df_list[max_length_index].copy()
-                df_list[i].loc[:, df_list[i].columns.difference(['Ref_date', 'Second_date'])] = np.nan
-        
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array(
             [df_list[i]['Ref_date'][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
@@ -1449,8 +1444,9 @@ class cube_data_class:
         cubenew.ds['reference_date'].attrs = {'standard_name': 'reference_date', 'unit': 'days',
                                               'description': 'first date of the cumulative displacement time series'}
 
-        # Retrieve the list a second date in the whole data cube
-        second_date_list = list(set(list(itertools.chain.from_iterable([df['Second_date'].values for df in df_list]))))
+        # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
+        second_date_list = list(set(list(
+            itertools.chain.from_iterable([df['Second_date'].values for df in df_list if not np.isnan(df['dx'].iloc[0])]))))
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
@@ -1495,3 +1491,28 @@ class cube_data_class:
             if verbose: print(f'Saved to {savepath}/{filename}.nc')
 
         return cubenew
+
+
+    def write_results_ticoi_or_tico(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
+                          savepath: str | None = None, result_quality: list | None = None,verbose: bool = False) -> Union["cube_data_class", str]:
+        """
+        Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
+        It reconize whatever the results are irregular or regular
+        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
+        units has been changed to unit, since it was producing an error while wirtting the netcdf file
+        :param result: list of pd xarray, resulut from the TICOI method
+        :param source: name of the source
+        :param sensor: sensors which have been used
+        :param filename:  filename of file to saved
+        :param savepath: path where to save the file
+        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
+        :param verbose: Print information throughout the process (default is False)
+        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
+        """
+        if result[0].columns[0] == 'First_date':
+            self.write_result_ticoi(result=result, source=source, sensor=sensor, filename= filename,
+                          savepath=savepath, result_quality=result_quality,verbose=verbose)
+        else:
+            self.write_result_tico(result=result, source=source, sensor=sensor, filename= filename,
+                          savepath=savepath, result_quality=result_quality,verbose=verbose)
+
