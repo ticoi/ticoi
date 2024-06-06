@@ -275,7 +275,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                 result_dy, mu=mu,
                 verbose=verbose,
                 regu=regu,
-                linear_operator=linear_operator, ini=None, accel=accel)
+                linear_operator=linear_operator, ini=None, accel=accel,result_quality=result_quality)
             # print('nb_max_iteration',nb_max_iteration)
             # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             # 6 sec
@@ -292,7 +292,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                     result_dx,
                     result_dy, mu,
                     verbose=verbose, regu=regu,
-                    linear_operator=linear_operator, ini=None, accel=accel)
+                    linear_operator=linear_operator, ini=None, accel=accel,result_quality=result_quality)
 
                 i += 1
 
@@ -308,7 +308,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                 weight_ix = weight_2x
 
             del result_dx, result_dy
-            if not visual and (result_quality is not None and 'GCV' in result_quality): del data_values, data_dates
+            if not visual: del data_values, data_dates
 
         else:  # If not iteration
             result_dy_i = result_dy
@@ -391,10 +391,13 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
         'xcount_y': xcount_y
     })
     if residu_normx is not None:  # add the norm of the residual
-        NormR = np.zeros(result.shape[0])
-        NormR[:4] = np.hstack([residu_normx, residu_normy])
-        result['NormR'] = NormR
-        del NormR
+        normr = np.zeros(result.shape[0])
+        if normr.shape[0]>3:
+            normr[:4] = np.hstack([residu_normx, residu_normy])
+        else:
+            normr[:normr.shape[0]]= np.full(normr.shape[0],np.nan)
+        result['NormR'] = normr
+        del normr
     if result_quality is not None:  # add the error propagation
         if 'Error_propagation' in result_quality:
             result['error_x'] = prop_wieght_diagx
@@ -638,8 +641,8 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
                                 detect_temporal_decorrelation=detect_temporal_decorrelation, linear_operator=linear_operator, 
                                 result_quality=result_quality, nb_max_iteration=nb_max_iteration, visual=visual, verbose=verbose)
         
-        if 'invert' in returned and 'interp' not in returned: 
-            if result[1] is not None:  
+        if 'invert' in returned and 'interp' not in returned:
+            if result[1] is not None:
                 returned_list.append(result[1])
             else:
                 returned_list.append(pd.DataFrame(
@@ -746,7 +749,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
                               delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
-                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None, 
+                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None,
                                       visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
                               for i, j in xy_values_tqdm)
             return result_block
@@ -762,21 +765,23 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
  
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(process)(block,
-            i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+            i, j, obs_filt=obs_filt,returned=returned,**inversion_kwargs)
         for i, j in xy_values_tqdm)
 
+        # result_block = [process(block, i, j, obs_filt=obs_filt,**inversion_kwargs)
+        #                 for i, j in xy_values_tqdm]
         return result_block
     
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
         
         # Get the parameters
-        if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-            for key, value in preData_kwargs.items():
-                globals()[key] = value
-            for key, value in inversion_kwargs.items():
-                globals()[key] = value
-        else:
-            raise ValueError('preData_kwars and inversion_kwars must be a dict')
+        # if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+        #     for key, value in preData_kwargs.items():
+        #         globals()[key] = value
+        #     for key, value in inversion_kwargs.items():
+        #         globals()[key] = value
+        # else:
+        #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
         # blocks = cube_split(cube, block_size=block_size, verbose=True)
         flags = preData_kwargs['flags']

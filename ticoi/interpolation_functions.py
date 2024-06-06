@@ -19,7 +19,10 @@ def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | str | No
     """
     
     if result.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(
+            {'Ref_date': [np.nan], 'Second_date': [np.nan],
+             'dx': [np.nan], 'dy': [np.nan],'xcount_x': [np.nan], 'xcount_y': [np.nan]})
+
     
     # Common Reference
     data = pd.DataFrame({'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
