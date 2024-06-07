@@ -1010,14 +1010,7 @@ def visualisation_core(list_dataf,option_visual,save=False,show=True,path_save=N
     for option in option_visual:
         dico_visual[option]
 
-    # pixel_object.plot_vx_vy_overlayed(color=colors,type_data='invert')
-    # pixel_object.plot_vv_overlayed(color=colors,type_data='invert')
-    # pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs')
-    # pixel_object.plot_xcount_vv(cmap=cmap)
-    # pixel_object.plot_xcount_vx_vy(cmap=cmap)
-    # pixel_object.plot_residuals(log_scale=log_scale)
-
-def visualisation_old(data:pd.DataFrame|None, result:np.ndarray, option_visual:list, path_save:str, interval_output:int=1, interval_inputMax:int|None=None, A:np.ndarray|None=None,
+def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list, path_save:str, interval_output:int=1, interval_inputMax:int|None=None, A:np.ndarray|None=None,
                   dataf:pd.DataFrame|None=None, unit:str='m/y',figsize:tuple=(12, 6), show:bool=True):
     """
     Visualize the data (original datas and results).
