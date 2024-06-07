@@ -585,6 +585,7 @@ def interpolation_to_data(result: pd.DataFrame, data: pd.DataFrame, option_inter
 
 def process(cube: cube_data_class, i: float | int, j: float | int, path_save, solver: str = 'LSMR', regu: int | str = 1, coef: int = 100, 
             flags: xr.Dataset | None = None, apriori_weight: bool = False, returned: list | str = 'interp', obs_filt: xr.Dataset | None = None, 
+            flags: xr.Dataset | None = None, apriori_weight: bool = False, returned: list | str = 'interp', obs_filt: xr.Dataset = None, 
             interpolation_load_pixel: str = 'nearest', iteration: bool = True, interval_output: int = 1, first_date_interpol: np.datetime64 | None = None, 
             last_date_interpol: np.datetime64 | None = None, proj='EPSG:4326', threshold_it: float = 0.1, conf: bool = True, 
             option_interpol: str = 'spline', redundancy: int | None = None, detect_temporal_decorrelation: bool = True, unit: int = 365,
@@ -715,11 +716,10 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
 
     return blocks
 
-
 def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_end: int,
                flags: xr.Dataset | None = None):
     
-    '''
+    """
     Persist a block in memory, i.e. load it in a distributed way.
     
     :param cube: [cube_data_class] --- Cube splited in blocks
@@ -729,7 +729,7 @@ def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_
     :return block: [cube_data_class] --- Sub-cube of cube according to the boundaries (block)
     :return flags_block: [xr dataset | None] --- If not None, part of flags dataset corresponding to the block
     :return duration: [float] --- Duration of the block loading
-    '''
+    """
     
     start = time.time()
     block = cube_data_class()
@@ -744,7 +744,6 @@ def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_
     duration = time.time() - start
 
     return block, flags_block, duration
-
 
 def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: float = 0.5, returned: list | str = 'interp', 
                           preData_kwargs: dict = None, inversion_kwargs: dict = None, verbose: bool = False):
@@ -763,21 +762,21 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
     
     :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
     '''
-    
-    async def process_block(block: cube_data_class, returned: list | str = 'interp', nb_cpu: int = 8, verbose: bool = False): 
+
+    async def process_block(block: cube_data_class, returned: list | str = 'interp', nb_cpu: int = 8, verbose: bool = False):
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
-        
+
         # Return only raw data => no need to filter the cube
         if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-                              delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
-                                      solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None,
-                                      visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
-                              for i, j in xy_values_tqdm)
+                delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
+                                          solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None,
+                                          visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+                for i, j in xy_values_tqdm)
             return result_block
-        
+
         # Filter the cube
         obs_filt = block.filter_cube(**preData_kwargs)
         

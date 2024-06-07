@@ -58,7 +58,7 @@ save_mean_velocity = True # Save a .tiff file with the mean reulting velocities,
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
 cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
 flag_file = 'test_data/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
-mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
+mask_file = None # Path to mask file
 load_file = None # If TICOI was already computed on this cube/subset, you can directly load it (TICOI_process='load')
 path_save = 'examples/results/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
@@ -76,8 +76,8 @@ if assign_flag:
 regu = {0: 1, 1: '1accelnotnull'} # With flags (0: stable ground, 1: glaciers)
 # regu = '1accelnotnull' # Without flags
 # Regularization coefficient.s to be used (for each flag if flags is not None)
-coef = {0: 500, 1: 200} # With flags (0: stable ground, 1: glaciers)
-# coef = 200 # Without flags
+coef = {0: 500, 1: 100} # With flags (0: stable ground, 1: glaciers)
+# coef = 100 # Without flags
 solver = 'LSMR_ini' # Solver for the inversion
 
 # What results must be returned from TICOI processing (can be a list of both)
@@ -103,7 +103,7 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'sigma': 3, # Standard deviation for 'gaussian' filter
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': 'median_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
+                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
                   'flags': flags, # Divide the data in several areas where different methods should be used
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                   'solver': solver, # Solver for the inversion
@@ -140,7 +140,7 @@ inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each
                     
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 12 # Number of CPU to be used for parallelization
-block_size = 0.1 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
+block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -309,5 +309,5 @@ if save or save_mean_velocity:
 
 stop.append(time.time())
 if TICOI_process != 'load':
-    print(f'[Writing results] Writing cube to netCDF file took {round(stop[-1] - start[-1], 3)} s')
+    print(f'[Writing results] Writing cube to netCDF file took {round(stop[-1] - start[-1], 3)} s')    
 print(f'[Overall] Overall processing took {round(stop[-1] - start[0], 0)} s')

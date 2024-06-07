@@ -1,5 +1,6 @@
 '''
-Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method for one pixel.
+Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method
+for one pixel.
 Author: Laurane Charrier
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
@@ -26,7 +27,7 @@ cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
 path_save = 'examples/results/pixel/' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
-i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation
+i, j = 343645.1, 5091340.1 # Point (pixel) where to carry on the computation
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = '1accelnotnull' # Regularization method to be used
