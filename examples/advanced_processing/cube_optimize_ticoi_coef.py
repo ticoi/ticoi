@@ -9,15 +9,18 @@ This code computes a RMSE-coefficient curve for every pixel of a given subset (o
 import os
 import time
 import itertools
-import numpy as np
 import warnings
-
+import asyncio
+import numpy as np
 import matplotlib.pyplot as plt
+
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
+from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
 from examples.advanced_processing.pixel_optimize_ticoi_coef import optimize_coef
+
 
 # %%========================================================================= #
 #                                    PARAMETERS                               #
@@ -148,18 +151,76 @@ print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]),
 print(f'[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
 print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})')
 
-start.append(time.time())
-
-# Filter the data cube (compute rolling_mean for regu=1accelnotnull)
-obs_filt = cube.filter_cube(**preData_kwargs)
-
-stop.append(time.time())
-print(f'[Data loading] Filtering the cube took {round((stop[1] - start[1]), 4)} s')
-
 
 # %% ======================================================================== #
 #                         COEFFICIENT OPTIMIZATION                            #
 # =========================================================================%% #
+
+async def process_block(block, block_gt, nb_cpu=8):
+    # Progression bar
+    xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
+    xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
+    
+    # Filter cube
+    obs_filt = block.filter_cube(**preData_kwargs)
+
+    # Optimization of the coefficient for every pixels of the block
+    result_block = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(block, block_gt, i, j, obs_filt, load_pixel_kwargs, 
+                           inversion_kwargs, interpolation_kwargs, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
+                           stats=stats, visual=False) for i, j in xy_values_tqdm)
+    
+    return result_block
+
+async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
+    
+    # Get the parameters
+    # if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
+    #     for key, value in preData_kwargs.items():
+    #         globals()[key] = value
+    #     for key, value in inversion_kwargs.items():
+    #         globals()[key] = value
+    # else:
+    #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
+
+    flags = preData_kwargs['flags']
+    blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
+    
+    dataf_list = [None] * ( cube.nx * cube.ny )
+
+    loop = asyncio.get_event_loop()
+
+    for n in range(len(blocks)):
+        print(f'Processing block {n+1}/{len(blocks)}')
+
+        # Load the first block and start the loop
+        if n == 0:
+            x_start, x_end, y_start, y_end = blocks[0]
+            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+
+        block, flags_block, duration = await future
+        preData_kwargs['flags'] = flags_block
+        inversion_kwargs['flags'] = flags_block
+        print(f'Block {n+1} loaded in {duration:.2f} s')
+        # if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
+
+        if n < len(blocks) - 1:
+            # load the next block while processing the current block
+            x_start, x_end, y_start, y_end = blocks[n+1]
+            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+
+        block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose)
+
+        for i in range(len(block_result)):
+            row = i % block.ny + blocks[n][2]
+            col = np.floor( i / block.ny ) + blocks[n][0]
+            idx = int( col * cube.ny + row )
+
+            dataf_list[idx] = block_result[i]
+
+        del block_result, block, flags_block
+
+    return dataf_list
+
 
 nb_points = len(cube.ds['x'].values) * len(cube.ds['y'].values)
 print(f'[Coef optimization] Number of CPU : {nb_cpu}')
@@ -170,11 +231,6 @@ start.append(time.time())
 # Progression bar
 xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
 xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
-
-# result = Parallel(n_jobs=nb_cpu, verbose=5)(delayed(optimize_coef)(cube, cube_p, i, j, proj=cube_proj, average_same=average_same, method=method, coef_min=coef_min, 
-#                 coef_max=coef_max, step=step, solver=solver, regu=regu, delete_outliers=delete_outliers, apriori_weight=apriori_weight, max_iteration=max_iteration, 
-#                 unit=unit, conf=conf, detect_temporal_decorrelation=detect_temporal_decorrelation, option_interpol=option_interpol, merged=merged, verbose=verbose)
-#             for i in cube.ds['x'].values for j in cube.ds['y'].values)
 
 result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(cube, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
                        inversion_kwargs, interpolation_kwargs, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 

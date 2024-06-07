@@ -1,6 +1,5 @@
 '''
-Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method
-for one pixel.
+Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method for one pixel.
 Author: Laurane Charrier
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
@@ -22,14 +21,12 @@ from ticoi.cube_data_classxr import cube_data_class
 # =========================================================================%% #
 
 ## ------------------------------ Data selection --------------------------- ##
-# List of the paths where the data cubes are stored
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2_2022_2023/c_x01225_y03675.nc',]
-               # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
-cube_authors = None # Specify the author of the data cubes (list), keep None if the authors are specified in the dataset
-path_save = 'nathan/Tests_MB/' # Path where to store the results
+# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
+cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
+path_save = 'examples/results/pixel/' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
-i, j = 334329.2,5081911.2 # Point (pixel) where to carry on the computation
+i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = '1accelnotnull' # Regularization method to be used
@@ -117,6 +114,8 @@ interpolation_kwargs = {'interval_output': 30, # Temporal baseline of the time s
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
+if type(cube_name) == str:
+    cube_name = [cube_name]
 
 # %% ======================================================================== #
 #                                DATA LOADING                                 #
@@ -126,13 +125,13 @@ start = [time.time()]
 
 # Load the main cube
 cube = cube_data_class()
-cube.load(cube_names[0], author=cube_authors[0] if type(cube_authors) == list else cube_authors, **load_kwargs)
+cube.load(cube_name[0], **load_kwargs)
 
 # Several cubes have to be merged together
-if len(cube_names) > 1:
-    for n in range(1, len(cube_names)):
+if len(cube_name) > 1:
+    for n in range(1, len(cube_name)):
         cube2 = cube_data_class()
-        cube2.load(cube_names[n], author=cube_authors[n] if type(cube_authors) == list else cube_authors, **load_kwargs)
+        cube2.load(cube_name[n], **load_kwargs)
         cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
         cube.merge_cube(cube2)
 
