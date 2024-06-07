@@ -929,7 +929,7 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
         
         # There is no data on the whole block (masked data)
         if obs_filt is None and 'interp' in returned:
-            return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'x_countx': [], 'x_county': [], 'dz': [],
+            return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'x_county': [], 'dz': [],
                          'vz': [], 'x_countz': [], 'NormR': []}) for i, j in xy_values_tqdm]
 
 
@@ -1241,10 +1241,10 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
         if 'Y_contribution' in option_visual:
             fig, ax = plt.subplots(2, 1, figsize=figsize)
             ax[0].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['X_countx'], s=4,
+            scat = ax[0].scatter(dates_deplacement_inv, result['result_vx'], c=result['xcount_x'], s=4,
                                  cmap='rainbow', label='Y_contribution')
             ax[1].set_ylabel(f'Velocity x [{unit}]')
-            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['X_county'], s=4,
+            scat = ax[1].scatter(dates_deplacement_inv, result['result_vy'], c=result['xcount_y'], s=4,
                                  cmap='rainbow', label='Y_contribution')
             legend1 = ax[1].legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
                                    bbox_transform=fig.transFigure,
@@ -1258,7 +1258,7 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
                           2)  # compute the magnitude of the velocity
             fig, ax = plt.subplots(figsize=figsize)
             ax.set_ylabel(f'Velocity magnitude [{unit}]', fontsize=16)
-            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['X_countx'] + result['X_county']) / 2, s=4, vmin=0,
+            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['xcount_x'] + result['xcount_x']) / 2, s=4, vmin=0,
                               vmax=100,
                               cmap='viridis_r', label='Y_contribution')
             legend1 = ax.legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,
@@ -1266,6 +1266,7 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
                                 title="Number of overlap from which the velocity is reconstructed", fontsize=16)
             plt.subplots_adjust(bottom=0.2)
             ax.add_artist(legend1)
+
             plt.setp(legend1.get_title(), fontsize=16)
             if show: plt.show(block=False)
             fig.savefig(f'{path_save}X_dates_contribution_vv.png')
@@ -1639,7 +1640,7 @@ def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list,
                           2)  # compute the magnitude of the velocity
             fig, ax = plt.subplots(figsize=figsize)
             ax.set_ylabel(f'Velocity magnitude [{unit}]', fontsize=16)
-            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['X_countx'] + result['X_county']) / 2, s=4, vmin=0,
+            scat = ax.scatter(dates_deplacement_inv, vv, c=(result['xcount_x'] + result['X_county']) / 2, s=4, vmin=0,
                               vmax=100,
                               cmap='viridis_r', label='Y_contribution')
             legend1 = ax.legend(*scat.legend_elements(num=5), loc='lower left', bbox_to_anchor=(0.1, 0), ncol=5,

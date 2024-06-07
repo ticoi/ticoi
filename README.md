@@ -31,40 +31,32 @@ Then replace all conda commands by mamba.
 
 ### STRUCTURE
 
-#### Main:
+#### Main code:
 
 * **core.py**: Main functions to process the temporal inversion of glacier's surface velocity using
   the TICOI method. The inversion is solved using an Iterative Reweighted Least Square, and a robust downweighted
   function (Tukey's biweight).
-* **secondary_functions.py**: Auxillary functions to process the temporal inversion.
-* **cube_data_classxr.py**: Class object to store and manipulate velocity observation data
-* **examples/ticoi_cube_demo.py**: Processing of one cube
-* **examples/ticoi_pixel_demo.py**: Processing of one pixel
+* * **cube_data_classxr.py**: Class object to store and manipulate velocity observation data
+* **inversion_functions.py**: Auxillary functions to process the temporal inversion.
+* **interpolation_functions.py**: Auxillary functions to process the temporal interpolation.
+* **filtering_functions.py**: Auxillary functions to process some filtering.
+* **other_functions.py**: Two other functions for assesing ITS_LIVE data.
+* **mjd2date.py**: Convert the dates from Modified Julian Date to Gregorian Date
+* 
+#### Examples:
+
+* **test_data**: test data for demonstration
+* 
+* **examples/ticoi_cube_demo.py**: Demonstration of how to process one cube
+* **examples/ticoi_pixel_demo.py**: Demonstration of how to process one pixel
+
+* **examples/results/cube**: Expected results for the demo cube
+* **examples/results/pixel**: Expected results for the demo pixel
+
+
 
 ### OUTPUTS
-
-Some figures can be displayed by filling the option_visual parameter with different strings:
-
-#### Original data
-
-- 'original_velocity_xy' -> vx_vy.png : Original velocities (central date and temporal baselines) according to x and y.
-- 'vxvy_quality' -> vxvy_quality_bas.png : Original velocities with measurement error (central date and colour).
-- 'vv_good_quality' -> vv_good_quality.png : Original velocities with a quality index greater than 0.5.
-- 'original_magnitude' -> vv.png : Magnitude of the original velocities (central date and temporal baselines).
-- 'vv_quality' -> vv_quality.png : Magnitude of the original velocity with measurement error (central date and colour).
-
-#### Results after inversion of the AX = Y system (ILF: varying temporal sampling)
-
-- 'X' -> X_velocity.png : Superposition of estimated and observed velocities (vx and vy). The limits of the figure
-  correspond to the estimated velocities.
-- 'X_zoom' -> X_velocity_Zoom.png : Superposition of estimated and observed velocities (vx and vy). The limits of the
-  figure correspond to the observed velocities.
-- 'X_magnitude' -> Xvv.png : Superposition of the magnitude of estimated velocities and the magnitude of observed
-  velocities. The limits of the figure correspond to the estimated velocities.
-- 'X_magnitude_zoom' -> Xvv_Zoom.png : Zoom on the ordinate of Xvv. The limits of the figure correspond to the observed
-  velocities.
-- 'Y_contribution' -> X_dates_contribution_vx_vy.png : Number of displacements of Y (observed displacements) used to
-  calculate a displacement of X (estimated displacements) for vx and vy.
+* to understand to output of pixel_demo please check Visualization_pixel_output.md
 
 [packaging guide]: https://packaging.python.org
 

@@ -18,8 +18,6 @@ import time
 import os
 import warnings
 import itertools
-import numpy as np
-from osgeo import gdal, osr
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
@@ -53,7 +51,7 @@ save_mean_velocity = True # Save a .tiff file with the mean resulting velocities
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results"))}'  # Path where to stored the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
 result_fn = 'test'# Name of the netCDF file to be created
 
 proj = 'EPSG:3413'  # EPSG system of the given coordinates
@@ -123,7 +121,7 @@ block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
-#Update of dictionary
+#Update of dictionary with common parameteres
 for common_parameter in ['flags','proj','delete_outliers','regu','solver']: inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
 # %%========================================================================= #
@@ -197,23 +195,8 @@ cubenew = cube.write_result_ticoi(result, source, sensor, filename=result_fn, sa
                                       result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
     
 # Plot the mean velocity as an example
-if save_mean_velocity:
-    mean_vv = np.sqrt(cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(np.float32)
-    mean_vv = np.flip(mean_vv, axis=0)
-    
-    driver = gdal.GetDriverByName('GTiff')
-    srs = osr.SpatialReference()
-    srs.SetWellKnownGeogCS('EPSG:32632')
-    
-    resolution = cube.resolution
-    dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
-    dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
-    dst_ds_temp.GetRasterBand(1).WriteArray(mean_vv)
-    dst_ds_temp.SetProjection(srs.ExportToWkt())
-    
-    dst_ds_temp = None
-    driver = None
-        
+if save_mean_velocity: cube.average_cube(return_format='geotiff', return_variable=['vv'], save=True, path_save=path_save)
+
 if save or save_mean_velocity:
     print(f'[ticoi_cube_demo] Results saved at {path_save}')
 

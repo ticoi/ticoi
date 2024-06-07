@@ -28,6 +28,7 @@ from ticoi.filtering_functions import *
 from typing import Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
+from osgeo import gdal, osr
 
 
 # %% ======================================================================== #
@@ -1170,7 +1171,7 @@ class cube_data_class:
         if cube.author not in self.author.split('\n'):
             self.author += f'\n{cube.author}'
 
-    def average_cube(self,return_format = 'tiff', return_variable='vv'):
+    def average_cube(self,return_format = 'geotiff', return_variable=['vv'],save=True,path_save=None):
         """
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
@@ -1178,31 +1179,53 @@ class cube_data_class:
 
         vx_mean = self.ds['vx'].mean(dim='mid_date')
         vy_mean = self.ds['vy'].mean(dim='mid_date')
-        ds_mean = xr.Dataset({})
-        coords = {'y': self.ds.y, 'x': self.ds.x}
-        ds_mean['vx_mean'] = xr.DataArray(, dims=['y', 'x'], coords=coords)
-        ds_mean['vy_mean'] = xr.DataArray(self.ds['vy'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
+        dico_variable = {'vx': vx_mean, 'vx': vy_mean}
+        if 'vv' in return_variable:
+            vv_mean =  np.sqrt(vx_mean**2 +vy_mean**2)
+            dico_variable['vv'] = vv_mean
 
-        mean_vv = np.sqrt(
-            cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(
-            np.float32)
-        mean_vv = np.flip(mean_vv, axis=0)
+        if return_format == 'nc':
+            ds_mean = xr.Dataset({})
+            coords = {'y': self.ds.y, 'x': self.ds.x}
+            for variable in return_variable:
+                ds_mean[f'{variable}_mean'] = xr.DataArray(dico_variable[variable], dims=['y', 'x'], coords=coords)
+            if save: ds_mean.to_netcdf(path_save)
+            return ds_mean
 
-        driver = gdal.GetDriverByName('GTiff')
-        srs = osr.SpatialReference()
-        srs.SetWellKnownGeogCS('EPSG:32632')
+        elif return_format == 'geotiff':
+            ds_mean = []
+            for variable in return_variable:
+                mean_v = dico_variable[variable].to_numpy().astype(
+                    np.float32)
+                mean_v = np.flip(mean_v, axis=0)
 
-        resolution = cube.resolution
-        dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1,
-                                    gdal.GDT_Float32)
-        dst_ds_temp.SetGeoTransform(
-            [np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
-        dst_ds_temp.GetRasterBand(1).WriteArray(mean_vv)
-        dst_ds_temp.SetProjection(srs.ExportToWkt())
+                if save:
+                    # Convert proj4 string to EPSG code
+                    crs = CRS(self.ds.proj4)
+                    epsg_code = crs.to_epsg()
+                    # Create a new spatial reference object
+                    srs = osr.SpatialReference()
+                    srs.ImportFromEPSG(epsg_code)
+                    # Create the GeoTIFF file
+                    driver = gdal.GetDriverByName('GTiff')
+                    dst_ds_temp = driver.Create(f'{path_save}/mean_velocity_{variable}.tiff', mean_v.shape[1], mean_v.shape[0], 1,
+                                                gdal.GDT_Float32)
+                    # Set the GeoTransform
+                    dst_ds_temp.SetGeoTransform([
+                        np.min(self.ds['x'].values), self.resolution, 0,
+                        np.min(self.ds['y'].values), 0, self.resolution
+                    ])
+                    # Write the array to the raster band
+                    dst_ds_temp.GetRasterBand(1).WriteArray(mean_v)
+                    # Set the projection
+                    dst_ds_temp.SetProjection(srs.ExportToWkt())
+                    # Properly close the dataset
+                    dst_ds_temp.FlushCache()
 
-        dst_ds_temp = None
-        driver = None
-        return ds_mean
+                ds_mean.append(mean_v)
+
+            return ds_mean
+        else: raise ValueError ('Please enter geotiff or nc')
 
     def compute_heatmap_moving(self, points_heatmap: pd.DataFrame, variable: str = 'vv', method_interp: str = 'linear',
                                verbose: bool = False, freq: str = 'MS', method: str = 'mean') -> pd.DataFrame:
