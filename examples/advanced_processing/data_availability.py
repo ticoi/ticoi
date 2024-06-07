@@ -130,7 +130,7 @@ solver = 'LSMR_ini'
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': [330200, 331000, 5075500, 5076800] , # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
                'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
                'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
@@ -173,16 +173,14 @@ if not os.path.exists(path_save):
     
 
 # %%========================================================================= #
-#                                 CUBE LOADING                                #
+#                                 DATA LOADING                                #
 # =========================================================================%% #
 
 start = [time.time()]
 
 # Load the first cube
 cube = cube_data_class()
-cube.load(cube_names[0], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
-          pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
-          subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
+cube.load(cube_names[0], **load_kwargs)
 
 # Several cubes have to be merged together
 filenames = [cube.filename]
@@ -191,10 +189,8 @@ if len(cube_names) > 1:
         cube2 = cube_data_class()
         subset = load_kwargs['subset']
         res = cube.ds['x'].values[1] - cube.ds['x'].values[0] # Resolution of the main data
-        cube2.load(cube_names[n], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], 
-                   conf=load_kwargs['conf'], pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], 
-                   proj=load_kwargs['proj'], verbose=load_kwargs['verbose'],
-                   subset=[subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res] if subset is not None else None)
+        load_kwargs.update({'subset': [subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res]})
+        cube2.load(cube_names[n], **load_kwargs)
         filenames.append(cube2.filename)
         # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
         cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
@@ -206,8 +202,8 @@ if mask_file is not None:
     cube.mask_cube(mask_file)
 
 stop = [time.time()]
-print(f'[data_availability] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[data_availability] Data loading took {round(stop[0] - start[0], 2)} s')
+print(f'[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[Data loading] Data loading took {round(stop[0] - start[0], 2)} s')
 
 
 # %%========================================================================= #
@@ -218,7 +214,8 @@ start.append(time.time())
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 if load_pixel_process == 'block_process': 
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', preData_kwargs=preData_kwargs, inversion_kwargs=load_pixel_kwargs)
+    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', preData_kwargs=preData_kwargs, 
+                                   inversion_kwargs=load_pixel_kwargs)
 
 # Direct loading of the whole cube
 elif load_pixel_process == 'direct_process':    
@@ -229,9 +226,7 @@ elif load_pixel_process == 'direct_process':
     # Parallelized loading of the pixels (list of arrays converted to dataframes)
     print('[data_availability] Loading pixels...')
     result = Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(cube.load_pixel)(i, j, proj=load_pixel_kwargs['proj'], interp=load_pixel_kwargs['interpolation_load_pixel'],
-                             solver=load_pixel_kwargs['solver'], regu=load_pixel_kwargs['regu'], rolling_mean=None, 
-                             visual=load_pixel_kwargs['visual'], verbose=load_pixel_kwargs['verbose'])
+                delayed(cube.load_pixel)(i, j, rolling_mean=None, **load_pixel_kwargs)
                 for i, j in xy_values_tqdm)
 
 result = [pd.DataFrame(data={'date1': r[0][0][:, 0], 'date2': r[0][0][:, 1],
@@ -259,10 +254,10 @@ if len(index) > 0:
                   'nb_long_data': int(np.max(longitude) - np.min(longitude)) // resolution + 1,
                   'nb_lat_data': int(np.max(latitude) - np.min(latitude)) // resolution + 1}
 else:
-    print('[data_availability] index list is empty, no indices or availability map will be computed...')
+    print('[Data loading] index list is empty, no indices or availability map will be computed...')
 
 stop.append(time.time())
-print(f'[data_availability] Pixel loading and filtering took {round(stop[1] - start[1], 1)} s')
+print(f'[Data loading] Pixel loading and filtering took {round(stop[1] - start[1], 1)} s')
 
 
 # %%========================================================================= #
@@ -336,15 +331,15 @@ for ind in index:
             period = int(ind.split('_')[-1][:-1])
         
         if 'all_data' in ind:
-            print('[data_availability] Computing all_data index...')
+            print('[Raw indices] Computing all_data index...')
             generate_tiff_index_map(all_data, data, period, coord_data, driver, srs, f'{path_save}index_all_data.tiff', 
                                     dtype='float32', parallel=False)
         if 'median_baseline' in ind:
-            print('[data_availability] Computing median_baseline index...')
+            print('[Raw indices] Computing median_baseline index...')
             generate_tiff_index_map(median_baseline, data, period, coord_data, driver, srs, f'{path_save}index_median_baseline.tiff', 
                                     dtype='int16', parallel=False)
         if 'max_leap_frog' in ind:
-            print('[data_availability] Computing max_leap_frog index...')
+            print('[Raw indices] Computing max_leap_frog index...')
             generate_tiff_index_map(max_leap_frog, data, period, coord_data, driver, srs, f'{path_save}index_max_leap_frog.tiff', 
                                     dtype='int16', parallel=False)
             
@@ -352,7 +347,7 @@ for ind in index:
 
 if is_raw_data_indices:
     tac = time.time()
-    print(f'[data_availability] Computing indices based on raw data only took {round(tac-tic, 1)} s')
+    print(f'[Raw indices] Computing indices based on raw data only took {round(tac-tic, 1)} s')
 
 driver = None
 
@@ -384,7 +379,7 @@ if 'monthly' in index:
         return pond
     
     # Parallelized computation
-    print('[data_availability] Computing monthly data availability...')
+    print('[Monthly availability] Computing monthly data availability...')
     monthly = pd.DataFrame(index=[(i, j) for (i, j) in positions],
                            columns=pd.date_range(start=np.min([d['date1'].min() for d in data]), 
                                                  end=np.max([d['date2'].max() for d in data]), freq='MS'))    
@@ -402,7 +397,7 @@ if 'monthly' in index:
     availability.index = [f'{availability.index[i].year}-{"0" if availability.index[i].month < 10 else ""}{availability.index[i].month}' for i in range(len(availability.index))]
 
     tac = time.time()
-    print(f'[data_availability] Computing monthly data availability with the ponderation approach took {round(tac-tic, 1)} s')
+    print(f'[Monthly availability] Computing monthly data availability with the ponderation approach took {round(tac-tic, 1)} s')
 
     # Plot a bar plot of the average monthly data availability of the data on the loaded cube (whole cube or subset)
     if 'monthly_graph' in index:
@@ -421,7 +416,7 @@ if 'monthly' in index:
         
         ax.set_yscale('log')
         fig.savefig(f'{path_save}monthly_availability_log.png')
-        print(f'[data_availability] Monthly availability graphs were saved to {path_save}monthly_availability(_log).png')
+        print(f'[Monthly availability] Monthly availability graphs were saved to {path_save}monthly_availability(_log).png')
         
     del availability
     
@@ -473,8 +468,8 @@ if 'availability_maps' in index:
     tiff = None
     
     tac = time.time()
-    print(f'[data_availability] Generating the availability maps took {round(tac-tic, 1)} s')
-    print(f'[data_availability] Availability map was saved to {path_save}seasonal_data_availability.tiff')
+    print(f'[Availability maps] Generating the availability maps took {round(tac-tic, 1)} s')
+    print(f'[Availability maps] Availability map was saved to {path_save}seasonal_data_availability.tiff')
  
     
 # %%========================================================================= #
@@ -562,7 +557,7 @@ for ind in index:
             n_month = int(ind.split('_')[1][:-5])
         method = ind.split('_')[0]
         
-        print(f'[data_availability] Computing {method}_{n_month}month index...')
+        print(f'[Indices] Computing {method}_{n_month}month index...')
         generate_tiff_index_map_from_monthly_availability(methods[method], monthly, positions, n_month, coord_data, 
                                                           f'{path_save}index_{method}_{n_month}month.tiff')
         
@@ -570,7 +565,7 @@ for ind in index:
 
 if is_monthly_indices:
     tac = time.time()
-    print(f'[data_availability] Computing indices based on monthly data availability took {round(tac-tic, 1)} s')
+    print(f'[Indices] Computing indices based on monthly data availability took {round(tac-tic, 1)} s')
 
     
 # Seasonal indices
@@ -579,18 +574,18 @@ if 'mini_season' in index or 'min_all_season' in index:
     
     maps = (winter, spring, summer, autumn)   
     if 'mini_season' in index:
-        print('[data_availability] Computing mini_season index...')
+        print('[Indices] Computing mini_season index...')
         generate_tiff_index_map_from_availability_map(mini_season, maps, coord_data, driver, srs, 
                                                       f'{path_save}index_mini_season.tiff')
     if 'min_all_season' in index:
-        print('[data_availability] Computing min_all_season index...')
+        print('[Indices] Computing min_all_season index...')
         generate_tiff_index_map_from_availability_map(min_all_season, maps, coord_data, driver, srs,
                                                       f'{path_save}index_min_all_season.tiff')
         
     tac = time.time()
-    print(f'[data_availability] Computing indices based on seasonal data availability maps took {round(tac-tic, 1)} s')
+    print(f'[Indices] Computing indices based on seasonal data availability maps took {round(tac-tic, 1)} s')
 
 driver = None
 
 stop.append(time.time())
-print(f'[data_availability] Overall processing took {round(stop[2] - start[0], 0)} s')
+print(f'[Overall] Overall processing took {round(stop[2] - start[0], 0)} s')
