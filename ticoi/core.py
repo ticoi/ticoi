@@ -150,7 +150,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                    linear_operator: bool = False, result_quality: list | str | None = None, nb_max_iteration: int = 10,
                    visual: bool = True, verbose: bool = False) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
     
-    """
+    '''
     Computes A in AX = Y and does the inversion using a given solver.
 
     :param data: [list] --- An array where each line is (date1, date2, other elements ) for which a velocity is computed (correspond to the original displacements)
@@ -175,7 +175,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
     :return A: [np array | None] --- Design matrix in AX = Y
     :return result: [pd dataframe | None] --- DF with dates, computed displacements and number of observations used to compute each displacement
     :return dataf: [pd dataframe | None] --- Complete DF with dates, velocities, errors, residus, weights, xcount, normr... for further visual purposes (directly depends on param visual and result_quality)
-    """
+    '''
 
     if data[0].size:  # If there are available data on this pixel
     
@@ -584,7 +584,7 @@ def interpolation_to_data(result: pd.DataFrame, data: pd.DataFrame, option_inter
 # =========================================================================%% #
 
 def process(cube: cube_data_class, i: float | int, j: float | int, path_save, solver: str = 'LSMR', regu: int | str = 1, coef: int = 100, 
-            flags: xr.Dataset | None = None, apriori_weight: bool = False, returned: list | str = 'interp', obs_filt: xr.Dataset = None, 
+            flags: xr.Dataset | None = None, apriori_weight: bool = False, returned: list | str = 'interp', obs_filt: xr.Dataset | None = None, 
             interpolation_load_pixel: str = 'nearest', iteration: bool = True, interval_output: int = 1, first_date_interpol: np.datetime64 | None = None, 
             last_date_interpol: np.datetime64 | None = None, proj='EPSG:4326', threshold_it: float = 0.1, conf: bool = True, 
             option_interpol: str = 'spline', redundancy: int | None = None, detect_temporal_decorrelation: bool = True, unit: int = 365,
@@ -599,7 +599,7 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
     :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
     :param apriori_weight: [bool] [default is False] --- If True use of aprori weight
     :param returned: [list | str] [default is 'interp'] --- What results must be returned ('raw', 'invert' and/or 'interp')
-    :param obs_filt: [xr dataset] [default is None] --- Filtered dataset (e.g. rolling mean)
+    :param obs_filt: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
     :param interpolation_load_pixel: [str] [default is 'nearest'] --- Type of interpolation to load the previous pixel in the temporal interpolation ('nearest' or 'linear')
     :param iteration: [bool] [default is True] --- If True, use of iterations
     :param interval_output: [int] [default is 1] --- Temporal sampling of the leap frog time series
@@ -715,10 +715,11 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
 
     return blocks
 
+
 def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_end: int,
                flags: xr.Dataset | None = None):
     
-    """
+    '''
     Persist a block in memory, i.e. load it in a distributed way.
     
     :param cube: [cube_data_class] --- Cube splited in blocks
@@ -728,7 +729,7 @@ def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_
     :return block: [cube_data_class] --- Sub-cube of cube according to the boundaries (block)
     :return flags_block: [xr dataset | None] --- If not None, part of flags dataset corresponding to the block
     :return duration: [float] --- Duration of the block loading
-    """
+    '''
     
     start = time.time()
     block = cube_data_class()
@@ -743,6 +744,7 @@ def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_
     duration = time.time() - start
 
     return block, flags_block, duration
+
 
 def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: float = 0.5, returned: list | str = 'interp', 
                           preData_kwargs: dict = None, inversion_kwargs: dict = None, verbose: bool = False):
@@ -762,11 +764,12 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
     :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
     '''
     
-    async def process_block(block, returned='interp', nb_cpu=8, verbose=False): 
+    async def process_block(block: cube_data_class, returned: list | str = 'interp', nb_cpu: int = 8, verbose: bool = False): 
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
-
+        
+        # Return only raw data => no need to filter the cube
         if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
                               delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
@@ -775,6 +778,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
                               for i, j in xy_values_tqdm)
             return result_block
         
+        # Filter the cube
         obs_filt = block.filter_cube(**preData_kwargs)
         
         # There is no data on the whole block (masked data)
@@ -788,32 +792,19 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
                 for i, j in xy_values_tqdm)
 
-        # result_block = [process(block, i, j, obs_filt=obs_filt,**inversion_kwargs)
-        #                 for i, j in xy_values_tqdm]
         return result_block
     
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
-        
-        # Get the parameters
-        # if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-        #     for key, value in preData_kwargs.items():
-        #         globals()[key] = value
-        #     for key, value in inversion_kwargs.items():
-        #         globals()[key] = value
-        # else:
-        #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
-
         flags = preData_kwargs['flags']
-        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
+        blocks = chunk_to_block(cube, block_size=block_size, verbose=True) # Split the cube in smaller blocks
         
         dataf_list = [None] * ( cube.nx * cube.ny )
 
         loop = asyncio.get_event_loop()
-
         for n in range(len(blocks)):
             print(f'Processing block {n+1}/{len(blocks)}')
 
-            # load the first block and start the loop
+            # Load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
@@ -822,15 +813,15 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
             preData_kwargs['flags'] = flags_block
             inversion_kwargs['flags'] = flags_block
             print(f'Block {n+1} loaded in {duration:.2f} s')
-            # if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
-                # load the next block while processing the current block
+                # Load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n+1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
-
-            block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose)
-
+                
+            block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose) # Process TICOI
+            
+            # Transform to list
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
                 col = np.floor( i / block.ny ) + blocks[n][0]
@@ -841,7 +832,9 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
             del block_result, block, flags_block
 
         return dataf_list
-      
+    
+    # /!\ The use of asyncio can cause problems when the code is launched from an IDE if it has its own event loop
+    # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
     return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs, 
                                            inversion_kwargs=inversion_kwargs, verbose=verbose))
 
@@ -854,7 +847,7 @@ def visualisation(data: pd.DataFrame, result: np.ndarray, option_visual: list, p
                   interval_inputMax: int | None = None, A: np.ndarray | None = None, dataf: pd.DataFrame | None = None, 
                   unit: str = 'm/y', figsize: tuple = (12, 6), show: bool = True):
     
-    """
+    '''
     Visualize the data (original datas and results from inversion and interpolation).
     
     :param data: [pd dataframe] --- An array where each line is (date1, date2, other elements ) for which a velocity is computed (correspond to the original displacements)
@@ -868,7 +861,7 @@ def visualisation(data: pd.DataFrame, result: np.ndarray, option_visual: list, p
     :param unit: [str] [default is 'm/y'] --- 'm/d' or 'm/y'
     :param figsize: [tuple] [default is (12, 6)] --- Size of the figures (int1, int2)
     :param show: [bool] [default is True] --- If True the figures are showed
-    """
+    '''
     
     if data is not None and data.size:  # If there are datas at the given point
         conversion = unit
