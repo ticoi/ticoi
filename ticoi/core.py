@@ -35,6 +35,7 @@ from typing import Union
 import asyncio
 import xarray as xr
 import warnings
+from ticoi.pixel_class import pixel_class
 
 warnings.filterwarnings("ignore")
 
@@ -999,8 +1000,24 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
     return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs, 
                                            inversion_kwargs=inversion_kwargs, verbose=verbose))
 
+def visualisation_core(list_dataf,option_visual,save=False,show=True,path_save=None,A=None,log_scale=False,cmap='rainbow',colors=['blueviolet','orange']):
+    pixel_object = pixel_class()
+    pixel_object.load(list_dataf, save=save, show=show, A=A,path_save=path_save)
 
-def visualisation(data:pd.DataFrame|None, result:np.ndarray, option_visual:list, path_save:str, interval_output:int=1, interval_inputMax:int|None=None, A:np.ndarray|None=None,
+    dico_visual = {'obs_xy':pixel_object.plot_vx_vy(color=colors[0]), 'obs_magnitude':pixel_object.plot_vv(color=colors[0]), 'obs_vxvy_quality':pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs'),
+     'invertxy_overlayed':pixel_object.plot_vx_vy_overlayed(colors=colors), 'invertvv_overlayed':pixel_object.plot_vv_overlayed(colors=colors),'residuals':pixel_object.plot_residuals(log_scale=log_scale), 'xcount_xy':pixel_object.plot_xcount_vx_vy(cmap=cmap),'xcount_vv':pixel_object.plot_xcount_vv(cmap=cmap)}
+
+    for option in option_visual:
+        dico_visual[option]
+
+    # pixel_object.plot_vx_vy_overlayed(color=colors,type_data='invert')
+    # pixel_object.plot_vv_overlayed(color=colors,type_data='invert')
+    # pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs')
+    # pixel_object.plot_xcount_vv(cmap=cmap)
+    # pixel_object.plot_xcount_vx_vy(cmap=cmap)
+    # pixel_object.plot_residuals(log_scale=log_scale)
+
+def visualisation_old(data:pd.DataFrame|None, result:np.ndarray, option_visual:list, path_save:str, interval_output:int=1, interval_inputMax:int|None=None, A:np.ndarray|None=None,
                   dataf:pd.DataFrame|None=None, unit:str='m/y',figsize:tuple=(12, 6), show:bool=True):
     """
     Visualize the data (original datas and results).

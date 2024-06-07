@@ -200,8 +200,8 @@ if not os.path.exists(f'{path_save}Fourier/'):
     
 dataf_lp = dataf_lp.dropna()
 
-dates_c = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2
-dates = (dates_c - dataf_lp['First_date'].min()).dt.days.to_numpy()
+dates_c = dataf_lp['date1'] + (dataf_lp['Second_date'] - dataf_lp['date1']) // 2
+dates = (dates_c - dataf_lp['date1'].min()).dt.days.to_numpy()
 vv = np.sqrt(dataf_lp['vx']**2 + dataf_lp['vy']**2).to_numpy()
 vv_c = vv - np.mean(vv)
 
@@ -249,7 +249,7 @@ if impose_frequency:
     if phi < 0: phi += 2*np.pi
 
     print(f'[ticoi_pixel_demo] Amplitude of the best matching sinus: {round(abs(popt[0]), 1)} m/y')
-    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  dataf_lp['First_date'].min()
+    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  dataf_lp['date1'].min()
     max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1))
     print(f'[ticoi_pixel_demo] Maximum at day {max_day.days}')
     print(f'[ticoi_pixel_demo] RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y')
@@ -303,7 +303,7 @@ else:
     
     print(f'[ticoi_pixel_demo] Period of the best matching sinus : {round(1/f, 0)} days')
     print(f'[ticoi_pixel_demo] Amplitude : {round(abs(A), 1)} m/y')
-    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  dataf_lp['First_date'].min()
+    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  dataf_lp['date1'].min()
     max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1))
     print(f'[ticoi_pixel_demo] Maximum at day {max_day.days}')
     print(f'[ticoi_pixel_demo] RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y')
@@ -350,7 +350,7 @@ elif local_var_method.split('_')[0] == 'uniform':
     var = local_var[local_var > 0].dropna().median()  
     
 elif local_var_method == 'residu':
-    dataf_lp.index = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2
+    dataf_lp.index = dataf_lp['date1'] + (dataf_lp['Second_date'] - dataf_lp['date1']) // 2
     dataf_lp['vv'] = np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
     dataf_lp = dataf_lp.reindex(index=np.unique(dataff.index)).interpolate().dropna()
     dataff = dataff[dataff.index >= dataf_lp.index[0]]

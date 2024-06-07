@@ -13,7 +13,7 @@ import time
 import os
 import numpy as np
 
-from ticoi.core import inversion_core, visualisation, interpolation_core
+from ticoi.core import inversion_core, visualisation_core, interpolation_core
 from ticoi.interpolation_functions import prepare_interpolation_date
 from ticoi.cube_data_classxr import cube_data_class
 
@@ -33,12 +33,14 @@ proj = 'EPSG:3413'  # EPSG system of the given coordinates
 i, j = -138.18069, 60.29076
 vmax = [50, 170]  # vmin and vmax of the legend
 # Visualisation options
-option_visual = ['original_velocity_xy', 'original_magnitude',
-                 'X_magnitude_zoom', 'X_magnitude', 'X_zoom', 'X',
-                 'vv_quality', 'vxvy_quality',
-                 'Residu_magnitude', 'Residu',
-                 'X_z', 'Y_contribution',
-                 'direction']
+# option_visual = ['original_velocity_xy', 'original_magnitude',
+#                  'X_magnitude_zoom', 'X_magnitude', 'X_zoom', 'X',
+#                  'vv_quality', 'vxvy_quality',
+#                  'Residu_magnitude', 'Residu',
+#                  'X_z', 'Y_contribution',
+#                  'direction']
+option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlayed','invertvv_overlayed','residuals','xcount_xy','xcount_vv']
+
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {},
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
@@ -139,29 +141,17 @@ A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, solver=in
                                   detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'],
                                   linear_operator=None, result_quality=inversion_kwargs['result_quality'],
                                   visual=visual, verbose=inversion_kwargs['verbose'])
-from ticoi.visualization_functions import pixel_class
+
+
+
+from ticoi.pixel_class import pixel_class
 pixel_object = pixel_class()
-# pixel_object.load(dataf, type_data = 'obs',dataformat='df',save=False,show=True,figsize = (10,6),unit='m/y')
-# pixel_object.plot_vv()
-# pixel_object.plot_vx_vy()
-# pixel_object.plot_vx_vy_quality()
-#
-# pixel_object.load(result, type_data = 'invert',dataformat='df',save=False,show=True,figsize = (10,6))
-# pixel_object.plot_vv()
-# pixel_object.plot_vx_vy()
-# pixel_object.plot_vv()
-# stop.append(time.time())
-
-
-# pixel_object.load_two_dataset([dataf,result],save=False,show=True)
-# pixel_object.plot_vx_vy_overlayed()
-# pixel_object.plot_vv_overlayed()
-# pixel_object.plot_xcount_vv(pixel_object.data2)
-# pixel_object.plot_xcount_vx_vy(pixel_object.data2)
-
+stop.append(time.time())
 print(f'[ticoi_pixel_demo] Inversion took {round((stop[2] - start[2]), 4)} s')
 
-if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=preData_kwargs['unit'], show=True, figsize=(12, 6))
+if visual:visualisation_core([dataf,result],option_visual=option_visual,save=False,show=True,path_save=None,A=None,log_scale=False,cmap='rainbow',colors=['blueviolet','orange'])
+
+# if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=preData_kwargs['unit'], show=True, figsize=(12, 6))
 if save: result.to_csv(f'{path_save}/ILF_result.csv')
 
 # %% ======================================================================== #
@@ -178,7 +168,6 @@ dataf_lp = interpolation_core(result, interpolation_bas,
                               visual=visual, data=dataf, unit=inversion_kwargs['unit'], redundancy=inversion_kwargs['redundancy'],
                               result_quality=inversion_kwargs['result_quality'],
                               verbose=inversion_kwargs['verbose'], vmax=vmax)
-
 stop.append(time.time())
 print(f'[ticoi_pixel_demo] Interpolation took {round((stop[3] - start[3]), 4)} s')
 
