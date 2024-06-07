@@ -148,9 +148,6 @@ from ticoi.pixel_class import pixel_class
 pixel_object = pixel_class()
 stop.append(time.time())
 print(f'[ticoi_pixel_demo] Inversion took {round((stop[2] - start[2]), 4)} s')
-
-if visual:visualisation_core([dataf,result],option_visual=option_visual,save=False,show=True,path_save=None,A=None,log_scale=False,cmap='rainbow',colors=['blueviolet','orange'])
-
 # if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=preData_kwargs['unit'], show=True, figsize=(12, 6))
 if save: result.to_csv(f'{path_save}/ILF_result.csv')
 
@@ -170,6 +167,8 @@ dataf_lp = interpolation_core(result, interpolation_bas,
                               verbose=inversion_kwargs['verbose'], vmax=vmax)
 stop.append(time.time())
 print(f'[ticoi_pixel_demo] Interpolation took {round((stop[3] - start[3]), 4)} s')
+
+if visual:visualisation_core([dataf,result],option_visual=option_visual,save=False,show=True,path_save=None,A=None,log_scale=False,cmap='rainbow',colors=['blueviolet','orange'])
 
 if save: dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
 
