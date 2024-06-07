@@ -635,13 +635,13 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
             regu, coef = data[3], data[4]
         
         # Inversion
-        if delete_outliers == 'median_angle': conf = True  # set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
+        if delete_outliers == 'median_angle': conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
         result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight, unit=unit, conf=conf, 
                                 regu=regu, mean=data[1], iteration=iteration, threshold_it=threshold_it, 
                                 detect_temporal_decorrelation=detect_temporal_decorrelation, linear_operator=linear_operator, 
                                 result_quality=result_quality, nb_max_iteration=nb_max_iteration, visual=visual, verbose=verbose)
         
-        if 'invert' in returned and 'interp' not in returned:
+        if 'invert' in returned:
             if result[1] is not None:
                 returned_list.append(result[1])
             else:
@@ -650,14 +650,14 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
 
         if 'interp' in returned:   
             # Interpolation
-            if result[1] is not None:  # if inversion have been performed
+            if result[1] is not None:  # If inversion have been performed
                 dataf_list = interpolation_core(result[1], interval_output, path_save, option_interpol=option_interpol,
                                                 first_date_interpol=first_date_interpol, last_date_interpol=last_date_interpol,
                                                 visual=visual, data=data, unit=unit, redundancy=redundancy, 
                                                 result_quality=result_quality, verbose=verbose)
         
                 if result_quality is not None and 'Norm_residual' in result_quality: 
-                    dataf_list['NormR'] = result[1]['NormR']  # store norm of the residual from the inversion
+                    dataf_list['NormR'] = result[1]['NormR']  # Store norm of the residual from the inversion
                 returned_list.append(dataf_list)
             else:
                 if result_quality is not None and 'Norm_residual' in result_quality: 

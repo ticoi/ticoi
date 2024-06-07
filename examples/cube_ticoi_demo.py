@@ -49,7 +49,7 @@ warnings.filterwarnings("ignore")
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 #   - 'load' : The TICOI cube was already calculated before, load it using the load_file variable to indicate the path to the .nc file
 
-TICOI_process = 'block_process'
+TICOI_process = 'direct_process'
 
 save = True # If True, save TICOI results to a netCDF file
 save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
@@ -80,7 +80,7 @@ solver = 'LSMR_ini' # Solver for the inversion
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion
 #   - 'interp' for the results of the interpolation
-returned = 'interp'
+returned = ['invert', 'interp']
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
@@ -213,8 +213,8 @@ elif TICOI_process == 'direct_process':
     xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
     
     # Main processing of the data with TICOI algorithm, individually for each pixel
-    result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(process)(cube, i, j, returned=returned, **inversion_kwargs)
-                                                        for i, j in xy_values_tqdm)
+    result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(process)(cube, i, j, returned=returned, obs_filt=obs_filt,
+                                                                 **inversion_kwargs) for i, j in xy_values_tqdm)
 
 elif TICOI_process == 'load':
     cubenew = cube_data_class()
@@ -257,9 +257,9 @@ if TICOI_process != 'load':
             source += ' and apriori weight'
         source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
         if 'interp' in returned:
-            source += f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
-            source += f'The interpolation baseline is {inversion_kwargs["interval_output"]} days.'
-            source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
+            source_interp = source + f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
+            source_interp += f'The interpolation baseline is {inversion_kwargs["interval_output"]} days.'
+            source_interp += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
     
     stop.append(time.time())    
     print(f'[Writing results] Initialisation took {round(stop[2] - start[2], 3)} s')
@@ -274,12 +274,24 @@ else:
 
 start.append(time.time())
 if TICOI_process != 'load':
-    # Save TICOI results to a netCDF file, thus obtaining a new data cube
-    cubenew = cube.write_result_ticoi(result, source, sensor, filename=result_fn, savepath=path_save if save else None, 
-                                      result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
-    
+    # Save TICO.I results to a netCDF file, thus obtaining a new data cube
+    cube_interp = None
+    several = (type(returned) == list and len(returned) >= 2)
+    if 'invert' in returned:
+        cube_invert = cube.write_result_tico([result[i][0] for i in range(len(result))] if several else result, source, sensor, 
+                                             filename=f'{result_fn}_invert' if several else result_fn, 
+                                             savepath=path_save if save else None, 
+                                             result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
+    if 'interp' in returned:
+        cube_interp = cube.write_result_ticoi([result[i][1] for i in range(len(result))] if several else result, source_interp, sensor, 
+                                              filename=f'{result_fn}_invert' if several else result_fn, 
+                                              savepath=path_save if save else None, 
+                                              result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
+
 # Plot the mean velocity as an example
-if save_mean_velocity:
+# TODO format the data cube with inversion results to the format of the interpolation resulting cube
+if save_mean_velocity and cube_interp is not None:
+    cubenew = cube_interp
     mean_vv = np.sqrt(cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(np.float32)
     mean_vv = np.flip(mean_vv, axis=0)
     
