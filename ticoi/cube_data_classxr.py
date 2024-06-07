@@ -593,8 +593,8 @@ class cube_data_class:
         }
 
         self.__init__()
-        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
-            if filepath.split(".")[-1] == "nc":  
+        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks       
+            if filepath.split(".")[-1] == "nc":
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
                 except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
@@ -860,7 +860,6 @@ class cube_data_class:
         :param flags:
 
         Returns: nothing, but modify self
-
         """
         
         if isinstance(delete_outliers, int):

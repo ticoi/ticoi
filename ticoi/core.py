@@ -219,7 +219,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
             else:
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
 
-        #### Initialisation (depending on apriori and solver)
+        ##  Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
         if regu == '1accelnotnull':
             accel = [np.diff(mean[0]), np.diff(
@@ -236,7 +236,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
             mean_ini = None
             accel = None
 
-        #### Inversion
+        ##  Inversion
         # 87.5 ms ± 668 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
         if regu == 'directionxy':
             result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(A, dates_range, 0, data_values,
@@ -530,6 +530,7 @@ def interpolation_core(result: pd.DataFrame, interval_output: int, path_save: st
 
     return dataf_lp
 
+
 def interpolation_to_data(result: pd.DataFrame, data: pd.DataFrame, option_interpol: str = 'spline', unit: int = 365, 
                           result_quality: list | None = None):
     
@@ -583,7 +584,7 @@ def interpolation_to_data(result: pd.DataFrame, data: pd.DataFrame, option_inter
 # =========================================================================%% #
 
 def process(cube: cube_data_class, i: float | int, j: float | int, path_save, solver: str = 'LSMR', regu: int | str = 1, coef: int = 100, 
-            flags: list | None = None, apriori_weight: bool = False, returned: list | str = 'interp', obs_filt: xr.Dataset = None, 
+            flags: xr.Dataset | None = None, apriori_weight: bool = False, returned: list | str = 'interp', obs_filt: xr.Dataset = None, 
             interpolation_load_pixel: str = 'nearest', iteration: bool = True, interval_output: int = 1, first_date_interpol: np.datetime64 | None = None, 
             last_date_interpol: np.datetime64 | None = None, proj='EPSG:4326', threshold_it: float = 0.1, conf: bool = True, 
             option_interpol: str = 'spline', redundancy: int | None = None, detect_temporal_decorrelation: bool = True, unit: int = 365,
@@ -595,7 +596,7 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
     :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
     :param regu: [int | str] [default is 1] --- Type of regularization
     :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
-    :param flags: [list | None] [default is None] --- List which can contain 'linear_operator', which is the linear operator to use in the inversion (e.g. the covariance matrix of the observation errors), and 'mean', which is the mean of the observations
+    :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
     :param apriori_weight: [bool] [default is False] --- If True use of aprori weight
     :param returned: [list | str] [default is 'interp'] --- What results must be returned ('raw', 'invert' and/or 'interp')
     :param obs_filt: [xr dataset] [default is None] --- Filtered dataset (e.g. rolling mean)
@@ -671,6 +672,78 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
         return returned_list[0]
     return returned_list if len(returned_list) > 0 else None
 
+
+def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool = False):
+    
+    '''
+    Split a dataset in blocks of a given size (maximum).
+    
+    :param cube: [cube_data_class] --- Cube to be splited in blocks
+    :param block_size: [float] [default is 1] --- Maximum size (in GB) of the blocks
+    :param verbose: [bool] [default is False] --- Print informations along the way
+    
+    :return blocks: [list] --- List of the boundaries of each blocks (x_start, x_end, y_start, y_end)
+    '''
+    
+    GB = 1073741824
+    blocks = []
+    if cube.ds.nbytes > block_size * GB:
+        num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
+        chunk_bytes = num_elements * cube.ds['vx'].dtype.itemsize
+        
+        nchunks_block = int(block_size * GB // chunk_bytes)
+        
+        x_step = int(np.sqrt(nchunks_block))
+        y_step = nchunks_block // x_step
+        
+        nblocks_x = int(np.ceil(len(cube.ds.chunks['x']) / x_step))
+        nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
+        
+        nblocks = nblocks_x * nblocks_y
+        if verbose: print(f'[TICOI processing] Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
+
+        for i in range(nblocks_y):
+            for j in range(nblocks_x):
+                x_start = j * x_step * cube.ds.chunks['x'][0]
+                y_start = i * y_step * cube.ds.chunks['y'][0]
+                x_end = x_start + x_step * cube.ds.chunks['x'][0] if j != nblocks_x - 1 else cube.ds.dims['x']
+                y_end = y_start + y_step * cube.ds.chunks['y'][0] if i != nblocks_y - 1 else cube.ds.dims['y']
+                blocks.append([x_start, x_end, y_start,y_end])
+    else:
+        blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
+        if verbose: print(f'[TICOI processing] Cube size smaller than {block_size}GB, no need to divide')
+
+    return blocks
+
+def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_end: int,
+               flags: xr.Dataset | None = None):
+    
+    """
+    Persist a block in memory, i.e. load it in a distributed way.
+    
+    :param cube: [cube_data_class] --- Cube splited in blocks
+    :params x_start, x_end, y_start, y_end: [int] --- Boundaries of the block
+    :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+    
+    :return block: [cube_data_class] --- Sub-cube of cube according to the boundaries (block)
+    :return flags_block: [xr dataset | None] --- If not None, part of flags dataset corresponding to the block
+    :return duration: [float] --- Duration of the block loading
+    """
+    
+    start = time.time()
+    block = cube_data_class()
+    block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+    block.ds = block.ds.persist()
+    block.update_dimension()
+
+    if flags is not None:
+        flags_block = flags.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+    else:
+        flags_block = None
+    duration = time.time() - start
+
+    return block, flags_block, duration
+
 def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: float = 0.5, returned: list | str = 'interp', 
                           preData_kwargs: dict = None, inversion_kwargs: dict = None, verbose: bool = False):
 
@@ -689,59 +762,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
     :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
     '''
     
-    def chunk_to_block(cube, block_size=1, verbose=False):
-        GB = 1073741824
-        blocks = []
-        if cube.ds.nbytes > block_size * GB:
-            num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
-            chunk_bytes = num_elements * cube.ds['vx'].dtype.itemsize
-            
-            nchunks_block = int(block_size * GB // chunk_bytes)
-            
-            x_step = int(np.sqrt(nchunks_block))
-            y_step = nchunks_block // x_step
-            
-            nblocks_x = int(np.ceil(len(cube.ds.chunks['x']) / x_step))
-            nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
-            
-            nblocks = nblocks_x * nblocks_y
-            if verbose: print(f'Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
-
-            for i in range(nblocks_y):
-                for j in range(nblocks_x):
-                    x_start = j * x_step * cube.ds.chunks['x'][0]
-                    y_start = i * y_step * cube.ds.chunks['y'][0]
-                    x_end = x_start + x_step * cube.ds.chunks['x'][0] if j != nblocks_x - 1 else cube.ds.dims['x']
-                    y_end = y_start + y_step * cube.ds.chunks['y'][0] if i != nblocks_y - 1 else cube.ds.dims['y']
-                    blocks.append([x_start, x_end, y_start,y_end])
-        else:
-            blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
-            if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
-
-        return blocks
-    
-    def load_block(cube: "cube_data_class", x_start: int, x_end: int, y_start: int, y_end: int,
-                   flags: None | xr.Dataset):
-        
-        """
-        Persist a block in memory, i.e. load it in a distributed way.
-        """
-        
-        start = time.time()
-        block = cube_data_class()
-        block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-        block.ds = block.ds.persist()
-        block.update_dimension()
-
-        if flags is not None:
-            flags_block = flags.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-        else:
-            flags_block = None
-        duration = time.time() - start
-
-        return block, flags_block, duration
-    
-    async def process_block(block, returned=returned, nb_cpu=8, verbose=False): 
+    async def process_block(block, returned='interp', nb_cpu=8, verbose=False): 
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
@@ -782,7 +803,6 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         # else:
         #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
-        # blocks = cube_split(cube, block_size=block_size, verbose=True)
         flags = preData_kwargs['flags']
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
         
