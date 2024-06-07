@@ -645,8 +645,8 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
             if result[1] is not None:
                 returned_list.append(result[1])
             else:
-                returned_list.append(pd.DataFrame(
-                    {'date1': [], 'date2': [], 'result_dx': [], 'result_dy': [], 'xcount_x': [], 'xcount_y': []}))
+                returned_list.append(pd.DataFrame({'date1': [], 'date2': [], 'result_dx': [], 'result_dy': [], 
+                                                   'xcount_x': [], 'xcount_y': []}))
 
         if 'interp' in returned:   
             # Interpolation
@@ -661,14 +661,15 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
                 returned_list.append(dataf_list)
             else:
                 if result_quality is not None and 'Norm_residual' in result_quality: 
-                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'NormR': []}))
+                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 
+                                                       'xcount_x': [], 'xcount_y': [], 'NormR': []}))
                 else:
-                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []}))
+                    returned_list.append(pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 
+                                                       'xcount_x': [], 'xcount_y': []}))
     
     if len(returned_list) == 1:
         return returned_list[0]
     return returned_list if len(returned_list) > 0 else None
-
 
 def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: float = 0.5, returned: list | str = 'interp', 
                           preData_kwargs: dict = None, inversion_kwargs: dict = None, verbose: bool = False):
@@ -686,8 +687,8 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
     :param verbose: [bool] [default is False] --- Print informations along the way
     
     :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
-    '''    
-
+    '''
+    
     def chunk_to_block(cube, block_size=1, verbose=False):
         GB = 1073741824
         blocks = []
@@ -718,7 +719,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
             if verbose: print(f'Cube size smaller than {block_size}GB, no need to divide')
 
         return blocks
-
+    
     def load_block(cube: "cube_data_class", x_start: int, x_end: int, y_start: int, y_end: int,
                    flags: None | xr.Dataset):
         
@@ -739,8 +740,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         duration = time.time() - start
 
         return block, flags_block, duration
-
-
+    
     async def process_block(block, returned=returned, nb_cpu=8, verbose=False): 
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
@@ -764,9 +764,8 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
                 return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []})]
  
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(block,
-            i, j, obs_filt=obs_filt,returned=returned,**inversion_kwargs)
-        for i, j in xy_values_tqdm)
+        delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+                for i, j in xy_values_tqdm)
 
         # result_block = [process(block, i, j, obs_filt=obs_filt,**inversion_kwargs)
         #                 for i, j in xy_values_tqdm]

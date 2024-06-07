@@ -45,11 +45,12 @@ result_quality = 'X_contribution' # Criterium used to evaluate the quality of th
 ## --------------------- Optimization parameters ----------------------- ##
 # Path to the "ground truth" cube used to optimize the regularisation
 cube_gt_name = 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc' 
-coef_min = 10
-coef_max = 1000
-step = 10
-coefs = None
-stats = True
+# Specify the coefficients you want to test
+coefs = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 240, 280, 320, 360, 400, 450, 500, 550, 600, 700, 800, 900, 1000]
+coef_min = 10 # If coefs=None, start point of the range of coefs to be tested 
+coef_max = 1000 # If coefs=None, stop point of the range of coefs to be tested
+step = 10 # If coefs=None, step for the range of coefs to be tested
+stats = True # Compute some statistics on raw data and GT data
 # Visualisation options
 save = True
 plot_them_all = True
@@ -109,7 +110,7 @@ interpolation_kwargs = {'option_interpol': 'spline', # Type of interpolation ('s
                         'unit': unit} # 365 if the unit is m/y, 1 if the unit is m/d
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 12 # Number of CPU to be used for parallelization
+nb_cpu = 4 # Number of CPU to be used for parallelization
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -143,9 +144,9 @@ if mask_file is not None:
     cube_gt.mask_cube(mask_file)
 
 stop = [time.time()]
-print(f'[Data Download] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
-print(f'[Data Download] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[Data Download] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})')
+print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})')
 
 start.append(time.time())
 
@@ -153,7 +154,7 @@ start.append(time.time())
 obs_filt = cube.filter_cube(**preData_kwargs)
 
 stop.append(time.time())
-print(f'[Data Download] Filtering the cube took {round((stop[1] - start[1]), 4)} s')
+print(f'[Data loading] Filtering the cube took {round((stop[1] - start[1]), 4)} s')
 
 
 # %% ======================================================================== #
@@ -216,7 +217,7 @@ mean_std_all = (np.nanmedian([result[i]['std_all'][0][0] if not result[i].empty 
                 np.nanmedian([result[i]['std_all'][0][3] if not result[i].empty else np.nan for i in range(len(result))]))
 
 print(f'[Coef optimization] Pixel with the greatest amount of Pleiade data : {result[np.argmax(nb_datas[1])]["position"][0]}', end='')
-print(f' with {np.max(nb_datas[1])} available Pleiade data')
+print(f'      with {np.max(nb_datas[1])} available Pleiade data')
 
 # Because tested coefficients are the same for each pixel (methods 'constant' and 'given_coef'), we compute the average RMSE 
 # for each coefficient and then select which one is the best (by plotting the curve showing the evolution of the RMSE with 
@@ -285,4 +286,4 @@ if plot_them_all:
     if save: fig.savefig(f'{path_save}RMSE_coef_{regu}_allplots.png')
 
 stop.append(time.time())
-print(f'Overall processing took {round(stop[-1] - start[0], 1)} s')
+print(f'[Overall] Overall processing took {round(stop[-1] - start[0], 1)} s')

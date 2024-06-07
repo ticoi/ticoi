@@ -125,9 +125,7 @@ inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each
                     'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
                     'linear_operator': None, # Perform the inversion using this specific linear operator
                     
-                    'interpolation': True, # If True, perform the temporal interpolation step of TICOI
-                    'interval_output': 1, 
-                    'interpolation_bas': 30, # Temporal baseline of the time series resulting from TICOI (after interpolation)
+                    'interval_output': 30, 
                     'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
                     'redundancy': 5, # Redundancy in the interpolated time series in number of days, no redundancy if None
                     
@@ -170,9 +168,7 @@ start = [time.time()]
     
 # Load the first cube
 cube = cube_data_class()
-cube.load(cube_names[0], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], conf=load_kwargs['conf'], 
-          pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], proj=load_kwargs['proj'], 
-          subset=load_kwargs['subset'], verbose=load_kwargs['verbose'])
+cube.load(cube_names[0], **load_kwargs)
 
 # Several cubes have to be merged together
 filenames = [cube.filename]
@@ -181,10 +177,8 @@ if len(cube_names) > 1:
         cube2 = cube_data_class()
         subset = load_kwargs['subset']
         res = cube.ds['x'].values[1] - cube.ds['x'].values[0] # Resolution of the main data
-        cube2.load(cube_names[n], pick_date=load_kwargs['pick_date'], chunks=load_kwargs['chunks'], 
-                   conf=load_kwargs['conf'], pick_sensor=load_kwargs['pick_sensor'], pick_temp_bas=load_kwargs['pick_temp_bas'], 
-                   proj=load_kwargs['proj'], verbose=load_kwargs['verbose'],
-                   subset=[subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res] if subset is not None else None)
+        load_kwargs.update({'subset': [subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res]})
+        cube2.load(cube_names[n], **load_kwargs)
         filenames.append(cube2.filename)
         # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
         cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
@@ -204,8 +198,8 @@ if mask_file is not None:
     cube.mask_cube(mask_file)
 
 stop = [time.time()]
-print(f'[ticoi_cube_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
+print(f'[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[Data loading] Data loading took {round(stop[0] - start[0], 3)} s')
     
 
 # %%========================================================================= #
@@ -214,7 +208,7 @@ print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
 
 start.append(time.time())
 
-print('[ticoi_cube_demo] Loading pixels...')
+print('[TICOI processing] Processing...')
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
@@ -227,11 +221,7 @@ if TICOI_process == 'block_process':
 # Direct computation of the whole TICOI cube
 elif TICOI_process == 'direct_process':
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(smooth_method=preData_kwargs['smooth_method'], s_win=preData_kwargs['s_win'], 
-                                t_win=preData_kwargs['t_win'], sigma=preData_kwargs['sigma'], order=preData_kwargs['order'],
-                                proj=preData_kwargs['proj'], flags=preData_kwargs['flags'], regu=preData_kwargs['regu'], 
-                                delete_outliers=preData_kwargs['delete_outliers'], velo_or_disp=preData_kwargs['velo_or_disp'],
-                                verbose=preData_kwargs['verbose'])
+    obs_filt = cube.filter_cube(**preData_kwargs)
     
     # Progression bar
     xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
@@ -239,19 +229,7 @@ elif TICOI_process == 'direct_process':
     
     # Main processing of the data with TICOI algorithm, individually for each pixel
     result = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(cube, i, j, inversion_kwargs['solver'], inversion_kwargs['coef'], inversion_kwargs['apriori_weight'], 
-            inversion_kwargs['path_save'], returned=['raw', 'interp'],
-            obs_filt=obs_filt, interpolation_load_pixel=inversion_kwargs['interpolation_load_pixel'],
-            iteration=inversion_kwargs['iteration'], interval_output=inversion_kwargs['interval_output'], 
-            first_date_interpol=inversion_kwargs['first_date_interpol'], last_date_interpol=inversion_kwargs['last_date_interpol'], 
-            threshold_it=inversion_kwargs['threshold_it'], conf=inversion_kwargs['conf'], flags=inversion_kwargs['flags'], 
-            regu=inversion_kwargs['regu'], interpolation_bas=inversion_kwargs['interpolation_bas'], 
-            option_interpol=inversion_kwargs['option_interpol'], redundancy=inversion_kwargs['redundancy'], 
-            proj=inversion_kwargs['proj'], detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'], 
-            unit=inversion_kwargs['unit'], result_quality=inversion_kwargs['result_quality'], 
-            nb_max_iteration=inversion_kwargs['nb_max_iteration'], delete_outliers=inversion_kwargs['delete_outliers'], 
-            interpolation=inversion_kwargs['interpolation'], linear_operator=inversion_kwargs['linear_operator'], 
-            visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+        delayed(process)(cube, i, j, **inversion_kwargs)
         for (i, j) in xy_values_tqdm
     )
     
@@ -259,7 +237,7 @@ elif TICOI_process == 'direct_process':
     result = [result[i][1] for i in range(len(result))] # TICOI results after interpolation
     
 stop.append(time.time())
-print(f'[ticoi_cube_demo] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[1] - start[1], 0)} s')
+print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[1] - start[1], 0)} s')
 
 
 # %%========================================================================= #
@@ -267,7 +245,6 @@ print(f'[ticoi_cube_demo] TICOI {"processing" if TICOI_process != "load" else "l
 # =========================================================================%% #
 
 start.append(time.time())
-
 
 # Write down some informations about the data and the TICOI processing performed
 if save:
@@ -291,8 +268,11 @@ if save:
             source += f'The interpolation baseline is {inversion_kwargs["interpolation_bas"]} days.'
         source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
 
-stop.append(time.time())    
-print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
+    stop.append(time.time())    
+    print(f'[Writing results] Initialisation took {round(stop[2] - start[2], 3)} s')
+    
+else:
+    stop.append(None)
 
 
 # %%========================================================================= #
@@ -308,7 +288,6 @@ cubenew = cube.write_result_ticoi(result, source, sensor, filename=result_fn, sa
 # Plot the mean velocity as an example
 if save_mean_velocity:
     mean_vv = np.sqrt(cubenew.ds['vx'].mean(dim='mid_date') ** 2 + cubenew.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(np.float32)
-    print(mean_vv.shape)
     mean_vv = np.flip(mean_vv, axis=0)
     
     driver = gdal.GetDriverByName('GTiff')
@@ -325,10 +304,10 @@ if save_mean_velocity:
     driver = None
         
 if save or save_mean_velocity:
-    print(f'[ticoi_cube_demo] Results saved at {path_save}')
+    print(f'[Writing results] Results saved at {path_save}')
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')    
+print(f'[Writing results] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')    
 
 
 # %%========================================================================= #
@@ -482,7 +461,7 @@ long_data = (longitude - np.min(cube.ds['x'].values)).astype(int) // resolution
 lat_data = (latitude - np.min(cube.ds['y'].values)).astype(int) // resolution
 
 ####  Best matching sinus map (amplitude and phase, and period if not fixed)
-print('[ticoi_cube_demo] Computing periodicity map...')
+print('[Fourier analysis] Computing periodicity map...')
 if not impose_frequency:
     period_map = np.empty([cube.nx, cube.ny])
     period_map[:,:] = np.nan
@@ -527,5 +506,5 @@ tiff = None
 driver = None 
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] Computing periodicity maps took {round(stop[4] - start[4], 0)} s')
-print(f'[ticoi_cube_demo] Overall processing took {round(stop[4] - start[0], 0)} s')
+print(f'[Fourier analysis] Computing periodicity maps took {round(stop[4] - start[4], 0)} s')
+print(f'[Overall] Overall processing took {round(stop[4] - start[0], 0)} s')

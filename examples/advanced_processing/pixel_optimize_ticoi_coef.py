@@ -240,10 +240,11 @@ if __name__ == '__main__':
     ## --------------------- Optimization parameters ----------------------- ##
     # Path to the "ground truth" cube used to optimize the regularisation
     cube_gt_name = 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc' 
+    # Specify the coefficients you want to test
+    coefs = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 240, 280, 320, 360, 400, 450, 500, 550, 600, 700, 800, 900, 1000] # To specify the coefficients to be tested, if None, range(cmin, cmax, step) coefs will be tested
     coef_min = 10 # If coefs=None, start point of the range of coefs to be tested 
     coef_max = 1000 # If coefs=None, stop point of the range of coefs to be tested
     step = 10 # If coefs=None, step for the range of coefs to be tested
-    coefs = None # To specify the coefficients to be tested, if None, range(cmin, cmax, step) coefs will be tested
     stats = True # Compute some statistics on raw data and GT data
     # Visualization during optimization (for each coefficient) /!\ Can generate a lot of figures...
     visual_opt = False # Plot interpolated and GT velocities
@@ -311,7 +312,7 @@ if __name__ == '__main__':
     
     
     # %% ======================================================================== #
-    #                                DATA DOWNLOAD                                #
+    #                                DATA LOADING                                 #
     # =========================================================================%% #
     
     start = [time.time()]
@@ -333,9 +334,9 @@ if __name__ == '__main__':
     cube_gt.load(cube_gt_name, **load_kwargs)
 
     stop = [time.time()]
-    print(f'[Data Download] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
-    print(f'[Data Download] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
-    print(f'[Data Download] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})')
+    print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+    print(f'[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
+    print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})')
 
     start.append(time.time())
     
@@ -343,7 +344,7 @@ if __name__ == '__main__':
     obs_filt = cube.filter_cube(**preData_kwargs)
 
     stop.append(time.time())
-    print(f'[Data Download] Filtering the cube took {round((stop[1] - start[1]), 4)} s')
+    print(f'[Data loading] Filtering the cube took {round((stop[1] - start[1]), 4)} s')
     
     
     # %%========================================================================= #
@@ -401,4 +402,4 @@ if __name__ == '__main__':
     if save: fig.savefig(f'{path_save}RMSE_coef_{round(i,5)}_{round(j,5)}_{regu}.png')
 
     stop.append(time.time())
-    print(f'Overall processing took {round((stop[-1] - start[0]), 1)} s')
+    print(f'[Overall] Overall processing took {round((stop[-1] - start[0]), 1)} s')

@@ -119,7 +119,7 @@ if not os.path.exists(path_save):
 
 
 # %% ======================================================================== #
-#                                DATA DOWNLOAD                                #
+#                                DATA LOADING                                 #
 # =========================================================================%% #
 
 start = [time.time()]
@@ -137,8 +137,8 @@ if len(cube_names) > 1:
         cube.merge_cube(cube2)
 
 stop = [time.time()]
-print(f'[Data Download] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
-print(f'[Data Download] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
 
 start.append(time.time())
 
@@ -153,7 +153,7 @@ start_date_interpol = np.min(cube2_date1)
 last_date_interpol = np.max(cube.date2_())
 
 stop.append(time.time())
-print(f'[Data Download] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
+print(f'[Data loading] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
 
 
 # %% ======================================================================== #
