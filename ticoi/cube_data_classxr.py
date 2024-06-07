@@ -900,6 +900,45 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
                 .astype('float32')
 
+    def create_flag(self, flag_shp : str = None, field_name : str | None = 'surge_type', default_value : str | int | None = 0):
+        """
+        Create a flag dataset based on the provided shapefile and shapefile field.
+        Which is usually used to divide the pixels into different types, especially for surging glaciers.
+        If you just want to divide by polygon, set the shp_field to None
+
+        :param flag_shp (str, optional): The path to the shapefile. Defaults to None.
+        :param shp_field (str, optional): The name of the shapefile field. Defaults to 'surge_type' (used in RGI7).
+        :param default_value (str | int | None, optional): The default value for the shapefile field. Defaults to 0.
+        :Returns flags: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
+        """
+        flag_shp = geopandas.read_file(flag_shp).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
+        
+        # surge-type glacier: 2, other glacier: 1, stable area: 0
+        if field_name is not None:
+            flag_id = flag_shp[field_name].apply(lambda x: 2 if x != default_value else 1).astype("int16")
+            geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
+        else:
+        # inside the polygon: 1, outside: 0
+            geom_value = ((geom, 1) for geom in flag_shp.geometry)
+        
+        flags = rasterio.features.rasterize(
+            geom_value,
+            out_shape=(self.ny, self.nx),
+            transform=self.ds.rio.transform(),
+            all_touched=True,
+            fill=0,  # background value
+            dtype="int16",
+        )
+        
+        flags = xr.Dataset(
+                    data_vars=dict(
+                        flags=(["y", "x"], flags),
+                    ),
+                    coords=dict(
+                        x=(["x"], self.ds.x.data),
+                        y=(["y"], self.ds.y.data),))
+        
+        return flags
 
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
                     s_win: int = 3, t_win: int = 90, sigma: int = 3,
