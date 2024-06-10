@@ -92,15 +92,18 @@ inversion_kwargs = {'coef': coef, # Regularization coefficient.s to be used (for
                     'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
                     'redundancy': 30, # Redundancy in the interpolated time series in number of days, no redundancy if None
                     'result_quality': result_quality, # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-                    'visual': False, # Plot results along the way
-                    'path_save': path_save, # Path where to store the results
-                    'verbose': False # Print information throughout TICOI processing
+                    'visual': False,  # Plot results along the way
+                    'path_save': path_save,  # Path where to store the results
+                    'verbose': False  # Print information throughout TICOI processing
                     }
 ## ----------------------- Interpolation parameters ------------------------ ##
-interpolation_kwargs = {'interval_output': 90, # Temporal baseline of the time series resulting from TICOI (after interpolation)
-                        'redundancy': 5, # Redundancy in the interpolated time series in number of days, no redundancy if None
-                        'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
-                        'result_quality': result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+interpolation_kwargs = {'interval_output': 90,
+                        # Temporal baseline of the time series resulting from TICOI (after interpolation)
+                        'redundancy': 5,
+                        # Redundancy in the interpolated time series in number of days, no redundancy if None
+                        'option_interpol': 'spline',  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+                        'result_quality': result_quality,
+                        # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
                         'unit': unit, # 365 if the unit is m/y, 1 if the unit is m/d
 
                         'visual': visual, # Plot results along the way
