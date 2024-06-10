@@ -57,7 +57,7 @@ Then replace all conda commands by mamba.
 
 
 ### OUTPUTS
-* to understand to output of pixel_demo please check Visualization_pixel_output.md
+* to understand to output of pixel_demo please check README_visualization_pixel_output.md
 
 [packaging guide]: https://packaging.python.org
 
