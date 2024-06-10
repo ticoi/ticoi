@@ -52,7 +52,7 @@ load_kwargs = {'chunks': {},
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outlier = 'median_angle'
-apriori_weight = False
+apriori_weight = True
 interpolation_bas = 90
 
 preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')

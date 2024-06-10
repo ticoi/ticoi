@@ -1017,7 +1017,7 @@ def visualization_core(list_dataf, option_visual, save=False, show=True, path_sa
     pixel_object = pixel_class()
     pixel_object.load(list_dataf, save=save, show=show, A=A,path_save=path_save)
 
-    dico_visual = {'obs_xy':pixel_object.plot_vx_vy(color=colors[0]), 'obs_magnitude':pixel_object.plot_vv(color=colors[0]), 'obs_vxvy_quality':pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs'),
+    dico_visual = {'obs_xy':pixel_object.plot_vx_vy(color=colors[0],type_data='obs'), 'obs_magnitude':pixel_object.plot_vv(color=colors[0],type_data='obs'), 'obs_vxvy_quality':pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs'),
      'invertxy_overlayed':pixel_object.plot_vx_vy_overlayed(colors=colors), 'invertvv_overlayed':pixel_object.plot_vv_overlayed(colors=colors),'residuals':pixel_object.plot_residuals(log_scale=log_scale), 'xcount_xy':pixel_object.plot_xcount_vx_vy(cmap=cmap),'xcount_vv':pixel_object.plot_xcount_vv(cmap=cmap),
                    'invert_weight':pixel_object.plot_weights_inversion()}
 

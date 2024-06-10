@@ -4,10 +4,9 @@ Some figures can be displayed by filling the option_visual parameter with differ
 #### Original data
 option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlayed','invertvv_overlayed','residuals','xcount_xy','xcount_vv']
 
-- 'obs_xy' -> vx_vy.png : Original velocities (central date and temporal baselines) according to x and y.
-- 'obs_magnitude' -> vxvy_quality_bas.png : Original velocities with measurement error (central date and colour).
-- 'obs_vxvy_quality' -> vv_quality.png : Magnitude of the original velocity with measurement error (central date and colour).
-- 'original_magnitude' -> vv.png : Magnitude of the original velocities (central date and temporal baselines).
+- 'obs_xy' -> vx_vy_obs.png : Original velocities (central date and temporal baselines) according to x and y.
+- 'original_magnitude' -> vv_obs.png : Magnitude of the original velocities (central date and temporal baselines).
+- 'obs_vxvy_quality' -> vv_quality_obs.png : Magnitude of the original velocity with measurement error (central date and colour).
 
 #### Results after inversion of the AX = Y system (ILF: varying temporal sampling)
 
