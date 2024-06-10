@@ -27,24 +27,28 @@ def prepare_interpolation_date(cube:"ticoi.cube_data_classxr.cube_data_class")->
     first_date_interpol = np.min(cube_date1)
     last_date_interpol = np.max(cube.date2_())
     return first_date_interpol,last_date_interpol
-def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | None = None,
+
+def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | str | None = None,
                            result_dz: pd.DataFrame | None = None) -> pd.DataFrame:
+
     """
     Build the Cumulative Displacements (CD) time series with a Common Reference (CR) from a Leap Frog time series
 
-    :param result: leap frog displacement x-component (displacement between consecutive dates)
-    :param result_quality: contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :param result_dz: vertical displacement component
-    :return: Cumulative displacement time series in x and y component, pandas dataframe
+    :param result: [np array] --- Leap frog displacement for x-component and y-component
+    :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+    :param result_dz: [pd dataframe | None] [default is None] --- Vertical displacement component
+
+    :return data: [pd dataframe] --- Cumulative displacement time series in x and y component, pandas dataframe
     """
+
     if result.empty:
         return pd.DataFrame(
             {'Ref_date': [np.nan], 'Second_date': [np.nan],
              'dx': [np.nan], 'dy': [np.nan],'xcount_x': [np.nan], 'xcount_y': [np.nan]})
 
     
-    data = pd.DataFrame(
-        {'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
+    # Common Reference
+    data = pd.DataFrame({'Ref_date': np.full(result.shape[0], result['date1'][0]), 'Second_date': result['date2'],
          'dx': np.cumsum(result['result_dx']), 'dy': np.cumsum(result['result_dy'])})
 
     if result_quality is not None and 'X_contribution' in result_quality :
@@ -62,19 +66,22 @@ def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | None = N
     return data
 
 
-def set_function_for_interpolation(option_interpol: str, x: np.ndarray, dataf: pd.DataFrame,
-                                   result_quality: list | None) -> (
-        interpolate.interp1d | interpolate.UnivariateSpline, interpolate.interp1d | interpolate.UnivariateSpline,
-        interpolate.interp1d | interpolate.UnivariateSpline, interpolate.interp1d | interpolate.UnivariateSpline):
+def set_function_for_interpolation(option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None) -> (
+            interpolate.interp1d | interpolate.UnivariateSpline, interpolate.interp1d | interpolate.UnivariateSpline,
+            interpolate.interp1d | interpolate.UnivariateSpline, interpolate.interp1d | interpolate.UnivariateSpline):
+
     """
-    Get the function to interpolate the each of the time series
-    :param option_interpol: type of interpolation (spline smooth, spline or nearest
-    :param x: integer corresponding to the time at which a certain displacement have been estimated
-    :param dataf: data to interpolate
-    :param result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :return: fdx,fdy the functions which need to be used to interpolate dx and dy
-    :return fdx_xcount, fdx_ycount the functions which need to be used to interpolate the contributed values in X
+    Get the function to interpolate the each of the time series.
+
+    :param option_interpol: [str] --- Type of interpolation, it can be 'spline', 'spline_smooth' or 'nearest'
+    :param x: [int] --- Integer corresponding to the time at which a certain displacement has been estimated
+    :param dataf: [pd dataframe] --- Data to interpolate
+    :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+
+    :return fdx, fdy: [functions | None] --- The functions which need to be used to interpolate dx and dy
+    :return fdx_xcount, fdx_ycount: [functions | None] --- The functions which need to be used to interpolate the contributed values in X
     """
+
     # Compute the functions used to interpolate
     # Define the interpolation functions based on the interpolation option
     interpolation_functions = {
@@ -123,20 +130,21 @@ def full_with_nan(dataf_lp:pd.DataFrame,first_date:pd.Series,second_date:pd.Seri
     dataf_lp = pd.concat([nul_df, dataf_lp], ignore_index=True)
     return dataf_lp
 
-def visualisation_interpolation(dataf_lp: pd.DataFrame, data: pd.DataFrame, path_save: str, show_temp: bool = True,
-                                unit='m/y',
-                                vmax=None, interval_output=30, figsize=(12, 6)):
-    """
-    Plot some figures to analyse the results from the interpolation
-    :param dataf_lp: results from the inversion
-    :param data: orginal data
-    :param path_save: str, where to save the figures
-    :param show_temp: if True, plot the temporal baseline on the figure
-    :param unit: m/y or m/d
-    :param vmax: [min,max] where min,max correspond to the ylim of the figures
-    :param interval_output:
-    :param figsize: (width, height) where width and height are the size of the figures
 
+def visualisation_interpolation(dataf_lp: pd.DataFrame, data: pd.DataFrame, path_save: str, show_temp: bool = True, unit='m/y',
+                                vmax=None, interval_output=30, figsize=(12, 6)):
+
+    """
+    Plot some figures to analyse the results from the interpolation.
+
+    :param dataf_lp: [pd dataframe] --- Results from the inversion
+    :param data: [pd dataframe] --- Original data
+    :param path_save: [str] --- Where to save the figures
+    :param show_temp: [bool] [default is True] --- If True, show the temporal baseline on the plot
+    :param unit: [str] [default is 'm/y'] --- 'm/y' or 'm/d'
+    :param vmax: [list] [default is [False, False]] --- [min,max] where min,max correspond to the ylim of the figures
+    :param interval_output: [int] [default is 30] --- Period between two dates of the obtained RLF
+    :param figsize: [tuple] [default is (12, 6)] --- (width, height) where width and height are the size of the figures
     """
 
     if vmax is None: vmax = [False, False]

@@ -23,17 +23,28 @@ from ticoi.cube_data_classxr import cube_data_class
 # =========================================================================%% #
 
 ####  Selection of data
-
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
+i, j = -138.18069, 60.29076
+proj = 'EPSG:3413'  # EPSG system of the given coordinates
 
+## --------------------------- Main parameters ----------------------------- ##
+#For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
+regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
+delete_outlier = 'median_angle'
+apriori_weight = True
+interpolation_bas = 90
+unit = 365 # 1 for m/d, 365 for m/y
+result_quality = ['X_contribution'] # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+
+## ----------------------- Visualization parameters ------------------------ ##
+verbose = False # Print information throughout TICOI processing
 save = True
 visual = True
-proj = 'EPSG:3413'  # EPSG system of the given coordinates
-i, j = -138.18069, 60.29076
-vmax = [50, 170]  # vmin and vmax of the legend
 # Visualisation options
 option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlayed','invertvv_overlayed','residuals','xcount_xy','xcount_vv','invert_weight']
+vmax = [False,False]  # vmin and vmax of the legend
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {},
@@ -48,12 +59,7 @@ load_kwargs = {'chunks': {},
                }
 
 ## ----------------------- Data preparation parameters --------------------- ##
-#For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
-regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier = 'median_angle'
-apriori_weight = True
-interpolation_bas = 90
+
 
 preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
                   's_win': 3, # Size of the spatial window
@@ -85,11 +91,21 @@ inversion_kwargs = {'coef': coef, # Regularization coefficient.s to be used (for
                     'interpolation_bas': interpolation_bas, # Temporal baseline of the time series resulting from TICOI (after interpolation)
                     'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
                     'redundancy': 30, # Redundancy in the interpolated time series in number of days, no redundancy if None
-                    'result_quality': 'X_contribution', # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+                    'result_quality': result_quality, # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
                     'visual': False, # Plot results along the way
                     'path_save': path_save, # Path where to store the results
                     'verbose': False # Print information throughout TICOI processing
                     }
+## ----------------------- Interpolation parameters ------------------------ ##
+interpolation_kwargs = {'interval_output': 90, # Temporal baseline of the time series resulting from TICOI (after interpolation)
+                        'redundancy': 5, # Redundancy in the interpolated time series in number of days, no redundancy if None
+                        'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+                        'result_quality': result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+                        'unit': unit, # 365 if the unit is m/y, 1 if the unit is m/d
+
+                        'visual': visual, # Plot results along the way
+                        'vmax': vmax, # vmin and vmax of the legend
+                        'verbose': verbose} # Print information throughout TICOI processing
 
 
 #Update of dictionary with common parameteres
@@ -100,29 +116,32 @@ if not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # %% ======================================================================== #
-#                                DATA DOWNLOAD                                #
+#                                DATA LOADING                                 #
 # =========================================================================%% #
 
 start = [time.time()]
 
+# Load the main cube
 cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]
-print(f'[ticoi_pixel_demo] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
-print(f'[ticoi_pixel_demo] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
 
 start.append(time.time())
+
+# Filter the cube (compute rolling_mean for regu=1accelnotnull)
 obs_filt = cube.filter_cube(**preData_kwargs)
-data, mean, dates_range = cube.load_pixel(i, j, proj=proj, interp=inversion_kwargs['interpolation_load_pixel'], solver=inversion_kwargs['solver'], regu=regu,
-                                          rolling_mean=obs_filt, visual=visual, verbose=load_kwargs['verbose'])
+# Load pixel data
+data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
 # Prepare interpolation dates
 first_date_interpol,last_date_interpol = prepare_interpolation_date(cube)
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 stop.append(time.time())
-print(f'[ticoi_pixel_demo] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
+print(f'[Data loading] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
 
 
 # %% ======================================================================== #
@@ -130,40 +149,35 @@ print(f'[ticoi_pixel_demo] Loading the pixel took {round((stop[1] - start[1]), 4
 # =========================================================================%% #
 
 start.append(time.time())
-A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, solver=inversion_kwargs['solver'], coef=coef, weight=apriori_weight,
-                                  unit=inversion_kwargs['unit'], conf=inversion_kwargs['conf'], regu=regu, mean=mean,
-                                  detect_temporal_decorrelation=inversion_kwargs['detect_temporal_decorrelation'],
-                                  linear_operator=None, result_quality=inversion_kwargs['result_quality'],
-                                  visual=visual, verbose=inversion_kwargs['verbose'])
 
+# Proceed to inversion
+A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, **inversion_kwargs)
 
-
-from ticoi.pixel_class import pixel_class
-pixel_object = pixel_class()
 stop.append(time.time())
-print(f'[ticoi_pixel_demo] Inversion took {round((stop[2] - start[2]), 4)} s')
-# if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=preData_kwargs['unit'], show=True, figsize=(12, 6))
+print(f'[Inversion] Inversion took {round((stop[2] - start[2]), 4)} s')
 if save: result.to_csv(f'{path_save}/ILF_result.csv')
+
 
 # %% ======================================================================== #
 #                              INTERPOLATION                                  #
 # =========================================================================%% #
 
 start.append(time.time())
-if interpolation_bas == False: interpolation_bas = 1
+
+if interpolation_kwargs['interval_output'] == False:
+    interpolation_kwargs['interval_output'] = 1
 start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))
-dataf_lp = interpolation_core(result, interpolation_bas,
-                              path_save, option_interpol=inversion_kwargs['option_interpol'],
-                              first_date_interpol=start_date_interpol, last_date_interpol=last_date_interpol,
-                              visual=visual, data=dataf, unit=inversion_kwargs['unit'], redundancy=inversion_kwargs['redundancy'],
-                              result_quality=inversion_kwargs['result_quality'],
-                              verbose=inversion_kwargs['verbose'], vmax=vmax)
-stop.append(time.time())
-print(f'[ticoi_pixel_demo] Interpolation took {round((stop[3] - start[3]), 4)} s')
 
+# Proceed to interpolation
+dataf_lp = interpolation_core(result, path_save=path_save, data=dataf, first_date_interpol=start_date_interpol,
+                              last_date_interpol=last_date_interpol, **interpolation_kwargs)
+
+stop.append(time.time())
+print(f'[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s')
+
+if save:
+    dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
 if visual:visualization_core([dataf, result], option_visual=option_visual, save=True, show=True, path_save=path_save, A=A, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange'])
 
-if save: dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
-
-print(f'[ticoi_pixel_demo] Overall processing took {round((stop[3] - start[0]), 4)} s')
+print(f'[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s')
