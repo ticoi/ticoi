@@ -42,7 +42,7 @@ warnings.filterwarnings("ignore")
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
 # than every other TICOI processing methods.
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal, 
-# there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it 
+# there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it 
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
@@ -50,7 +50,7 @@ warnings.filterwarnings("ignore")
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (name can be
 # 'interp', 'invert' or 'raw' as for returned, path can be a single str or a list of str to merge cubes) in cube_name
 
-TICOI_process = 'block_process'
+TICOI_process = 'load'
 
 save = True # If True, save TICOI results to a netCDF file
 save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
@@ -59,8 +59,9 @@ save_mean_velocity = True # Save a .tiff file with the mean reulting velocities,
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
+cube_name = {'invert': 'nathan/Tests_MB/Areas/c_x01225_y03675_cube/TICOI/0-1-500_1-1accelnotnull-200/c_x01225_y03675_invert.nc'}
 flag_file = 'test_data/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
-mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
+mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path to mask file (.shp file) to mask some of the data on cube
 path_save = 'examples/results/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
 
@@ -153,8 +154,10 @@ if not os.path.exists(path_save):
 #                                 DATA LOADING                                #
 # =========================================================================%% #
 
-start = [time.time()]
+start, stop = [], []
 if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.keys()):
+    start.append(time.time())
+    
     # Load the cube.s
     cube = cube_data_class()
     
@@ -171,10 +174,10 @@ if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.ke
     
     inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
     
-    stop = [time.time()]
+    stop.append(time.time())
     print(f'[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
     print(f'[Data loading] Data loading took {round(stop[-1] - start[-1], 3)} s')
-    
+
 
 # %%========================================================================= #
 #                                      TICOI                                  #

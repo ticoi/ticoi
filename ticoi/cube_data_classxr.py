@@ -54,13 +54,17 @@ class cube_data_class:
         self.ds = xr.Dataset({})
         self.resolution = 50
 
-    def update_dimension(self):
+    def update_dimension(self, time_dim: str = 'mid_date'):
         
-        ''' Update the attributes corresponding to cube dimensions: nx, ny, and nz '''
+        ''' 
+        Update the attributes corresponding to cube dimensions: nx, ny, and nz 
+        
+        :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
+        '''
         
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.nz = self.ds[time_dim].sizes[time_dim]
         self.resolution = self.ds['x'].values[1] - self.ds['x'].values[0]
 
     def subset(self, proj: str, subset: list):
@@ -475,64 +479,77 @@ class cube_data_class:
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
-
+        
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
-            
+            print(f'[Cube loading] Path to cube file {"(TICO cube)" if self.load_TICO else ""} : {filepath}')
+        
+        # Informations about the cube
         self.filedir = os.path.dirname(filepath)
-        self.filename = os.path.basename(filepath)  # name of the netcdf file
+        self.filename = os.path.basename(filepath)  # Name of the netcdf file
         if self.ds.author == 'J. Mouginot, R.Millan, A.Derkacheva_aligned':
-            self.author = 'IGE'  # name of the author
+            self.author = 'IGE'  # Name of the author
         else:
             self.author = self.ds.author
-
         self.source = self.ds.source
         del filepath
 
+        # Select specific data within the cube
         if subset is not None:  # Crop according to 4 coordinates
             self.subset(proj, subset)
-
         elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
-        self.update_dimension()
+        time_dim = 'mid_date' if not self.load_TICO else 'second_date' # 'second_date' if we load TICO data
+        self.update_dimension(time_dim)
 
-        if pick_date is not None:  # Temporal subset between two dates
-            self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
-                                      self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+        # Temporal subset between two dates
+        if pick_date is not None:
+            if not self.load_TICO: 
+                self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
+                                        self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+            else:
+                self.ds = self.ds.where(((self.ds['second_date'] >= np.datetime64(pick_date[0])) & (
+                    self.ds['second_date'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
         del pick_date
 
-        self.update_dimension()
+        self.update_dimension(time_dim)
 
         # Pick sensors or temporal baselines
         if pick_sensor is not None:
-            self.ds = self.ds.sel(mid_date=self.ds['sensor'].isin(pick_sensor))
+            if not self.load_TICO:
+                self.ds = self.ds.sel(mid_date=self.ds['sensor'].isin(pick_sensor))
+            else:
+                self.ds = self.ds.sel(second_date=self.ds['sensor'].isin(pick_sensor))
+        
+        # Following properties are not available for TICO cubes
+        if not self.load_TICO:
+            # Pick specific temporal baselines
+            if pick_temp_bas is not None:
+                self.ds = self.ds.sel(mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
+                                    ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
 
-        if pick_temp_bas is not None:
-            self.ds = self.ds.sel(mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
-                                ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
+            # Convert the errors into confidence indicators between 0 and 1
+            if conf and 'confx' not in self.ds.data_vars:
+                minconfx = np.nanmin(self.ds['errorx'].values[:])
+                maxconfx = np.nanmax(self.ds['errorx'].values[:])
+                minconfy = np.nanmin(self.ds['errory'].values[:])
+                maxconfy = np.nanmax(self.ds['errory'].values[:])
+                errorx = 1 - (self.ds['errorx'].values - minconfx) / (maxconfx - minconfx)
+                errory = 1 - (self.ds['errory'].values - minconfy) / (maxconfy - minconfy)
+                self.ds['errorx'] = xr.DataArray(errorx, dims=['mid_date', 'y', 'x'],
+                                                coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
+                                                        'x': self.ds.x}).chunk(chunks=self.ds.chunks)
+                self.ds['errory'] = xr.DataArray(errory, dims=['mid_date', 'y', 'x'],
+                                                coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
+                                                        'x': self.ds.x}).chunk(chunks=self.ds.chunks)
 
-        if conf and 'confx' not in self.ds.data_vars:  # Convert the errors into confidence indicators between 0 and 1
-            minconfx = np.nanmin(self.ds['errorx'].values[:])
-            maxconfx = np.nanmax(self.ds['errorx'].values[:])
-            minconfy = np.nanmin(self.ds['errory'].values[:])
-            maxconfy = np.nanmax(self.ds['errory'].values[:])
-            errorx = 1 - (self.ds['errorx'].values - minconfx) / (maxconfx - minconfx)
-            errory = 1 - (self.ds['errory'].values - minconfy) / (maxconfy - minconfy)
-            self.ds['errorx'] = xr.DataArray(errorx, dims=['mid_date', 'y', 'x'],
-                                             coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
-                                                     'x': self.ds.x}).chunk(chunks=self.ds.chunks)
-            self.ds['errory'] = xr.DataArray(errory, dims=['mid_date', 'y', 'x'],
-                                             coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
-                                                     'x': self.ds.x}).chunk(chunks=self.ds.chunks)
-
-        # For cube writen with write_result_TICOI
-        if 'source' not in self.ds.variables:
-            self.ds['source'] = xr.DataArray([self.ds.author] * self.nz, dims='mid_date').chunk(
-                                             chunks=self.ds.chunks['mid_date'])
-        if 'sensor' not in self.ds.variables:
-            self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
-                                             chunks=self.ds.chunks['mid_date'])
+            # For cube writen with write_result_TICOI
+            if 'source' not in self.ds.variables:
+                self.ds['source'] = xr.DataArray([self.ds.author] * self.nz, dims='mid_date').chunk(
+                                                chunks=self.ds.chunks['mid_date'])
+            if 'sensor' not in self.ds.variables:
+                self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
+                                                chunks=self.ds.chunks['mid_date'])
 
     def load(self, filepath: list | str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
              buffer: str | None = None, pick_date: str | None = None, pick_sensor: str | None = None, 
@@ -596,17 +613,19 @@ class cube_data_class:
                     if "Author" in self.ds.attrs: # Uniformization of the attribute Author to author
                         self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
+                    self.load_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+                    time_dim = time_dim_name[self.ds.author] if not self.load_TICO else 'second_date' # To load TICO results
+                    var_name = "vx" if not self.load_TICO else "dx"
+
                     if chunks == {}: # Rechunk with optimal chunk size
-                        tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim=time_dim_name[self.ds.author], 
-                                                                       verbose=True)
-                        self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
+                        tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
+                        self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
                 elif filepath.split(".")[-1] == "zarr":
                     if chunks == {}:
                         chunks = "auto" # Change the default value to auto
 
-                    self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
-                                            consolidated=True, chunks=chunks)
+                    self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
 
             if verbose:
                 print('[Cube loading] File open')
@@ -622,14 +641,14 @@ class cube_data_class:
             }
             dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
                                     pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
-            # rechunk again if the size of the cube is changed:
+            # Rechunk again if the size of the cube is changed:
             if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-                tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim='mid_date', verbose=True)
-                self.ds = self.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
+                tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
+                self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
             # Reorder the coordinates to keep the consistency
-            self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-            self.standardize_cube_for_processing()
+            self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
+            self.standardize_cube_for_processing(time_dim)
             
             if mask_file is not None:
                 self.mask_cube(mask_file)
@@ -642,21 +661,26 @@ class cube_data_class:
             if verbose:
                 print(f'[Cube loading] Author : {self.ds.author}')
 
-    def standardize_cube_for_processing(self):
+    def standardize_cube_for_processing(self, time_dim='mid_date'):
         
-        ''' Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist '''
+        ''' 
+        Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist 
+        
+        :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
+        '''
         
         self.ds = self.ds.unify_chunks()
-        if self.ds.chunksizes['mid_date'] != (self.nz,):
-            self.ds = self.ds.chunk({'mid_date': self.nz})
+        if self.ds.chunksizes[time_dim] != (self.nz,):
+            self.ds = self.ds.chunk({time_dim: self.nz})
             
-        # Create a variable for temporal_baseline
-        self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
-        
-        # Add errors if not already there
-        if "errorx" not in self.ds.variables:
-            self.ds["errorx"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
-            self.ds["errory"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
+        if not self.load_TICO:
+            # Create a variable for temporal_baseline
+            self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
+            
+            # Add errors if not already there
+            if "errorx" not in self.ds.variables:
+                self.ds["errorx"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
+                self.ds["errory"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
 
 
     # %% ==================================================================== #
@@ -916,9 +940,14 @@ class cube_data_class:
             mask.load()
 
         # Mask the velocities and the errors
-        self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
-                .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
-                .astype('float32')
+        if not self.load_TICO:
+            self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
+                    .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                    .astype('float32')
+        else:
+            self.ds[['dx', 'dy', 'xcount_x', 'xcount_y']] = self.ds[['dx', 'dy', 'xcount_x', 'xcount_y']] \
+                    .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                    .astype('float32')
 
 
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
