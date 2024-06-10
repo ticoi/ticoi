@@ -33,6 +33,7 @@ from scipy import stats
 from typing import Union
 from joblib import Parallel, delayed
 
+from ticoi.pixel_class import pixel_class
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.inversion_functions import construction_a_lf, class_linear_operator, find_date_obs, inversion_one_component, \
     inversion_two_components, TukeyBiweight, weight_for_inversion, mu_regularisation, construction_dates_range_np
@@ -846,35 +847,35 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
 #                               VISUALISATION                                 #
 # =========================================================================%% #
 
-    def visualization_core(list_dataf, option_visual, save=False, show=True, path_save=None, A=None, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange']):
-        """
-        Visualisa
-        :param list_dataf:
-        :param option_visual:
-        :param save:
-        :param show:
-        :param path_save:
-        :param A:
-        :param log_scale:
-        :param cmap:
-        :param colors:
-        :return:
-        """
-        pixel_object = pixel_class()
-        pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save)
+def visualization_core(list_dataf, option_visual, save=False, show=True, path_save=None, A=None, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange']):
+    """
+    Visualisa
+    :param list_dataf:
+    :param option_visual:
+    :param save:
+    :param show:
+    :param path_save:
+    :param A:
+    :param log_scale:
+    :param cmap:
+    :param colors:
+    :return:
+    """
+    pixel_object = pixel_class()
+    pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save)
 
-        dico_visual = {'obs_xy': pixel_object.plot_vx_vy(color=colors[0], type_data='obs'),
-                       'obs_magnitude': pixel_object.plot_vv(color=colors[0], type_data='obs'),
-                       'obs_vxvy_quality': pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs'),
-                       'invertxy_overlayed': pixel_object.plot_vx_vy_overlayed(colors=colors),
-                       'invertvv_overlayed': pixel_object.plot_vv_overlayed(colors=colors),
-                       'residuals': pixel_object.plot_residuals(log_scale=log_scale),
-                       'xcount_xy': pixel_object.plot_xcount_vx_vy(cmap=cmap),
-                       'xcount_vv': pixel_object.plot_xcount_vv(cmap=cmap),
-                       'invert_weight': pixel_object.plot_weights_inversion()}
+    dico_visual = {'obs_xy': pixel_object.plot_vx_vy(color=colors[0], type_data='obs'),
+                   'obs_magnitude': pixel_object.plot_vv(color=colors[0], type_data='obs'),
+                   'obs_vxvy_quality': pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs'),
+                   'invertxy_overlayed': pixel_object.plot_vx_vy_overlayed(colors=colors),
+                   'invertvv_overlayed': pixel_object.plot_vv_overlayed(colors=colors),
+                   'residuals': pixel_object.plot_residuals(log_scale=log_scale),
+                   'xcount_xy': pixel_object.plot_xcount_vx_vy(cmap=cmap),
+                   'xcount_vv': pixel_object.plot_xcount_vv(cmap=cmap),
+                   'invert_weight': pixel_object.plot_weights_inversion()}
 
-        for option in option_visual:
-            dico_visual[option]
+    for option in option_visual:
+        dico_visual[option]
 
 
 def visualisation(data: pd.DataFrame, result: np.ndarray, option_visual: list, path_save: str, interval_output: int = 1,
@@ -1533,7 +1534,7 @@ def visualisation(data: pd.DataFrame, result: np.ndarray, option_visual: list, p
         print(f'NO DATA')
 
 
-def save_cube_parameters(cube:"ticoi.cube_data_classxr.cube_data_class",load_kwargs:dict,preData_kwargs:dict,inversion_kwargs:dict):
+def save_cube_parameters(cube:"ticoi.cube_data_classxr.cube_data_class",load_kwargs:dict,preData_kwargs:dict,inversion_kwargs:dict,returned:list|None=None):
     """
 
     :param cube:
@@ -1556,10 +1557,9 @@ def save_cube_parameters(cube:"ticoi.cube_data_classxr.cube_data_class",load_kwa
     if inversion_kwargs['apriori_weight']:
         source += ' and apriori weight'
     source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
-    if inversion_kwargs['interpolation']:
+    if 'interp' in returned:
         source += f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
-        if inversion_kwargs['interpolation_bas']:
-            source += f'The interpolation baseline is {inversion_kwargs["interpolation_bas"]} days.'
+        source += f'The interpolation baseline is {inversion_kwargs["interval_output"]} days.'
         source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
 
     source += f'The preparation are argument are: {preData_kwargs}'

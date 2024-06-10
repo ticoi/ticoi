@@ -56,7 +56,10 @@ result_fn = 'test'# Name of the netCDF file to be created
 
 proj = 'EPSG:3413'  # EPSG system of the given coordinates
 
-
+# What results must be returned from TICOI processing (can be a list of both)
+#   - 'invert' for the results of the inversion
+#   - 'interp' for the results of the interpolation
+returned = ['invert', 'interp']
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
@@ -97,23 +100,23 @@ inversion_kwargs = {'coef': coef, # Regularization coefficient.s to be used (for
                     'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
                     'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                     'interpolation_load_pixel': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
+
                     'iteration': True, # Allow the inversion process to make several iterations
                     'nb_max_iteration': 10, # Maximum number of iteration during the inversion process
                     'threshold_it': 0.1, # Threshold to test the stability of the results between each iteration, used to stop the process
                     'apriori_weight': apriori_weight, # If True, use apriori weights
                     'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
                     'linear_operator': None, # Perform the inversion using this specific linear operator
-                    'interpolation': True, # If True, perform the temporal interpolation step of TICOI
-                    'interval_output': 1, 
-                    'interpolation_bas': interpolation_bas, # Temporal baseline of the time series resulting from TICOI (after interpolation)
+
+                    'interval_output': 30,
                     'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
                     'redundancy': 30, # Redundancy in the interpolated time series in number of days, no redundancy if None
+
                     'result_quality': 'X_contribution', # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
                     'visual': False, # Plot results along the way
                     'path_save': path_save, # Path where to store the results
                     'verbose': False # Print information throughout TICOI processing
                     }
-
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 12 # Number of CPU to be used for parallelization
 block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
@@ -163,7 +166,7 @@ elif TICOI_process == 'direct_process':
     
     # Main processing of the data with TICOI algorithm, individually for each pixel
     result = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(cube, i, j, obs_filt=obs_filt, **inversion_kwargs)
+        delayed(process)(cube, i, j, obs_filt=obs_filt,returned=returned, **inversion_kwargs)
         for i, j in xy_values_tqdm
     )
 else:
@@ -179,7 +182,7 @@ print(f'[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s
 
 start.append(time.time())
 # Write down some informations about the data and the TICOI processing performed
-if save: source, sensor = save_cube_parameters(cube,load_kwargs,preData_kwargs,inversion_kwargs)
+if save: source, sensor = save_cube_parameters(cube,load_kwargs,preData_kwargs,inversion_kwargs,returned=returned)
 stop.append(time.time())
 print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 
@@ -190,7 +193,23 @@ print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 
 start.append(time.time())
 
+several = (type(returned) == list and len(returned) >= 2)
+if 'invert' in returned:
+    cube_invert = cube.write_result_tico([result[i][0] for i in range(len(result))] if several else result, source,
+                                         sensor,
+                                         filename=f'{result_fn}_invert' if several else result_fn,
+                                         savepath=path_save if save else None,
+                                         result_quality=inversion_kwargs['result_quality'],
+                                         verbose=inversion_kwargs['verbose'])
+if 'interp' in returned:
+    cube_interp = cube.write_result_ticoi([result[i][1] for i in range(len(result))] if several else result,
+                                          source_interp, sensor,
+                                          filename=f'{result_fn}_interp' if several else result_fn,
+                                          savepath=path_save if save else None,
+                                          result_quality=inversion_kwargs['result_quality'],
+                                          verbose=inversion_kwargs['verbose'])
 # Save TICOI results to a netCDF file, thus obtaining a new data cube
+
 cubenew = cube.write_result_ticoi(result, source, sensor, filename=result_fn, savepath=path_save if save else None,
                                       result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
     
