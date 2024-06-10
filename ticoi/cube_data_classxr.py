@@ -534,14 +534,15 @@ class cube_data_class:
             self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
                                              chunks=self.ds.chunks['mid_date'])
 
-    def load(self, filepath: str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
+    def load(self, filepath: list | str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
              buffer: str | None = None, pick_date: str | None = None, pick_sensor: str | None = None, 
-             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', verbose: bool = False):
+             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', mask_file: str | xr.DataArray = None, 
+             verbose: bool = False):
 
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
-        :param filepath: [str] --- Filepath of the dataset
+        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
         :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
                                   chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
                                   chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
@@ -552,73 +553,94 @@ class cube_data_class:
         :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
         :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
+        :param mask_file: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
-
-        time_dim_name = {
-            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
-            "J. Mouginot, R.Millan, A.Derkacheva": 'z',
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": 'mid_date',
-            "L. Charrier, L. Guo": 'mid_date',
-            "L. Charrier": 'mid_date',
-            "E. Ducasse": 'time',
-            "S. Leinss, L. Charrier": 'mid_date'
-        }
-
-        self.__init__()
-        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks       
-            if filepath.split(".")[-1] == "nc":
-                try:
-                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
-                except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
-                    chunks = {}
-                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
+        
+        if type(filepath) == list: # Merge several cubes
+            self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                      proj=proj, mask_file=mask_file, verbose=verbose)
+            
+            cube2 = None
+            for n in range(1, len(filepath)):
+                cube2 = cube_data_class()
+                # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
+                sub = [self.ds['x'].min().values, self.ds['x'].max().values, self.ds['y'].min().values, self.ds['y'].max().values]
+                cube2.load(filepath[n], chunks=chunks, conf=conf, subset=sub, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                           proj=proj, mask_file=mask_file, verbose=verbose)
+                # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
+                cube2 = self.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
+                self.merge_cube(cube2) # Merge the new cube to the main one
+            del cube2
                 
-                if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
-                    self.ds.attrs["author"] = self.ds.attrs.pop("Author")
+        else: # Load one cube
+            time_dim_name = {
+                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
+                "J. Mouginot, R.Millan, A.Derkacheva": 'z',
+                "J. Mouginot, R.Millan, A.Derkacheva_aligned": 'mid_date',
+                "L. Charrier, L. Guo": 'mid_date',
+                "L. Charrier": 'mid_date',
+                "E. Ducasse": 'time',
+                "S. Leinss, L. Charrier": 'mid_date'
+            }
 
-                if chunks == {}:  # Rechunk with optimal chunk size
-                    tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", 
-                                                                   time_dim=time_dim_name[self.ds.author], verbose=True)
-                    self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
+            self.__init__()
+            with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks       
+                if filepath.split(".")[-1] == "nc":
+                    try:
+                        self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
+                    except NotImplementedError: # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                        chunks = {}
+                        self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
+                    
+                    if "Author" in self.ds.attrs: # Uniformization of the attribute Author to author
+                        self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-            elif filepath.split(".")[-1] == "zarr":
-                if chunks == {}:
-                    chunks = "auto"  # Change the default value to auto
+                    if chunks == {}: # Rechunk with optimal chunk size
+                        tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim=time_dim_name[self.ds.author], 
+                                                                       verbose=True)
+                        self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
 
-                self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
-                                          consolidated=True, chunks=chunks)
+                elif filepath.split(".")[-1] == "zarr":
+                    if chunks == {}:
+                        chunks = "auto" # Change the default value to auto
 
-        if verbose:
-            print('[Cube loading] File open')
+                    self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
+                                            consolidated=True, chunks=chunks)
 
-        dico_load = {
-            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
-            "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
-            "L. Charrier, L. Guo": self.load_charrier,
-            "L. Charrier": self.load_charrier,
-            "E. Ducasse": self.load_ducasse,
-            "S. Leinss, L. Charrier": self.load_charrier,
-        }
-        dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
-                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
-        # rechunk again if the size of the cube is changed:
-        if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim='mid_date', verbose=True)
-            self.ds = self.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
+            if verbose:
+                print('[Cube loading] File open')
 
-        # Reorder the coordinates to keep the consistency
-        self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-        self.standardize_cube_for_processing()
+            dico_load = {
+                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
+                "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
+                "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
+                "L. Charrier, L. Guo": self.load_charrier,
+                "L. Charrier": self.load_charrier,
+                "E. Ducasse": self.load_ducasse,
+                "S. Leinss, L. Charrier": self.load_charrier,
+            }
+            dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
+                                    pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
+            # rechunk again if the size of the cube is changed:
+            if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
+                tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim='mid_date', verbose=True)
+                self.ds = self.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
 
-        # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
-        #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
-        #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
-        #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
+            # Reorder the coordinates to keep the consistency
+            self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
+            self.standardize_cube_for_processing()
+            
+            if mask_file is not None:
+                self.mask_cube(mask_file)
 
-        if verbose:
-            print(f'[Cube loading] Author : {self.ds.author}')
+            # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
+            #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
+            #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
+            #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
+
+            if verbose:
+                print(f'[Cube loading] Author : {self.ds.author}')
 
     def standardize_cube_for_processing(self):
         
@@ -635,7 +657,7 @@ class cube_data_class:
         if "errorx" not in self.ds.variables:
             self.ds["errorx"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
             self.ds["errory"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
-            
+
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
@@ -877,6 +899,13 @@ class cube_data_class:
         self.ds = self.ds.persist()
 
     def mask_cube(self, mask : xr.DataArray | str):
+        
+        '''
+        Mask some of the data of the cube (putting it to np.nan).
+        
+        :param mask: [str | xr dataarray] --- Either a DataArray with 1 the data to keep and 0 the ones to remove, or a path to a file containing a DataArray or a shapefile to be rasterized
+        '''
+        
         if type(mask) is str:
             if mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile)
                 polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
@@ -1131,12 +1160,21 @@ class cube_data_class:
         :param cube: (cube_data_class) The cube to be merged to self
         '''
 
-        self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
+        # Merge the cubes (must be previously aligned before using align_cube)
+        self.ds = xr.concat([self.ds, cube.ds.sel(x=self.ds['x'], y=self.ds['y'])], dim='mid_date')
+        
+        # Update the attributes
         self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
         self.nz = self.ds['mid_date'].size
-
-        if cube.author not in self.author.split('\n'):
-            self.author += f'\n{cube.author}'
+        if type(self.filedir) != list and type(self.filename) != list and type(self.author) != list and type(self.source) != list:
+            self.filedir = [self.filedir]
+            self.filename = [self.filename]
+            self.author = [self.author]
+            self.source = [self.source]
+        self.filedir.append(cube.filedir)
+        self.filename.append(cube.filename)
+        self.author.append(cube.author)
+        self.source.append(cube.source)
 
     def average_cube(self):
         
