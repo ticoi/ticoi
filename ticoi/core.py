@@ -763,16 +763,19 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
     :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
     '''
 
-    async def process_block(block: cube_data_class, returned: list | str = 'interp', nb_cpu: int = 8, verbose: bool = False):
+    async def process_block(block: cube_data_class, returned: list | str = 'interp', nb_cpu: int = 8,
+                            verbose: bool = False):
 
         xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
         xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
 
         # Return only raw data => no need to filter the cube
-        if 'raw' in returned and (type(returned) == str or len(returned) == 1): # Only load the raw data
+        if 'raw' in returned and (type(returned) == str or len(returned) == 1):  # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
-                                          solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None,
+                delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'],
+                                          interp=inversion_kwargs['interpolation_load_pixel'],
+                                          solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'],
+                                          rolling_mean=None,
                                           visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
                 for i, j in xy_values_tqdm)
             return result_block
