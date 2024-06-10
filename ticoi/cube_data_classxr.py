@@ -1,11 +1,12 @@
-"""
+'''
 Class object to store and manipulate velocity observation data
 
 Author : Laurane Charrier Reference: Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021).
 Extraction of velocity time series with an optimal temporal sampling from displacement observation networks. IEEE
 Transactions on Geoscience and Remote Sensing. Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R.,
 & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations. ISPRS annals of the
-photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
+photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+'''
 
 import os
 import dask
@@ -541,9 +542,9 @@ class cube_data_class:
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
         :param filepath: [str] --- Filepath of the dataset
-        :param chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
-                       chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
-                       chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
+        :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
+                                  chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
+                                  chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
         :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
         :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
         :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
@@ -601,8 +602,7 @@ class cube_data_class:
             "S. Leinss, L. Charrier": self.load_charrier,
         }
         dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
-                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj
-                                  )
+                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
         # rechunk again if the size of the cube is changed:
         if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
             tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim='mid_date', verbose=True)
@@ -635,7 +635,7 @@ class cube_data_class:
         if "errorx" not in self.ds.variables:
             self.ds["errorx"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
             self.ds["errory"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
-
+            
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
@@ -846,7 +846,6 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    
     def delete_outliers(self, delete_outliers: str | float, flags: xr.Dataset | None = None):
         
         '''
@@ -1140,10 +1139,13 @@ class cube_data_class:
             self.author += f'\n{cube.author}'
 
     def average_cube(self):
-        """
-
-        :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
-        """
+        
+        '''
+        Average the velocity data.
+        
+        :return ds_mean: [xr dataset] --- Dataset with vx_mean the mean of vx, and vy_mean the mean of vy
+        '''
+        
         ds_mean = xr.Dataset({})
         coords = {'y': self.ds.y, 'x': self.ds.x}
         ds_mean['vx_mean'] = xr.DataArray(self.ds['vx'].mean(dim='mid_date'), dims=['y', 'x'], coords=coords)
@@ -1177,7 +1179,7 @@ class cube_data_class:
         # Find the index of the dates that have to be averaged, to get the heatmap
         # Each value of the heatmap corresponds to an average of all the velocities which are overlapping a given period
         save_line = [[] for _ in range(len(date_range) - 1)]
-        for i_date, date in enumerate(date_range[:-1]):
+        for i_date, _ in enumerate(date_range[:-1]):
             i = 0
             while i < data.shape[0] and date_range[i_date + 1] >= data[i, 0]:
                 if date_range[i_date] <= data[i, 1]:
@@ -1214,6 +1216,7 @@ class cube_data_class:
                 vvmean = [np.ma.median(vvmasked[lines]) for lines in save_line]
 
             vvdf = pd.DataFrame(vvmean, index=dates_c, columns=[points_heatmap['distance'].iloc[k] / 1000])
+            line_df_vv = None
             if k > 0:
                 line_df_vv = pd.concat([line_df_vv, vvdf], join='inner', axis=1)
             else:
@@ -1238,20 +1241,22 @@ class cube_data_class:
     def write_result_ticoi(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
                            savepath: str | None = None, result_quality: list | None = None,
                            verbose: bool = False) -> Union["cube_data_class", str]:
-        """
+        
+        '''
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
-        units has been changed to unit, since it was producing an error while wirtting the netcdf file
-        :param result: list of pd xarray, resulut from the TICOI method
-        :param source: name of the source
-        :param sensor: sensors which have been used
-        :param filename: filename of file to saved
-        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
-        :param savepath: string, path where to save the file
-        :param verbose: Print information throughout the process (default is False)
+        units has been changed to unit, since it was producing an error while writting the netcdf file
+        
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
 
-        :return: new cube where the results are saved
-        """
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        '''
+        
         # TODO: need to check the order of dimension: do we need to transpose?
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
@@ -1373,19 +1378,22 @@ class cube_data_class:
     def write_result_tico(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
                           savepath: str | None = None, result_quality: list | None = None,
                           verbose: bool = False) -> Union["cube_data_class", str]:
-        """
+        
+        '''
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
         units has been changed to unit, since it was producing an error while wirtting the netcdf file
-        :param result: list of pd xarray, resulut from the TICOI method
-        :param source: name of the source
-        :param sensor: sensors which have been used
-        :param filename:  filename of file to saved
-        :param savepath: path where to save the file
-        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
-        :param verbose: Print information throughout the process (default is False)
-        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
-        """
+        
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        '''
+        
         cubenew = cube_data_class()
         cubenew.ds['x'] = self.ds['x']
         cubenew.ds['x'].attrs = {'standard_name': 'projection_x_coordinate', 'unit': 'm',
@@ -1461,27 +1469,28 @@ class cube_data_class:
 
         return cubenew
 
-
     def write_results_ticoi_or_tico(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
                           savepath: str | None = None, result_quality: list | None = None,verbose: bool = False) -> Union["cube_data_class", str]:
-        """
+        
+        '''
         Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
-        It reconize whatever the results are irregular or regular
+        It recognizes whether the results are irregular or regular and uses the appropriate saving method
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
         units has been changed to unit, since it was producing an error while wirtting the netcdf file
-        :param result: list of pd xarray, resulut from the TICOI method
-        :param source: name of the source
-        :param sensor: sensors which have been used
-        :param filename:  filename of file to saved
-        :param savepath: path where to save the file
-        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
-        :param verbose: Print information throughout the process (default is False)
-        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
-        """
+        
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        '''
+        
         if result[0].columns[0] == 'First_date':
             self.write_result_ticoi(result=result, source=source, sensor=sensor, filename= filename,
                           savepath=savepath, result_quality=result_quality,verbose=verbose)
         else:
             self.write_result_tico(result=result, source=source, sensor=sensor, filename= filename,
                           savepath=savepath, result_quality=result_quality,verbose=verbose)
-

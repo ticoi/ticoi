@@ -15,7 +15,6 @@ import numpy as np
 from ticoi.core import inversion_core, visualisation, interpolation_core
 from ticoi.cube_data_classxr import cube_data_class
 
-
 # %%========================================================================= #
 #                                    PARAMETERS                               #
 # =========================================================================%% #

@@ -47,7 +47,7 @@ warnings.filterwarnings("ignore")
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
-#   - 'load' : The TICOI cube was already calculated before, load it using the load_file variable to indicate the path to the .nc file
+#   - 'load' : The  TICOI cube was already calculated before, load it using the load_file variable to indicate the path to the .nc file
 
 TICOI_process = 'block_process'
 
@@ -139,7 +139,7 @@ inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each
                     'verbose': False} # Print information throughout TICOI processing
                     
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 12 # Number of CPU to be used for parallelization
+nb_cpu = 6 # Number of CPU to be used for parallelization
 block_size = 0.1 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
@@ -237,7 +237,7 @@ print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "
 #                                INITIALISATION                               #
 # =========================================================================%% #
 
-if TICOI_process != 'load':
+if TICOI_process != 'load':    
     # Write down some informations about the data and the TICOI processing performed
     if save:
         start.append(time.time())
@@ -269,9 +269,9 @@ if TICOI_process != 'load':
 # =========================================================================%% #
 
 start.append(time.time())
+cube_interp = None
 if TICOI_process != 'load':
     # Save TICO.I results to a netCDF file, thus obtaining a new data cube
-    cube_interp = None
     several = (type(returned) == list and len(returned) >= 2)
     if 'invert' in returned:
         cube_invert = cube.write_result_tico([result[i][0] for i in range(len(result))] if several else result, source, sensor, 
