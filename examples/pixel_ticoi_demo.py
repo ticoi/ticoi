@@ -13,7 +13,7 @@ import time
 import os
 import numpy as np
 
-from ticoi.core import inversion_core, visualisation_core, interpolation_core
+from ticoi.core import inversion_core, visualization_core, interpolation_core
 from ticoi.interpolation_functions import prepare_interpolation_date
 from ticoi.cube_data_classxr import cube_data_class
 
@@ -33,13 +33,7 @@ proj = 'EPSG:3413'  # EPSG system of the given coordinates
 i, j = -138.18069, 60.29076
 vmax = [50, 170]  # vmin and vmax of the legend
 # Visualisation options
-# option_visual = ['original_velocity_xy', 'original_magnitude',
-#                  'X_magnitude_zoom', 'X_magnitude', 'X_zoom', 'X',
-#                  'vv_quality', 'vxvy_quality',
-#                  'Residu_magnitude', 'Residu',
-#                  'X_z', 'Y_contribution',
-#                  'direction']
-option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlayed','invertvv_overlayed','residuals','xcount_xy','xcount_vv']
+option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlayed','invertvv_overlayed','residuals','xcount_xy','xcount_vv','invert_weight']
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {},
@@ -168,7 +162,7 @@ dataf_lp = interpolation_core(result, interpolation_bas,
 stop.append(time.time())
 print(f'[ticoi_pixel_demo] Interpolation took {round((stop[3] - start[3]), 4)} s')
 
-if visual:visualisation_core([dataf,result],option_visual=option_visual,save=False,show=True,path_save=None,A=None,log_scale=False,cmap='rainbow',colors=['blueviolet','orange'])
+if visual:visualization_core([dataf, result], option_visual=option_visual, save=True, show=True, path_save=path_save, A=A, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange'])
 
 if save: dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
 

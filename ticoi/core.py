@@ -1000,12 +1000,26 @@ def process_blocks_refine(cube, nb_cpu=8, block_size=0.5, returned='interp', pre
     return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs, 
                                            inversion_kwargs=inversion_kwargs, verbose=verbose))
 
-def visualisation_core(list_dataf,option_visual,save=False,show=True,path_save=None,A=None,log_scale=False,cmap='rainbow',colors=['blueviolet','orange']):
+def visualization_core(list_dataf, option_visual, save=False, show=True, path_save=None, A=None, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange']):
+    """
+    Visualisa
+    :param list_dataf:
+    :param option_visual:
+    :param save:
+    :param show:
+    :param path_save:
+    :param A:
+    :param log_scale:
+    :param cmap:
+    :param colors:
+    :return:
+    """
     pixel_object = pixel_class()
     pixel_object.load(list_dataf, save=save, show=show, A=A,path_save=path_save)
 
     dico_visual = {'obs_xy':pixel_object.plot_vx_vy(color=colors[0]), 'obs_magnitude':pixel_object.plot_vv(color=colors[0]), 'obs_vxvy_quality':pixel_object.plot_vx_vy_quality(cmap=cmap, type_data='obs'),
-     'invertxy_overlayed':pixel_object.plot_vx_vy_overlayed(colors=colors), 'invertvv_overlayed':pixel_object.plot_vv_overlayed(colors=colors),'residuals':pixel_object.plot_residuals(log_scale=log_scale), 'xcount_xy':pixel_object.plot_xcount_vx_vy(cmap=cmap),'xcount_vv':pixel_object.plot_xcount_vv(cmap=cmap)}
+     'invertxy_overlayed':pixel_object.plot_vx_vy_overlayed(colors=colors), 'invertvv_overlayed':pixel_object.plot_vv_overlayed(colors=colors),'residuals':pixel_object.plot_residuals(log_scale=log_scale), 'xcount_xy':pixel_object.plot_xcount_vx_vy(cmap=cmap),'xcount_vv':pixel_object.plot_xcount_vv(cmap=cmap),
+                   'invert_weight':pixel_object.plot_weights_inversion()}
 
     for option in option_visual:
         dico_visual[option]

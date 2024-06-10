@@ -36,12 +36,13 @@ Then replace all conda commands by mamba.
 * **core.py**: Main functions to process the temporal inversion of glacier's surface velocity using
   the TICOI method. The inversion is solved using an Iterative Reweighted Least Square, and a robust downweighted
   function (Tukey's biweight).
-* * **cube_data_classxr.py**: Class object to store and manipulate velocity observation data
-* **inversion_functions.py**: Auxillary functions to process the temporal inversion.
-* **interpolation_functions.py**: Auxillary functions to process the temporal interpolation.
-* **filtering_functions.py**: Auxillary functions to process some filtering.
-* **other_functions.py**: Two other functions for assesing ITS_LIVE data.
-* **mjd2date.py**: Convert the dates from Modified Julian Date to Gregorian Date
+* **cube_data_classxr.py**: Class object to store and manipulate velocity observation data in a cube (netcdf or zarr)
+* **pixel_class.py**: Class object to manipulate and visualize velocity observations and inverted results on a pixel (from a pandas dataframe, or inside a cube)
+* **inversion_functions.py**: Functions to process the temporal inversion.
+* **interpolation_functions.py**: Functions to process the temporal interpolation.
+* **filtering_functions.py**: Functions to process some filtering.
+* **other_functions.py**: Two other functions for accessing ITS_LIVE data.
+* **mjd2date.py**: Functions to convert the dates from Modified Julian Date to Gregorian Date
 * 
 #### Examples:
 

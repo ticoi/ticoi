@@ -119,7 +119,7 @@ class pixel_class():
         plt.subplots_adjust(bottom=0.2)
         ax1[1].legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, fontsize=12)
         if self.show: plt.show()
-        if self.save:fig1.savefig(f'{self.path_save}vx_vy_{type_data}.png')
+        if self.save:fig1.savefig(f'{self.path_save}/vx_vy_{type_data}.png')
         return ax1, fig1
 
     def plot_vx_vy_overlayed(self,colors = ['blueviolet','orange']):
@@ -143,7 +143,7 @@ class pixel_class():
         ax1[1].legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, fontsize=14)
 
         if self.show: plt.show()
-        if self.save:fig1.savefig(f'{self.path_save}vx_vy_overlayed.png')
+        if self.save:fig1.savefig(f'{self.path_save}/vx_vy_overlayed.png')
 
 
     def plot_vv(self,color='blueviolet',type_data='invert'):
@@ -160,7 +160,7 @@ class pixel_class():
         plt.subplots_adjust(bottom=0.2)
         ax.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=14)
         if self.show: plt.show(block=False)
-        if self.save:fig.savefig(f'{self.path_save}vv_{type_data.png}')
+        if self.save:fig.savefig(f'{self.path_save}/vv_{type_data}.png')
         return ax, fig
 
     def plot_vv_overlayed(self, colors=['blueviolet', 'orange']):
@@ -177,7 +177,7 @@ class pixel_class():
                     color=colors[1], alpha=0.2, fmt=',', zorder=1)
         ax.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=14)
         if self.show: plt.show()
-        if self.save:fig.savefig(f'{self.path_save}vv_overlayed.png')
+        if self.save:fig.savefig(f'{self.path_save}/vv_overlayed.png')
 
 
     def plot_vx_vy_quality(self,cmap='rainbow',type_data='obs'):
@@ -202,7 +202,7 @@ class pixel_class():
         plt.subplots_adjust(bottom=0.20)
         ax[1].legend(loc='lower left', bbox_to_anchor=(0.15, 0), bbox_transform=fig.transFigure, fontsize=14)
         if self.show: plt.show(block=False)
-        if self.save:fig.savefig(f'{self.path_save}vxvy_quality_bas_{type_data}.png')
+        if self.save:fig.savefig(f'{self.path_save}/vxvy_quality_bas_{type_data}.png')
 
     def plot_xcount_vx_vy(self,cmap='rainbow'):
         if self.datainvert is None: return ('You should this function, once a data of inverted have been loaded')
@@ -221,7 +221,7 @@ class pixel_class():
         plt.subplots_adjust(bottom=0.2)
         ax[1].add_artist(legend1)
         if self.show: plt.show(block=False)
-        if self.save:fig.savefig(f'{self.path_save}X_dates_contribution_vx_vy.png')
+        if self.save:fig.savefig(f'{self.path_save}/X_dates_contribution_vx_vy.png')
 
     def plot_xcount_vv(self,cmap='rainbow'):
         if self.datainvert is None: return ('You should this function, once a data of inverted have been loaded')
@@ -239,7 +239,7 @@ class pixel_class():
         ax.add_artist(legend1)
         plt.setp(legend1.get_title(), fontsize=16)
         if self.show: plt.show(block=False)
-        if self.save:fig.savefig(f'{self.path_save}X_dates_contribution_vv.png')
+        if self.save:fig.savefig(f'{self.path_save}/X_dates_contribution_vv.png')
 
 
     def plot_weights_inversion(self):
@@ -264,7 +264,7 @@ class pixel_class():
         ax[1].add_artist(legend1)
         ax[1].add_artist(legend2)
         if self.show: plt.show(block=False)
-        if self.save: fig.savefig(f'{self.path_save}vx_vy_weightini.png')
+        if self.save: fig.savefig(f'{self.path_save}/weightini_vx_vy.png')
 
         ##WEIGHTS USED IN THE LAST INVERSION
 
@@ -287,7 +287,7 @@ class pixel_class():
         ax[1].add_artist(legend1)
         ax[1].add_artist(legend2)
         if self.show: plt.show(block=False)
-        if self.save: fig.savefig(f'{self.path_save}vx_vy_weightlast.png')
+        if self.save: fig.savefig(f'{self.path_save}/weightlast_vx_vy.png')
 
 
     def plot_residuals(self,log_scale=False):
@@ -327,7 +327,7 @@ class pixel_class():
         ax[1].errorbar(self.dataobs.dataf['date_cori'], Y_reconstruct_y, xerr=self.dataobs.dataf['offset_bar'], color='r', alpha=0.3, fmt=',', zorder=1)
         ax[1].legend(bbox_to_anchor=(0.55, -0.3), ncol=3, fontsize=15)
         if self.show: plt.show()
-        if self.save: fig.savefig(f'{self.path_save}vx_vy_mismatch.png')
+        if self.save: fig.savefig(f'{self.path_save}/residuals_vx_vy_mismatch.png')
 
         ###RESIDUALS FROM THE LAST INVERSION
         fig, ax = plt.subplots(2, 1, figsize=(8, 4))
@@ -347,29 +347,30 @@ class pixel_class():
         ax[1].add_artist(legend1)
         ax[1].add_artist(legend2)
         if self.show: plt.show(block=False)
-        fig.savefig(f'{self.path_save}vx_vy_final_residual.png')
+        if self.save:fig.savefig(f'{self.path_save}/residuals_vx_vy_final_residual.png')
 
         ###RESIDUALS FOR VX AND VY, ACCORDING TO THE SENSOR
         ax = sns.catplot(data=dataf, x="sensor", y="abs_residux", hue="Author", kind="box")
         ax.set(xlabel='Sensor', ylabel='Absolute residual vx [m/y]')
+        if self.save:plt.savefig(f'{self.path_save}/residuals_vx_author_abs.png')
         if self.show: plt.show()
-        plt.savefig(f'{self.path_save}vx_residual_author_abs.png')
 
         ax = sns.catplot(data=dataf, x="sensor", y="abs_residuy", hue="Author", kind="box")
         ax.set(xlabel='Sensor', ylabel='Absolute residual vy [m/y]')
+        if self.save: plt.savefig(f'{self.path_save}/residuals_author_abs.png')
         if self.show: plt.show()
-        plt.savefig(f'{self.path_save}vy_residual_author_abs.png')
 
         ###RESIDUALS FROM VX AND VY, ACCORDING TO THE AUTHOR
         ax = sns.catplot(data=dataf, x="sensor", y="residux", hue="Author", kind="box")
         ax.set(xlabel='Sensor', ylabel='Residual vx [m/y]')
+        if self.save:plt.savefig(f'{self.path_save}/residuals_vx_author.png')
         if self.show: plt.show()
-        plt.savefig(f'{self.path_save}vx_residual_author.png')
 
         ax = sns.catplot(data=dataf, x="sensor", y="residuy", hue="Author", kind="box")
         ax.set(xlabel='Sensor', ylabel='Residual vy [m/y]')
+        if self.save:plt.savefig(f'{self.path_save}/residuals_vy_author.png')
         if self.show: plt.show()
-        plt.savefig(f'{self.path_save}vy_residual_author.png')
+
 
         ###RESIDUALS FROM VX AND VY, ACCORDING TO THE QUALITY INDICATOR
         fig, ax = plt.subplots(2, 1, figsize=self.figsize)
@@ -389,7 +390,9 @@ class pixel_class():
         ax[1].legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=12,
                      ncol=5)
         if self.show: plt.show()
-        fig.savefig(f'{self.path_save}residu_qualitylog.png')
+        if self.save:
+            if log_scale:fig.savefig(f'{self.path_save}/residu_qualitylog.png')
+            else:fig.savefig(f'{self.path_save}/residuals_quality.png')
 
         ###RESIDUALS FROM VX AND VY, ACCORDING TO THE TEMPORAL BASELINE
         fig, ax = plt.subplots(2, 1, figsize=self.figsize)
@@ -409,4 +412,7 @@ class pixel_class():
         ax[1].legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=12,
                      ncol=5)
         if self.show: plt.show()
-        fig.savefig(f'{self.path_save}residu_tempbaseline_log.png')
+        if self.save:
+            if log_scale:fig.savefig(f'{self.path_save}/residu_tempbaseline_log.png')
+            else:fig.savefig(f'{self.path_save}/residuals_tempbaseline.png')
+
