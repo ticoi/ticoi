@@ -49,31 +49,31 @@ warnings.filterwarnings("ignore")
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 #   - 'load' : The TICOI cube was already calculated before, load it using the load_file variable to indicate the path to the .nc file
 
-TICOI_process = 'block_process'
+TICOI_process = 'direct_process'
 
 save = True # If True, save TICOI results to a netCDF file
 save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_names = ['/media/tristan/Data3/OIC_2024/S2/TICOI_inversion_2nd/Mont_Blac_displacement_S2.nc'] #['test_data/c_x18620_y08085_2016-2022_crop_GPS_Lower.nc',]
+cube_names = ['/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_subset.nc'] #['test_data/c_x18620_y08085_2016-2022_crop_GPS_Lower.nc',]
                # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
-flag_shp = 'test_data/Alpes_RGI7.shp' # Path of the shape file for flags generating
+flag_shp = '/media/tristan/Data3/Hala_lake/glacier_outline/hala_lake_RGI7.shp' # Path of the shape file for flags generating
 mask_file = None # Path where the mask file is stored (.shp file)
 load_file = None # If TICOI was already computed on this cube/subset, you can directly load it (TICOI_process='load')
-path_save = 'test_data/Tests_MB/' # Path where to store the results
+path_save = 'Tests_MB/' # Path where to store the results
 result_fn = 'test'# Name of the netCDF file to be created
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
-proj = 'EPSG:32632'  # EPSG system of the given coordinates
+proj = 'EPSG:32647'  # EPSG system of the given coordinates
 
 ## ----------------------- Regularization parameters ---------------------- ##
 # Divide the data in several areas where different methods should be used
 assign_flag = True
-regu = {0: 1, 1: "1accelnotnull"} # Regularization method.s to be used (for each flag if flags is not None)
-coef = {1:200, 0: 150} # Regularization coefficient.s to be used (for each flag if flags is not None)
+regu = {0: 1, 1: 2, 2: "1accelnotnull"} # Regularization method.s to be used (for each flag if flags is not None)
+coef = {0: 100, 1:150, 2:300} # Regularization coefficient.s to be used (for each flag if flags is not None)
 
 solver = 'LSMR_ini' # Solver for the inversion
 
@@ -84,7 +84,7 @@ returned = ['invert', 'interp']
 
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 40 # Number of CPU to be used for parallelization
+nb_cpu = 20 # Number of CPU to be used for parallelization
 block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 
@@ -93,7 +93,7 @@ load_kwargs = {'chunks': {},
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
                'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
                'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
+               'pick_date': None, # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
@@ -108,11 +108,11 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                   'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
-                  'flags': None, # Divide the data in several areas where different methods should be used
+                  'flag': flag_shp, # shape file to divide the data into several areas where different methods should be used
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                   'solver': solver, # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+                  'velo_or_disp': 'disp', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
                   'verbose': True # Print information throughout the filtering process 
                   }
 
@@ -120,7 +120,7 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
 inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                     'coef': coef, # Regularization coefficient.s to be used (for each flag if flags is not None)
                     'solver': solver, # Solver for the inversion
-                    'flags': None, # Divide the data in several areas where different methods should be used
+                    'flag': flag_shp, # shape file to divide the data into several areas where different methods should be used
                     'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
                     'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                     'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
@@ -141,7 +141,7 @@ inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each
                     'result_quality': 'X_contribution', # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
                     'visual': False, # Plot results along the way
                     'path_save': path_save, # Path where to store the results
-                    'verbose': True # Print information throughout TICOI processing
+                    'verbose': False # Print information throughout TICOI processing
                     }
 
 # %%========================================================================= #
@@ -172,11 +172,6 @@ if TICOI_process != 'load':
     # Mask some of the data
     if mask_file is not None:
         cube.mask_cube(mask_file)
-    
-    if assign_flag:
-        flags = cube.create_flag(flag_shp=flag_shp, field_name="surge_type", default_value=0)
-        preData_kwargs.update({'flags': flags})
-        inversion_kwargs.update({'flags': flags})
 
     stop = [time.time()]
     print(f'[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
@@ -209,7 +204,8 @@ if TICOI_process == 'block_process':
 # Direct computation of the whole TICOI cube
 elif TICOI_process == 'direct_process':
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(**preData_kwargs)
+    obs_filt, flag = cube.filter_cube(**preData_kwargs)
+    inversion_kwargs.update({'flag': flag})
     
     # Progression bar
     xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)

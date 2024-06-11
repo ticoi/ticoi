@@ -755,7 +755,7 @@ class cube_data_class:
 
 
     def load_pixel(self, i: int | float, j: int | float, unit: int = 365, regu: int | str = 1, coef: int = 100, 
-                   flags: xr.Dataset | None = None, solver: str = 'LSMR', interp: str = 'nearest', 
+                   flag: xr.Dataset | None = None, solver: str = 'LSMR', interp: str = 'nearest', 
                    proj: str = 'EPSG:4326', rolling_mean: xr.Dataset | None = None, 
                    visual: bool = False, verbose = False):
         
@@ -766,7 +766,7 @@ class cube_data_class:
         :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
         :param regu: [int | str] [default is 1] --- Type of regularization
         :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
-        :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
@@ -777,8 +777,8 @@ class cube_data_class:
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
         :return dates_range: [list | None] --- Dates between which the displacements will be inverted
-        :return regu: [np array | Nothing] --- If flags is not None, regularisation method to be used for each pixel
-        :return coef: [np array | Nothing] --- If flags is not None, regularisation coefficient to be used for each pixel
+        :return regu: [np array | Nothing] --- If flag is not None, regularisation method to be used for each pixel
+        :return coef: [np array | Nothing] --- If flag is not None, regularisation coefficient to be used for each pixel
         '''
 
         # Variables to keep
@@ -798,9 +798,9 @@ class cube_data_class:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
                     dim='mid_date')  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
-        if flags is not None:
+        if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flags['flags'].sel(x=i, y=j, method='nearest').values)
+                flag = np.round(flag['flag'].sel(x=i, y=j, method='nearest').values)
                 regu = regu[flag]
                 coef = coef[flag]
             else:
@@ -836,7 +836,7 @@ class cube_data_class:
             data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
             data = [data_dates, data_values]
 
-        if flags is not None:
+        if flag is not None:
             return data, mean, dates_range, regu, coef
         else:
             return data, mean, dates_range
@@ -847,13 +847,13 @@ class cube_data_class:
     # =====================================================================%% #
 
     
-    def delete_outliers(self, delete_outliers: str | float, flags: xr.Dataset | None = None):
+    def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None):
         
         '''
         Delete outliers according to a certain criterium.
         
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
-        :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         '''
         
         if isinstance(delete_outliers, int):
@@ -863,9 +863,9 @@ class cube_data_class:
             axis = self.ds['vx'].dims.index('mid_date')
             inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, axis=axis)
             
-            if flags is not None:
+            if flag is not None:
                 if delete_outliers != 'vvc_angle':
-                    flag = flags['flags'].values if flags['flags'].shape[0] == self.nx else flags['flags'].values.T
+                    flag = flag['flag'].values if flag['flag'].shape[0] == self.nx else flag['flag'].values.T
                     flag_condition = (flag == 0)
                     flag_condition = np.expand_dims(flag_condition, axis=axis)
                     inlier_mask = np.logical_or(inlier_mask, flag_condition)
@@ -892,7 +892,7 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
                 .astype('float32')
 
-    def create_flag(self, flag_shp : str = None, field_name : str | None = 'surge_type', default_value : str | int | None = 0):
+    def create_flag(self, flag_shp : str = None, field_name : str | None = None, default_value : str | int | None = None):
         """
         Create a flag dataset based on the provided shapefile and shapefile field.
         Which is usually used to divide the pixels into different types, especially for surging glaciers.
@@ -901,11 +901,19 @@ class cube_data_class:
         :param flag_shp (str, optional): The path to the shapefile. Defaults to None.
         :param shp_field (str, optional): The name of the shapefile field. Defaults to 'surge_type' (used in RGI7).
         :param default_value (str | int | None, optional): The default value for the shapefile field. Defaults to 0.
-        :Returns flags: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
+        :Returns flag: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
         """
         flag_shp = geopandas.read_file(flag_shp).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
         
         # surge-type glacier: 2, other glacier: 1, stable area: 0
+        if field_name is None:
+            if 'surge_type' in flag_shp.columns: #RGI inventory, surge-type glacier: 2, other glacier: 0
+                default_value = 0
+                field_name = 'surge_type'
+            elif 'Surge_class' in flag_shp.columns: #HMA surging glacier inventory, surge-type glacier: 2, other glacier: ''
+                default_value = None
+                field_name = 'Surge_class'
+        
         if field_name is not None:
             flag_id = flag_shp[field_name].apply(lambda x: 2 if x != default_value else 1).astype("int16")
             geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
@@ -913,7 +921,7 @@ class cube_data_class:
         # inside the polygon: 1, outside: 0
             geom_value = ((geom, 1) for geom in flag_shp.geometry)
         
-        flags = rasterio.features.rasterize(
+        flag = rasterio.features.rasterize(
             geom_value,
             out_shape=(self.ny, self.nx),
             transform=self.ds.rio.transform(),
@@ -922,19 +930,19 @@ class cube_data_class:
             dtype="int16",
         )
         
-        flags = xr.Dataset(
+        flag = xr.Dataset(
                     data_vars=dict(
-                        flags=(["y", "x"], flags),
+                        flag=(["y", "x"], flag),
                     ),
                     coords=dict(
                         x=(["x"], self.ds.x.data),
                         y=(["y"], self.ds.y.data),))
         
-        return flags
+        return flag
 
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
                     s_win: int = 3, t_win: int = 90, sigma: int = 3, order: int = 3, unit: int = 365, 
-                    delete_outliers: str | float | None = None, flags: xr.Dataset | None = None, regu: int | str = 1, 
+                    delete_outliers: str | float | None = None, flag: xr.Dataset | str | None = None, regu: int | str = 1, 
                     solver: str = 'LSMR_ini', proj: str = "EPSG:4326", velo_or_disp: str = "velo",
                     select_baseline: int | None = None, verbose: bool = False) -> xr.Dataset:
 
@@ -949,7 +957,7 @@ class cube_data_class:
         :param order: [int] [default is 3] --- Order of the smoothing function
         :param unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
         :param delete_outliers: [str | float | None] [default is None] --- If float delete all velocities which a quality indicator higher than delete_outliers
-        :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         :param regu: [int | str] [default is 1] --- Regularisation of the solver
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
@@ -1027,12 +1035,20 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
         
-        if flags is not None:
-            flags = flags.load()
+        if flag is not None:
+            
+            if isinstance(flag, str): # if flag is a shape file 
+                flag = self.create_flag(flag)
+                flag = flag.load()
+            elif isinstance(flag, xr.Dataset):
+                flag = flag.load()
+            else:
+                raise ValueError("flag must be a str or xr.Dataset!")
+            
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
-                raise ValueError("regu must be a dict if assign_flag is True!")
+                raise ValueError("regu must be a dict if flag is Not None")
         else:
             if isinstance(regu, int):  # if regu is an integer
                 regu = [regu]
@@ -1041,7 +1057,7 @@ class cube_data_class:
         
         start = time.time()
         if delete_outliers is not None: 
-            self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
+            self.delete_outliers(delete_outliers=delete_outliers, flag=flag)
             if verbose: print(f'Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
@@ -1083,7 +1099,7 @@ class cube_data_class:
         self.ds = self.ds.persist()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
-        return obs_filt
+        return obs_filt, flag
 
     def align_cube(self, cube: "cube_data_class", unit: int = 365, reproj_vel: bool = True, reproj_coord: bool = True,
                    interp_method: str = 'nearest'):

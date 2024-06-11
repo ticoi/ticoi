@@ -22,15 +22,16 @@ from ticoi.cube_data_classxr import cube_data_class
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
-cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
-path_save = 'examples/results/pixel/' # Path where to store the results
-proj = 'EPSG:32632'  # EPSG system of the given coordinates
+cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_subset.nc'
 
-i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation
+proj = 'EPSG:32647'  # EPSG system of the given coordinates
+
+i, j = 396343, 4259420# Point (pixel) where to carry on the computation
+path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/{i}-{j}-test-vvc/' # Path where to store the results
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = '1accelnotnull' # Regularization method to be used
-coef = 100 # Regularization coefficient to be used
+coef = 200 # Regularization coefficient to be used
 solver = 'LSMR_ini' # Solver for the inversion
 unit = 365 # 1 for m/d, 365 for m/y
 result_quality = 'X_contribution' # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
@@ -51,8 +52,8 @@ vmax = [False, False] # Vertical limits for the plots
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'buffer': [i, j, 500], # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
+               'buffer': [i, j, 100], # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+               'pick_date': None, # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
@@ -69,7 +70,7 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'regu': regu, # Regularization method to be used
                   'solver': solver, # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+                  'velo_or_disp': 'disp', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
                   'verbose': verbose} # Print information throughout the filtering process 
                   
 ## ---------------- Parameters for the pixel loading part ------------------ ##
@@ -101,7 +102,7 @@ inversion_kwargs = {'regu': regu, # Regularization method to be used
                     
 ## ----------------------- Interpolation parameters ------------------------ ##
 interpolation_kwargs = {'interval_output': 30, # Temporal baseline of the time series resulting from TICOI (after interpolation)
-                        'redundancy': 5, # Redundancy in the interpolated time series in number of days, no redundancy if None
+                        'redundancy': 15, # Redundancy in the interpolated time series in number of days, no redundancy if None
                         'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')                
                         'result_quality': result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
                         'unit': unit, # 365 if the unit is m/y, 1 if the unit is m/d
