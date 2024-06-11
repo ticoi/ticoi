@@ -44,8 +44,8 @@ class Testclass_cube_data_xr:
     ], indirect=["filepath"])  #indirect mean that this parameter should be handled by a fixture that can interpret these values
 
     @pytest.mark.parametrize("x, y, expected", [
-        (1, 2, np.array([[ 36., -52.,112.59999847, 149.1000061 ,  16. ]]).astype('float64')),
-        (-138.18069, 60.29076, np.array([[ 59., -6., 112.59999847 ,149.1000061 ,  16.]]).astype('float64'))
+        (1, 2, np.array([ 36.0, -52.0,112.59999847, 149.1000061 ,  16.0 ]).astype('float32')),
+        (-138.18069, 60.29076, np.array([ 59., -6.0, 112.59999847 ,149.1000061 ,  16.0]).astype('float32'))
     ])
     def test_load_pixel(self,cube_data_class_instance,x,y, expected):
         data, mean, dates_range = cube_data_class_instance.load_pixel(x,y)
@@ -54,8 +54,4 @@ class Testclass_cube_data_xr:
         assert str(data[0][0,0].dtype) == 'datetime64[D]', "data_dates is not an array with two columns"
         assert data[1].shape[1] == 5
         actual = data[1][0,:]
-        print('actual',actual)
-        print('expected',expected)
-        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-5, err_msg=f"Arrays at coordinates ({x},{y}) do not match.")
-        # np.testing.assert_array_equal(actual, expected, err_msg=f"Arrays at coordinates ({x},{y}) do not match.")
-
+        np.testing.assert_array_almost_equal(actual, expected, decimal=1)

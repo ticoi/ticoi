@@ -319,10 +319,10 @@ class cube_data_class:
         date2 = [mjd2date(date_str) for date_str in self.ds['date2'].values]
         self.ds = self.ds.unify_chunks()
         self.ds['date1'] = xr.DataArray(np.array(date1).astype('datetime64[ns]'), dims='mid_date').chunk(
-                                        chunks=self.ds.chunks['mid_date'])
+                                        {'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
         self.ds['date2'] = xr.DataArray(np.array(date2).astype('datetime64[ns]'), dims='mid_date').chunk(
-                                        chunks=self.ds.chunks['mid_date'])
+                                        {'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
         del date1, date2
 
