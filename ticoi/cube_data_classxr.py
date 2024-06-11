@@ -879,13 +879,13 @@ class cube_data_class:
 
         # data_values is composed of vx, vy, errorx, errory, temporal baseline
         if visual:
-            if output_format == 'nc':
+            if output_format == 'np':
                 data_str = data[['sensor', 'source']].to_array().values.T
                 data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
                 data = [data_dates, data_values, data_str]
             elif output_format == 'df':
                 data = data.to_pandas()
-            else: raise ValueError ('Please enter nc if want to have as output a numpy array, and df if you want a pandas dataframe')
+            else: raise ValueError ('Please enter np if want to have as output a numpy array, and df if you want a pandas dataframe')
         else:
             data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
             data = [data_dates, data_values]
