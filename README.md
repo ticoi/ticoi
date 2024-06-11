@@ -58,7 +58,9 @@ Then replace all conda commands by mamba.
 ##### More advanced examples:
 
 * **examples/advances_processing/ticoi_cube_demo_with_flag.py**: Demonstration of how to process one cube, by using different parameters for different areas (stable, surge)
-* **examples/ticoi_pixel_demo.py**: Demonstration of how to process one pixel
+* **examples/data_availability.py**: A few tools to evaluate the data availability on a set of data, its repartition throughout the period of measurement and its quality 
+in some cases, in order to see whether it is relevent or not to study glacier velocities at a point (seaonality, surge...). It uses 
+TICOI's optimized loading to load the data.
 
 ### OUTPUTS
 * to understand to output of pixel_demo please check README_visualization_pixel_output.md
