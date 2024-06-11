@@ -25,12 +25,12 @@ from datetime import date
 from dask.diagnostics import ProgressBar
 from typing import Union
 from rasterio.features import rasterize
+from typing import Union
+from dask.array.lib.stride_tricks import sliding_window_view
 
 from ticoi.mjd2date import mjd2date
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
-from typing import Union
-from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 
 
@@ -53,6 +53,7 @@ class cube_data_class:
         self.source = ''
         self.ds = xr.Dataset({})
         self.resolution = 50
+        self.is_TICO = False
 
     def update_dimension(self, time_dim: str = 'mid_date'):
         
@@ -91,7 +92,7 @@ class cube_data_class:
                                   y=slice(np.max([subset[2], subset[3]]), np.min([subset[2], subset[3]])))
         
         if len(self.ds['x'].values) == 0 and len(self.ds['y'].values) == 0:
-            print(f'[Cube loading] The given subset is not part of cube {self.filename}')
+            print(f'[Data loading] The given subset is not part of cube {self.filename}')
 
     def buffer(self, proj: str, buffer: list):
 
@@ -123,7 +124,7 @@ class cube_data_class:
             del i1, i2, j1, j2, buffer
             
         if len(self.ds['x'].values) == 0 and len(self.ds['y'].values) == 0:
-            print(f'[Cube loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
+            print(f'[Data loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
                                      time_dim: str = 'mid_date', verbose: bool = False) -> (int, int, int):
@@ -165,7 +166,7 @@ class cube_data_class:
             chunk_size_limit = 200 * mb
         else:
             chunk_size_limit = 1000 * mb
-            
+        
         time_axis = self.ds[variable_name].dims.index(time_dim)
         x_axis = self.ds[variable_name].dims.index(x_dim)
         y_axis = self.ds[variable_name].dims.index(y_dim)
@@ -205,7 +206,7 @@ class cube_data_class:
         '''
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+            print(f'[Data loading] Path to cube file : {filepath}')
 
         self.filedir = os.path.dirname(filepath)  # Path were is stored the netcdf file
         self.filename = os.path.basename(filepath)  # Name of the netcdf file
@@ -301,7 +302,7 @@ class cube_data_class:
         """
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+            print(f'[Data loading] Path to cube file : {filepath}')
             
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)  # name of the netcdf file
@@ -403,7 +404,7 @@ class cube_data_class:
         """
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+            print(f'[Data loading] Path to cube file : {filepath}')
             
         self.ds = self.ds.chunk({'x': 125, 'y': 125, 'time': 2000})  # set chunk
         self.filedir = os.path.dirname(filepath)
@@ -481,7 +482,7 @@ class cube_data_class:
         """
         
         if verbose:
-            print(f'[Cube loading] Path to cube file {"(TICO cube)" if self.load_TICO else ""} : {filepath}')
+            print(f'[Data loading] Path to cube file {"(TICO cube)" if self.is_TICO else ""} : {filepath}')
         
         # Informations about the cube
         self.filedir = os.path.dirname(filepath)
@@ -499,12 +500,12 @@ class cube_data_class:
         elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
-        time_dim = 'mid_date' if not self.load_TICO else 'second_date' # 'second_date' if we load TICO data
+        time_dim = 'mid_date' if not self.is_TICO else 'second_date' # 'second_date' if we load TICO data
         self.update_dimension(time_dim)
 
         # Temporal subset between two dates
         if pick_date is not None:
-            if not self.load_TICO: 
+            if not self.is_TICO: 
                 self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
                                         self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
             else:
@@ -516,13 +517,13 @@ class cube_data_class:
 
         # Pick sensors or temporal baselines
         if pick_sensor is not None:
-            if not self.load_TICO:
+            if not self.is_TICO:
                 self.ds = self.ds.sel(mid_date=self.ds['sensor'].isin(pick_sensor))
             else:
                 self.ds = self.ds.sel(second_date=self.ds['sensor'].isin(pick_sensor))
         
         # Following properties are not available for TICO cubes
-        if not self.load_TICO:
+        if not self.is_TICO:
             # Pick specific temporal baselines
             if pick_temp_bas is not None:
                 self.ds = self.ds.sel(mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
@@ -574,6 +575,8 @@ class cube_data_class:
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
         
+        assert type(filepath) == list or type(filepath) == str, (f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}.")
+        
         if type(filepath) == list: # Merge several cubes
             self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
                       proj=proj, mask_file=mask_file, verbose=verbose)
@@ -613,9 +616,9 @@ class cube_data_class:
                     if "Author" in self.ds.attrs: # Uniformization of the attribute Author to author
                         self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                    self.load_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
-                    time_dim = time_dim_name[self.ds.author] if not self.load_TICO else 'second_date' # To load TICO results
-                    var_name = "vx" if not self.load_TICO else "dx"
+                    self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+                    time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
+                    var_name = "vx" if not self.is_TICO else "dx"
 
                     if chunks == {}: # Rechunk with optimal chunk size
                         tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
@@ -628,7 +631,7 @@ class cube_data_class:
                     self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
 
             if verbose:
-                print('[Cube loading] File open')
+                print('[Data loading] File open')
 
             dico_load = {
                 "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
@@ -641,7 +644,9 @@ class cube_data_class:
             }
             dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
                                     pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
+            
             # Rechunk again if the size of the cube is changed:
+            time_dim = 'mid_date' if not self.is_TICO else 'second_date'
             if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
                 tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
                 self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
@@ -659,7 +664,7 @@ class cube_data_class:
             #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
 
             if verbose:
-                print(f'[Cube loading] Author : {self.ds.author}')
+                print(f'[Data loading] Author : {self.ds.author}')
 
     def standardize_cube_for_processing(self, time_dim='mid_date'):
         
@@ -673,7 +678,7 @@ class cube_data_class:
         if self.ds.chunksizes[time_dim] != (self.nz,):
             self.ds = self.ds.chunk({time_dim: self.nz})
             
-        if not self.load_TICO:
+        if not self.is_TICO:
             # Create a variable for temporal_baseline
             self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
             
@@ -791,12 +796,12 @@ class cube_data_class:
         if proj == 'EPSG:4326':
             myproj = Proj(self.ds.proj4)
             i, j = myproj(i, j)
-            if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+            if verbose: print(f'[Data loading] Converted to projection {self.ds.proj4}: {i, j}')
         else:
             if CRS(self.ds.proj4) != CRS(proj):
                 transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
                 i, j = transformer.transform(i, j)
-                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+                if verbose: print(f'[Data loading] Converted to projection {self.ds.proj4}: {i, j}')
         return i, j
 
 
@@ -940,7 +945,7 @@ class cube_data_class:
             mask.load()
 
         # Mask the velocities and the errors
-        if not self.load_TICO:
+        if not self.is_TICO:
             self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
                     .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
                     .astype('float32')
@@ -1016,7 +1021,7 @@ class cube_data_class:
                 filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                        sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
-            if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
+            if verbose: print(f'[Data filtering] Smoothing observations took {round((time.time() - start), 1)} s')
 
             # Spatial average
             if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :# The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
@@ -1030,12 +1035,12 @@ class cube_data_class:
             return spatial_mean.compute(), np.unique(date_out)
 
         if np.isnan(self.ds['date1'].values).all():
-            print('Empty sub-cube (masked data ?)')
+            print('[Data filtering] Empty sub-cube (masked data ?)')
             return None
 
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
-            if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
+            if verbose: print(f"[Data filtering] Clipping dataset to individual pixel: (x, y) = ({i},{j})")
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
@@ -1060,7 +1065,7 @@ class cube_data_class:
         start = time.time()
         if delete_outliers is not None: 
             self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
-            if verbose: print(f'Delete outlier took {round((time.time() - start), 1)} s')
+            if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)],
@@ -1085,7 +1090,7 @@ class cube_data_class:
             del vx_filtered, vy_filtered
 
             if verbose: 
-                print("Calculating smoothing mean of the observations completed in {:.2f} seconds".format(time.time() - start))
+                print("[Data filtering] Calculating smoothing mean of the observations completed in {:.2f} seconds".format(time.time() - start))
         
         elif solver == 'LSMR_ini':  # The initialization is based on the averaged velocity over the period, for every pixel
             obs_filt = self.ds[['vx', 'vy']].mean(dim='mid_date')
@@ -1328,22 +1333,22 @@ class cube_data_class:
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
                             result[i * self.ny + j]['vx'].shape[
-                                0] != 0]  # temporal size of the results which are not empty
+                                0] != 0]  # Temporal size of the results which are not empty
         first_date_results = [result[i * self.ny + j]['First_date'].iloc[0] for i in range(self.nx) for j in
                               range(self.ny) if
                               result[i * self.ny + j]['vx'].shape[
-                                  0] != 0]  # temporal size of the results which are not empty
+                                  0] != 0]  # Temporal size of the results which are not empty
         if len(non_null_results) == 0:
-            print('There is no results to write and/or save')
+            print('[Writing results] There is no results to write and/or save')
             return 'There is no results to write and/or save'
 
         if np.min(non_null_results) == np.max(non_null_results) and all(
                 element == first_date_results[0] for element in
-                first_date_results):  # if the dates of the results are the same for every pixel
+                first_date_results):  # If the dates of the results are the same for every pixel
             non_null_el = next((element for element in result if element.shape[0] != 0),
                                None)  # First result array which is not empty, and have size corresponding to the time period common between every pixel
             del non_null_results, first_date_results
-            print('Same time dimension for every pixels')
+            print('[Writing results] Same time dimension for every pixels')
         else:
             print('Not the same time dimension for every pixels')
             raise ValueError('Not the same time dimension for every pixels, cannot save cube')
@@ -1376,7 +1381,7 @@ class cube_data_class:
             result_arr = result_arr.reshape((self.nx, self.ny, len(time_variable)))
             cubenew.ds[var] = xr.DataArray(result_arr, dims=['x', 'y', 'mid_date'],
                                            coords={'x': self.ds['x'], 'y': self.ds['y'], 'mid_date': time_variable})
-            cubenew.ds[var] = cubenew.ds[var].transpose('mid_date', 'y', 'x')
+            cubenew.ds[var] = cubenew.ds[var].transpose('x', 'y', 'mid_date')
             cubenew.ds[var].attrs = {'standard_name': short_name[i], 'unit': 'm/y', 'long_name': long_name[i]}
 
         if result_quality is not None and 'Norm_residual' in result_quality:
@@ -1414,8 +1419,8 @@ class cube_data_class:
                 cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
                 cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
                                                    'long_name': long_name[k]}
-
         del non_null_el, long_name, result_arr
+        
         cubenew.ds['x'] = self.ds['x']
         cubenew.ds['x'].attrs = {'standard_name': 'projection_x_coordinate', 'unit': 'm',
                                  'long_name': 'x coordinate of projection'}
@@ -1436,9 +1441,9 @@ class cube_data_class:
         cubenew.nz = cubenew.ds['mid_date'].sizes['mid_date']
         cubenew.filename = filename
 
-        if savepath is not None:  # save the dataset to a netcdf file
+        if savepath is not None:  # Save the dataset to a netcdf file
             cubenew.ds.to_netcdf(f'{savepath}/{filename}.nc')
-            if verbose: print(f'Saved to {savepath}/{filename}.nc')
+            if verbose: print(f'[Writing results] Saved to {savepath}/{filename}.nc')
 
         return cubenew
 
@@ -1532,7 +1537,7 @@ class cube_data_class:
 
         if savepath is not None:  # save the dataset to a netcdf file
             cubenew.ds.to_netcdf(f'{savepath}/{filename}.nc')
-            if verbose: print(f'Saved to {savepath}/{filename}.nc')
+            if verbose: print(f'[Writing results] Saved to {savepath}/{filename}.nc')
 
         return cubenew
 

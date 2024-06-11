@@ -50,18 +50,20 @@ warnings.filterwarnings("ignore")
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (name can be
 # 'interp', 'invert' or 'raw' as for returned, path can be a single str or a list of str to merge cubes) in cube_name
 
-TICOI_process = 'load'
+TICOI_process = 'block_process'
 
 save = True # If True, save TICOI results to a netCDF file
 save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
-# If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
-cube_name = {'invert': 'nathan/Tests_MB/Areas/c_x01225_y03675_cube/TICOI/0-1-500_1-1accelnotnull-200/c_x01225_y03675_invert.nc'}
+# If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
+# cube_name = {'raw': 'test_data/Alps_Mont-Blanc_Argentiere_example.nc',
+#              'invert': 'examples/results/Argentiere_example_invert.nc',
+#              'interp': 'examples/results/Argentiere_example_interp.nc'}
 flag_file = 'test_data/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
-mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path to mask file (.shp file) to mask some of the data on cube
+mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
 path_save = 'examples/results/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
 
@@ -82,7 +84,7 @@ coef = {0: 500, 1: 200} # With flags (0: stable ground, 1: glaciers)
 # coef = 200 # Without flags
 solver = 'LSMR_ini' # Solver for the inversion
 
-# What results must be returned from TICOI processing
+# What results must be returned from TICOI processing (not used for TICOI_process='load')
 #   - 'raw' for loading raw data at pixels too
 #   - 'invert' for the results of the inversion
 #   - 'interp' for the results of the interpolation
@@ -185,6 +187,9 @@ if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.ke
 
 start.append(time.time())
 
+cube_interp = None
+cube_invert = None
+
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
 if TICOI_process == 'block_process':
@@ -204,7 +209,7 @@ elif TICOI_process == 'direct_process':
     result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(process)(cube, i, j, returned=returned, obs_filt=obs_filt,
                                                                  **inversion_kwargs) for i, j in xy_values_tqdm)
 
-elif TICOI_process == 'load':
+elif TICOI_process == 'load':    
     # Load inversion results
     if 'invert' in cube_name.keys():
         cube_invert = cube_data_class()
@@ -255,9 +260,8 @@ if TICOI_process != 'load':
 # =========================================================================%% #
 
 start.append(time.time())
-cube_interp = None
 if TICOI_process != 'load':
-    # Save TICO.I results to a netCDF file, thus obtaining a new data cube
+    # Save TICO.I results to a netCDF file, thus obtaining a new data cube    
     several = (type(returned) == list and len(returned) >= 2)
     j = 1 if 'raw' in returned else 0
     if 'invert' in returned:
@@ -272,15 +276,15 @@ if TICOI_process != 'load':
                                               result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
 
 # Plot the mean velocity as an example
-if save_mean_velocity and cube_interp is not None:
+if save_mean_velocity and cube_interp is not None:    
     mean_vv = np.sqrt(cube_interp.ds['vx'].mean(dim='mid_date') ** 2 + cube_interp.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(np.float32)
-    mean_vv = np.flip(mean_vv, axis=0)
+    mean_vv = np.flip(mean_vv.T, axis=0)
     
     driver = gdal.GetDriverByName('GTiff')
     srs = osr.SpatialReference()
     srs.SetWellKnownGeogCS('EPSG:32632')
     
-    dst_ds_temp = driver.Create(f'{path_save}mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
+    dst_ds_temp = driver.Create(f'{path_save}{result_fn}_mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
     if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.keys()):
         resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
         dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
@@ -293,7 +297,7 @@ if save_mean_velocity and cube_interp is not None:
     dst_ds_temp = None
     driver = None
         
-if save or save_mean_velocity:
+if save or (save_mean_velocity and cube_interp is not None):
     print(f'[Writing results] Results saved at {path_save}')
 
 stop.append(time.time())

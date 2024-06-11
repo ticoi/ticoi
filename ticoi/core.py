@@ -104,8 +104,7 @@ def inversion_iteration(data: np.ndarray, A: np.ndarray, dates_range: np.ndarray
     weighty = weightf(compute_residual(A, data[:, 1], result_dy), Weight[1])
 
     if A.shape[0] < A.shape[1]:
-        if verbose: print(
-            f'If the number of row is lower than the number of colomns, the results are not updated {A.shape}')
+        if verbose: print(f'[Inversion] If the number of row is lower than the number of colomns, the results are not updated {A.shape}')
         return result_dx, result_dy, weightx, weighty, None, None
 
     if regu == 'directionxy':
@@ -296,12 +295,11 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
 
                 i += 1
 
-                if verbose: print(i, 'dx', np.mean(abs(result_dx_i - result_dx)), 'dy',
-                                  np.mean(abs(result_dy_i - result_dy)))
+                if verbose: print('[Inversion] ', i, 'dx', np.mean(abs(result_dx_i - result_dx)), 'dy', np.mean(abs(result_dy_i - result_dy)))
 
             if verbose:
-                print('end loop', i, np.mean(abs(result_dy_i - result_dy)))
-                print('nb iteration', i)
+                print('[Inversion] End loop', i, np.mean(abs(result_dy_i - result_dy)))
+                print('[Inversion] Nb iteration', i)
 
             if i == 2:
                 weight_iy = weight_2y
@@ -378,7 +376,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
             dataf, A = None, None
 
     else:  # If there is no data over this pixel
-        if verbose: print(f'NO DATA TO INVERSE AT POINT {i, j}')
+        if verbose: print(f'[TICOI Processing] NO DATA TO INVERSE AT POINT {i, j}')
         return None, None, None
 
     # pandas dataframe with the saved results
@@ -802,7 +800,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
 
         loop = asyncio.get_event_loop()
         for n in range(len(blocks)):
-            print(f'Processing block {n+1}/{len(blocks)}')
+            print(f'[TICOI Processing] Processing block {n+1}/{len(blocks)}')
 
             # Load the first block and start the loop
             if n == 0:
@@ -812,7 +810,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
             block, flags_block, duration = await future
             preData_kwargs['flags'] = flags_block
             inversion_kwargs['flags'] = flags_block
-            print(f'Block {n+1} loaded in {duration:.2f} s')
+            print(f'[TICOI Processing] Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # Load the next block while processing the current block
