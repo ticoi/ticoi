@@ -960,7 +960,7 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         '''
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray):
+        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 900) -> (np.ndarray, np.ndarray):
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1075,9 +1075,9 @@ class cube_data_class:
             obs_filt.attrs['units'] = 'm/y'
 
         # Unify the observations to displacement to provide displacement values during inversion
-        if velo_or_disp == "velo":
-            self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
-            self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
+        # if velo_or_disp == "velo":
+        self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
+        self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         obs_filt.load()
         self.ds = self.ds.persist()  # Crash memory without loading
