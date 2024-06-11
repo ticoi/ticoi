@@ -629,6 +629,8 @@ class cube_data_class:
                         chunks = "auto" # Change the default value to auto
 
                     self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
+                    time_dim = 'mid_date'
+                    var_name = 'vx'
 
             if verbose:
                 print('[Data loading] File open')

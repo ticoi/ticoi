@@ -49,8 +49,7 @@ warnings.filterwarnings("ignore")
 def inversion_iteration(data: np.ndarray, A: np.ndarray, dates_range: np.ndarray, solver: str, coef: int,
                         Weight: np.ndarray, result_dx: np.ndarray, result_dy: np.ndarray, mu: np.ndarray,
                         regu: int | str = 1, accel: np.ndarray | None = None, linear_operator=Union["class_linear_operator", None],
-                        result_quality: list | str | None = None, ini: np.ndarray | None = None, verbose: bool = False) -> (
-                        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None):
+                        result_quality: list | str | None = None, ini: np.ndarray | None = None, verbose: bool = False):
     
     '''
     Compute an iteration of the inversion : update the weights using the weights from the previous iteration and the studentized residual, update the results in consequence
@@ -147,7 +146,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                    regu: int | str = 1, coef: int = 100, weight: bool = False, iteration: bool = True, threshold_it: float = 0.1, 
                    unit: int = 365, conf: bool = False,  mean: list | None = None, detect_temporal_decorrelation: bool = True, 
                    linear_operator: bool = False, result_quality: list | str | None = None, nb_max_iteration: int = 10,
-                   visual: bool = True, verbose: bool = False) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
+                   visual: bool = True, verbose: bool = False):
     
     '''
     Computes A in AX = Y and does the inversion using a given solver.
