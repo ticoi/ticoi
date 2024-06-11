@@ -78,7 +78,7 @@ warnings.filterwarnings("ignore")
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
 # than every other loading methods.
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal, 
-# there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it 
+# there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it 
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to load is too high (depending on your available memory). If you want to load big amount of data, you should use
@@ -86,14 +86,63 @@ warnings.filterwarnings("ignore")
 
 load_pixel_process = 'block_process'
 
-save = True # If True, save TICOI results to a netCDF file
-save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
-
 ## --------- ------------ Data availability parameters --------------------- ##
 index = ['monthly_graph',
          'all_data', 'median_baseline', 'max_leap_frog',
          'mini_month', 'mini_3month', 'mean_month', 'median_month',
          'mini_season', 'min_all_season']
+
+## ------------------------------ Data selection --------------------------- ##
+# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc' # Path to flags file
+mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/' # Path where to store the results
+result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
+
+proj = 'EPSG:32632'  # EPSG system of the given coordinates
+
+# Divide the data in several areas where different methods should be used
+assign_flag = True
+flags = None
+if assign_flag:
+    flags = xr.open_dataset(flag_file)
+    flags.load()
+
+# Regularization method.s to be used (for each flag if flags is not None)
+regu = {0: 1, 1: '1accelnotnull'} # With flags (0: stable ground, 1: glaciers)
+# regu = '1accelnotnull' # Without flags
+# Regularization coefficient.s to be used (for each flag if flags is not None)
+coef = {0: 500, 1: 200} # With flags (0: stable ground, 1: glaciers)
+# coef = 200 # Without flags
+solver = 'LSMR_ini' # Solver for the inversion
+
+## ---------------------------- Loading parameters ------------------------- ##
+load_kwargs = {'chunks': {}, 
+               'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
+               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
+               'pick_sensor': None, # Select sensors (None to select all)
+               'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
+               'proj': proj, # EPSG system of the given coordinates
+               'mask_file': mask_file, # Path to mask file (.shp file) to mask some of the data on cube
+               'verbose': False} # Print information throughout the loading process 
+                
+## ---------------- Parameters for the pixel loading part ------------------ ##
+load_pixel_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
+                     'solver': solver, # Solver for the inversion
+                     'proj': proj, # EPSG system of the given coordinates
+                     'interpolation_load_pixel': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
+                     'visual': False, # Plot results along the way
+                     'verbose':False} # Print information throughout TICOI processing
+                      
+## ----------------------- Parallelization parameters ---------------------- ##
+nb_cpu = 12 # Number of CPU to be used for parallelization
+block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
+
+if not os.path.exists(path_save):
+    os.mkdir(path_save)
 
 # Adjust index list looking at the dependencies of each index
 if ('mini_season' in index or 'min_all_season' in index) and 'availability_maps' not in index:
@@ -106,72 +155,6 @@ for ind in index:
             index.append('monthly')
         break
 
-## ------------------------------ Data selection --------------------------- ##
-# List of the paths where the data cubes are stored
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc',]
-               # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
-flag_file = None  # Path where the flag file is stored
-mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored
-path_save = 'nathan/Tests_MB/' # Path where to store the results
-result_fn = 'test'# Name of the netCDF file to be created
-
-proj = 'EPSG:32632'  # EPSG system of the given coordinates
-
-assign_flag = False
-flags = None
-if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
-
-regu = '1accelnotnull'
-coef = 100
-solver = 'LSMR_ini'
-
-## ---------------------------- Loading parameters ------------------------- ##
-load_kwargs = {'chunks': {}, 
-               'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-               'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
-               'pick_sensor': None, # Select sensors (None to select all)
-               'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
-               'proj': proj, # EPSG system of the given coordinates
-               'verbose': False # Print information throughout the loading process 
-               }
-
-## ----------------------- Data preparation parameters --------------------- ##
-preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
-                  's_win': 3, # Size of the spatial window
-                  't_win': 90, # Time window size for 'ewma' smoothing
-                  'sigma': 3, # Standard deviation for 'gaussian' filter
-                  'order': 3, # Order of the smoothing function
-                  'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
-                  'flags': flags, # Divide the data in several areas where different methods should be used
-                  'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
-                  'solver': solver, # Solver for the inversion
-                  'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-                  'verbose': True # Print information throughout the filtering process 
-                  }
-
-## ---------------- Parameters for the pixel loading part ------------------ ##
-load_pixel_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
-                     'solver': solver, # Solver for the inversion
-                     'proj': proj, # EPSG system of the given coordinates
-                     'interpolation_load_pixel': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
-                     'visual': False, # Plot results along the way
-                     'verbose':False # Print information throughout TICOI processing
-                     }
-
-## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 12 # Number of CPU to be used for parallelization
-block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
-
-if not os.path.exists(path_save):
-    os.mkdir(path_save)
-    
-
 # %%========================================================================= #
 #                                 DATA LOADING                                #
 # =========================================================================%% #
@@ -180,30 +163,11 @@ start = [time.time()]
 
 # Load the first cube
 cube = cube_data_class()
-cube.load(cube_names[0], **load_kwargs)
-
-# Several cubes have to be merged together
-filenames = [cube.filename]
-if len(cube_names) > 1:
-    for n in range(1, len(cube_names)):
-        cube2 = cube_data_class()
-        subset = load_kwargs['subset']
-        res = cube.ds['x'].values[1] - cube.ds['x'].values[0] # Resolution of the main data
-        load_kwargs.update({'subset': [subset[0]-res, subset[1]+res, subset[2]-res, subset[3]+res]})
-        cube2.load(cube_names[n], **load_kwargs)
-        filenames.append(cube2.filename)
-        # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
-        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
-        cube.merge_cube(cube2) # Merge the new cube to the main one
-    del cube2
-
-# Mask some of the data
-if mask_file is not None:
-    cube.mask_cube(mask_file)
+cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]
 print(f'[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[Data loading] Data loading took {round(stop[0] - start[0], 2)} s')
+print(f'[Data loading] Data loading took {round(stop[-1] - start[-1], 2)} s')
 
 
 # %%========================================================================= #
@@ -214,8 +178,7 @@ start.append(time.time())
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 if load_pixel_process == 'block_process': 
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', preData_kwargs=preData_kwargs, 
-                                   inversion_kwargs=load_pixel_kwargs)
+    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', inversion_kwargs=load_pixel_kwargs)
 
 # Direct loading of the whole cube
 elif load_pixel_process == 'direct_process':    
@@ -257,7 +220,7 @@ else:
     print('[Data loading] index list is empty, no indices or availability map will be computed...')
 
 stop.append(time.time())
-print(f'[Data loading] Pixel loading and filtering took {round(stop[1] - start[1], 1)} s')
+print(f'[Data loading] Pixel loading and filtering took {round(stop[-1] - start[-1], 1)} s')
 
 
 # %%========================================================================= #
@@ -321,7 +284,7 @@ driver = gdal.GetDriverByName('GTiff')
 srs = osr.SpatialReference()
 srs.SetWellKnownGeogCS(proj)
 
-tic = time.time()
+start.append(time.time())
 
 is_raw_data_indices = False
 for ind in index:
@@ -346,8 +309,10 @@ for ind in index:
         is_raw_data_indices = True
 
 if is_raw_data_indices:
-    tac = time.time()
-    print(f'[Raw indices] Computing indices based on raw data only took {round(tac-tic, 1)} s')
+    stop.append(time.time())
+    print(f'[Raw indices] Computing indices based on raw data only took {round(stop[-1] - start[-1], 1)} s')
+else:
+    stop.append(None)
 
 driver = None
 
@@ -363,7 +328,7 @@ driver = None
 # Each data has a value of one which is ponderated by the monthly coverage (how many days the data has in the considered month)
 # divided by the temporal baseline of the data
 if 'monthly' in index:
-    tic = time.time()
+    start.append(time.time())
     
     # Apply a monthly ponderation to each of the data and sum it up for each month 
     def monthly_ponderation_pixel(dt, month):
@@ -396,8 +361,8 @@ if 'monthly' in index:
     availability = availability.reindex(pd.date_range(start=availability.index[0], end=availability.index[-1], freq='MS'), fill_value=0)
     availability.index = [f'{availability.index[i].year}-{"0" if availability.index[i].month < 10 else ""}{availability.index[i].month}' for i in range(len(availability.index))]
 
-    tac = time.time()
-    print(f'[Monthly availability] Computing monthly data availability with the ponderation approach took {round(tac-tic, 1)} s')
+    stop.append(time.time())
+    print(f'[Monthly availability] Computing monthly data availability with the ponderation approach took {round(stop[-1] - start[-1], 1)} s')
 
     # Plot a bar plot of the average monthly data availability of the data on the loaded cube (whole cube or subset)
     if 'monthly_graph' in index:
@@ -408,9 +373,9 @@ if 'monthly' in index:
         ax.set_ylabel('Amount of available velocity data\nfor one pixel', fontsize=16)
         if load_kwargs['subset'] is not None:
             fig.suptitle(f'Monthly availability of data for subset {load_kwargs["subset"]}\n' + 
-                         f'of cube {cube_names[0].split("/")[-1][:-18]}', fontsize=18)
+                         f'of cube {cube_name[0].split("/")[-1][:-18]}', fontsize=18)
         else:
-            fig.suptitle(f'Monthly availability of data for cube {cube_names[0].split("/")[-1][:-18]}', fontsize=18)
+            fig.suptitle(f'Monthly availability of data for cube {cube_name[0].split("/")[-1][:-18]}', fontsize=18)
         plt.subplots_adjust(bottom=0.2)
         fig.savefig(f'{path_save}monthly_availability.png')
         
@@ -433,7 +398,7 @@ if 'monthly' in index:
 #    - autumn : september, october and november
 
 if 'availability_maps' in index:
-    tic = time.time()
+    start.append(time.time())
     
     # Initialisation
     seasons = np.array([1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 1])
@@ -467,8 +432,8 @@ if 'availability_maps' in index:
     driver = None
     tiff = None
     
-    tac = time.time()
-    print(f'[Availability maps] Generating the availability maps took {round(tac-tic, 1)} s')
+    stop.append(time.time())
+    print(f'[Availability maps] Generating the availability maps took {round(stop[-1] - start[-1], 1)} s')
     print(f'[Availability maps] Availability map was saved to {path_save}seasonal_data_availability.tiff')
  
     
@@ -544,7 +509,7 @@ srs = osr.SpatialReference()
 srs.SetWellKnownGeogCS(proj)
 
 # Monthly indices ('mini_nmonth', 'mean_nmonth' or 'median_nmonth' where n is a number or empty)
-tic = time.time()
+start.append(time.time())
 
 methods = {'mini': mini_nmonth,
            'mean': mean_nmonth,
@@ -564,13 +529,14 @@ for ind in index:
         is_monthly_indices = True
 
 if is_monthly_indices:
-    tac = time.time()
-    print(f'[Indices] Computing indices based on monthly data availability took {round(tac-tic, 1)} s')
-
+    stop.append(time.time())
+    print(f'[Indices] Computing indices based on monthly data availability took {round(stop[-1] - start[-1], 1)} s')
+else:
+    stop.append(None)
     
 # Seasonal indices
 if 'mini_season' in index or 'min_all_season' in index:
-    tic = time.time()
+    start.append(time.time())
     
     maps = (winter, spring, summer, autumn)   
     if 'mini_season' in index:
@@ -582,10 +548,12 @@ if 'mini_season' in index or 'min_all_season' in index:
         generate_tiff_index_map_from_availability_map(min_all_season, maps, coord_data, driver, srs,
                                                       f'{path_save}index_min_all_season.tiff')
         
-    tac = time.time()
-    print(f'[Indices] Computing indices based on seasonal data availability maps took {round(tac-tic, 1)} s')
+    stop.append(time.time())
+    print(f'[Indices] Computing indices based on seasonal data availability maps took {round(stop[-1] - start[-1], 1)} s')
+else:
+    stop.append(time.time())
 
+# Needed to effectively save the .tiff files
 driver = None
 
-stop.append(time.time())
-print(f'[Overall] Overall processing took {round(stop[2] - start[0], 0)} s')
+print(f'[Overall] Overall processing took {round(stop[-1] - start[0], 0)} s')

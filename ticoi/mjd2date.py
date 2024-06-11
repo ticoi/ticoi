@@ -1,8 +1,9 @@
+#From Jeremie Mouginot
+
 import jdcal
 import numpy as np
-
-
 # make jdcal external library data-type friendly (-datatime- and -integer- instead tuples)
+
 def mjd2date(date):
     '''
     Convert the dates from Modified Julian Date to Gregorian Date
@@ -22,7 +23,7 @@ def date2mjd(date):
 
     try:
         JD = jdcal.gcal2jd(date.year, date.month, date.day)
-    except:  # ajout Laurane, les cas ou les dates sont en format datetime64
+    except:
         date = date.astype('M8[D]').astype('O')
         JD = jdcal.gcal2jd(date.year, date.month, date.day)
     return int(JD[1])

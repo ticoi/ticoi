@@ -1,23 +1,46 @@
+"""
+Auxillary functions to process the temporal interpolation.
+
+Author : Laurane Charrier, Lei Guo, Nathan Lioret
+Reference:
+    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
+    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
+    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+"""
+
 import numpy as np
-import pandas as pd
 from scipy import interpolate
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def prepare_interpolation_date(cube:"ticoi.cube_data_classxr.cube_data_class")-> (np.datetime64,np.datetime64):
+    """
+    Define the first and last date required for the interpolation, as the first date and last in the observations.
+    The purpose is to have homogenized results
+    :param cube: dataset
+    :return: first and last date required for the interpolation
+    """
+    # Prepare interpolation dates
+    cube_date1 = cube.date1_().tolist()
+    cube_date1.remove(np.min(cube_date1))
+    first_date_interpol = np.min(cube_date1)
+    last_date_interpol = np.max(cube.date2_())
+    return first_date_interpol,last_date_interpol
 
 def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | str | None = None,
                            result_dz: pd.DataFrame | None = None) -> pd.DataFrame:
-    
+
     """
     Build the Cumulative Displacements (CD) time series with a Common Reference (CR) from a Leap Frog time series
 
     :param result: [np array] --- Leap frog displacement for x-component and y-component
     :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param result_dz: [pd dataframe | None] [default is None] --- Vertical displacement component
-    
+
     :return data: [pd dataframe] --- Cumulative displacement time series in x and y component, pandas dataframe
     """
-    
+
     if result.empty:
         return pd.DataFrame(
             {'Ref_date': [np.nan], 'Second_date': [np.nan],
@@ -46,19 +69,19 @@ def reconstruct_common_ref(result: pd.DataFrame, result_quality: list | str | No
 def set_function_for_interpolation(option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None) -> (
             interpolate.interp1d | interpolate.UnivariateSpline, interpolate.interp1d | interpolate.UnivariateSpline,
             interpolate.interp1d | interpolate.UnivariateSpline, interpolate.interp1d | interpolate.UnivariateSpline):
-    
+
     """
     Get the function to interpolate the each of the time series.
-    
+
     :param option_interpol: [str] --- Type of interpolation, it can be 'spline', 'spline_smooth' or 'nearest'
     :param x: [int] --- Integer corresponding to the time at which a certain displacement has been estimated
     :param dataf: [pd dataframe] --- Data to interpolate
     :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    
+
     :return fdx, fdy: [functions | None] --- The functions which need to be used to interpolate dx and dy
     :return fdx_xcount, fdx_ycount: [functions | None] --- The functions which need to be used to interpolate the contributed values in X
     """
-    
+
     # Compute the functions used to interpolate
     # Define the interpolation functions based on the interpolation option
     interpolation_functions = {
@@ -110,10 +133,10 @@ def full_with_nan(dataf_lp:pd.DataFrame,first_date:pd.Series,second_date:pd.Seri
 
 def visualisation_interpolation(dataf_lp: pd.DataFrame, data: pd.DataFrame, path_save: str, show_temp: bool = True, unit='m/y',
                                 vmax=None, interval_output=30, figsize=(12, 6)):
-    
+
     """
     Plot some figures to analyse the results from the interpolation.
-    
+
     :param dataf_lp: [pd dataframe] --- Results from the inversion
     :param data: [pd dataframe] --- Original data
     :param path_save: [str] --- Where to save the figures

@@ -71,8 +71,6 @@ class Test_inversion:
 ]
     )
 
-
-
     def test_inversion_one_component(self,solver, expected, ini):
         actual = inversion_one_component(self.A, self.dates_range, 1, self.data, solver=solver, Weight=1,
                                          mu=self.mu1accelnotnull, ini=ini)[0]

@@ -1,5 +1,6 @@
 '''
-Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method for one pixel.
+Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method
+for one pixel.
 Author: Laurane Charrier
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
@@ -12,7 +13,8 @@ import time
 import os
 import numpy as np
 
-from ticoi.core import inversion_core, visualisation, interpolation_core
+from ticoi.core import inversion_core, visualization_core, interpolation_core
+from ticoi.interpolation_functions import prepare_interpolation_date
 from ticoi.cube_data_classxr import cube_data_class
 
 
@@ -20,103 +22,112 @@ from ticoi.cube_data_classxr import cube_data_class
 #                                    PARAMETERS                               #
 # =========================================================================%% #
 
-## ------------------------------ Data selection --------------------------- ##
-# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
-cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_subset.nc'
-
-proj = 'EPSG:32647'  # EPSG system of the given coordinates
-
-i, j = 396343, 4259420# Point (pixel) where to carry on the computation
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/{i}-{j}-test-vvc/' # Path where to store the results
+####  Selection of data
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
+i, j = -138.18069, 60.29076
+proj = 'EPSG:4326'  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
-regu = '1accelnotnull' # Regularization method to be used
-coef = 200 # Regularization coefficient to be used
-solver = 'LSMR_ini' # Solver for the inversion
+#For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
+regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
+delete_outlier = 'vvc_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+apriori_weight = False #Use the error as apriori
+interval_output = 30 #temporal sampling of the output results
 unit = 365 # 1 for m/d, 365 for m/y
-result_quality = 'X_contribution' # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+result_quality = ['X_contribution'] # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False # Print information throughout TICOI processing
-visual = True # Plot informations along the way
-save = True # Save the results or not
+save = True #Save the results and figures
+visual = True #Plot some figures
 # Visualisation options
-option_visual = ['original_velocity_xy', 'original_magnitude',
-                 'X_magnitude_zoom', 'X_magnitude', 'X_zoom', 'X',
-                 'vv_quality', 'vxvy_quality',
-                 'Residu_magnitude', 'Residu',
-                 'X_z', 'Y_contribution',
-                 'direction']
-vmax = [False, False] # Vertical limits for the plots
+option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlayed','invertvv_overlayed','residuals','xcount_xy','xcount_vv','invert_weight'] #see README_visualization_pixel_output.md
+vmax = [False,False]  # vmin and vmax of the legend
 
 ## ---------------------------- Loading parameters ------------------------- ##
-load_kwargs = {'chunks': {}, 
+load_kwargs = {'chunks': {},
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'buffer': [i, j, 100], # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-               'pick_date': None, # Select dates ([min, max] or None to select all)
+               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
-               'verbose': verbose} # Print information throughout the loading process 
+               'verbose': False # Print information throughout the loading process
+               }
 
 ## ----------------------- Data preparation parameters --------------------- ##
+
+
 preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
                   's_win': 3, # Size of the spatial window
                   't_win': 90, # Time window size for 'ewma' smoothing
                   'sigma': 3, # Standard deviation for 'gaussian' filter
                   'order': 3, # Order of the smoothing function
-                  'unit': unit, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
-                  'regu': regu, # Regularization method to be used
-                  'solver': solver, # Solver for the inversion
+                  'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
+                  'delete_outliers': delete_outlier, # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+                  'flags': None, # Divide the data in several areas where different methods should be used
+                  'regu': regu, # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+                  'solver': 'LSMR_ini', # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'disp', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-                  'verbose': verbose} # Print information throughout the filtering process 
-                  
+                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+                  'verbose': True # Print information throughout the filtering process
+                  }
+
 ## ---------------- Parameters for the pixel loading part ------------------ ##
 load_pixel_kwargs = {'regu': regu, # Regularization method to be used
                      'coef': coef,
-                     'solver': solver, # Solver for the inversion
+                     'solver': 'LMSR_ini', # Solver for the inversion
                      'proj': proj, # EPSG system of the given coordinates
                      'interp': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
                      'visual': visual, # Plot results along the way
                      'verbose':verbose} # Print information throughout TICOI processing
-                     
-## --------------------------- Inversion parameters ------------------------ ##
-inversion_kwargs = {'regu': regu, # Regularization method to be used
-                    'coef': coef, # Regularization coefficient to be used
-                    'solver': solver, # Solver for the inversion
-                    'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
-                    'unit': unit, # 365 if the unit is m/y, 1 if the unit is m/d
 
-                    'iteration': True, # Allow the inversion process to make several iterations
-                    'nb_max_iteration': 10, # Maximum number of iteration during the inversion process
-                    'threshold_it': 0.1, # Threshold to test the stability of the results between each iteration, used to stop the process
-                    'weight': True, # If True, use apriori weights
-                    'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
-                    'linear_operator': None, # Perform the inversion using this specific linear operator
-                    'result_quality': result_quality, # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-                    
-                    'visual': visual, # Plot results along the way
-                    'verbose': verbose} # Print information throughout TICOI processing
-                    
+## --------------------------- Inversion parameters ------------------------ ##
+inversion_kwargs = {'regu': regu,  # Regularization method to be used
+                    'coef': coef,  # Regularization coefficient to be used
+                    'solver': 'LSMR_ini',  # Solver for the inversion
+                    'conf': False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
+                    'unit': unit,  # 365 if the unit is m/y, 1 if the unit is m/d
+
+                    'iteration': True,  # Allow the inversion process to make several iterations
+                    'nb_max_iteration': 10,  # Maximum number of iteration during the inversion process
+                    'threshold_it': 0.1,
+                    # Threshold to test the stability of the results between each iteration, used to stop the process
+                    'apriori_weight': True,  # If True, use apriori weights
+                    'detect_temporal_decorrelation': True,
+                    # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
+                    'linear_operator': None,  # Perform the inversion using this specific linear operator
+                    'result_quality': result_quality,
+                    # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+
+                    'visual': visual,  # Plot results along the way
+                    'verbose': verbose}  # Print information throughout TICOI processing
+
 ## ----------------------- Interpolation parameters ------------------------ ##
-interpolation_kwargs = {'interval_output': 30, # Temporal baseline of the time series resulting from TICOI (after interpolation)
-                        'redundancy': 15, # Redundancy in the interpolated time series in number of days, no redundancy if None
-                        'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')                
-                        'result_quality': result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-                        'unit': unit, # 365 if the unit is m/y, 1 if the unit is m/d
-                        
-                        'visual': visual, # Plot results along the way
-                        'vmax': vmax, # vmin and vmax of the legend
-                        'verbose': verbose} # Print information throughout TICOI processing
+interpolation_kwargs = {'interval_output': interval_output,
+                        # Temporal baseline of the time series resulting from TICOI (after interpolation)
+                        'redundancy': 5,
+                        # Redundancy in the interpolated time series in number of days, no redundancy if None
+                        'option_interpol': 'spline',
+                        # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+                        'result_quality': result_quality,
+                        # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+                        'unit': unit,  # 365 if the unit is m/y, 1 if the unit is m/d
+
+
+                        'visual': visual,  # Plot results along the way
+                        'vmax': vmax,  # vmin and vmax of the legend
+                        'verbose': verbose}  # Print information throughout TICOI processing
+
+#Update of dictionary with common parameteres
+for common_parameter in ['regu','solver','unit']: inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
 # Create a subfolder if it doesnt exist
 if not os.path.exists(path_save):
     os.mkdir(path_save)
-
-if type(cube_name) == str:
-    cube_name = [cube_name]
 
 # %% ======================================================================== #
 #                                DATA LOADING                                 #
@@ -126,15 +137,7 @@ start = [time.time()]
 
 # Load the main cube
 cube = cube_data_class()
-cube.load(cube_name[0], **load_kwargs)
-
-# Several cubes have to be merged together
-if len(cube_name) > 1:
-    for n in range(1, len(cube_name)):
-        cube2 = cube_data_class()
-        cube2.load(cube_name[n], **load_kwargs)
-        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
-        cube.merge_cube(cube2)
+cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]
 print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
@@ -147,10 +150,9 @@ obs_filt = cube.filter_cube(**preData_kwargs)
 # Load pixel data
 data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
-cube2_date1 = cube.date1_().tolist()
-cube2_date1.remove(np.min(cube2_date1))
-start_date_interpol = np.min(cube2_date1)
-last_date_interpol = np.max(cube.date2_())
+# Prepare interpolation dates
+first_date_interpol,last_date_interpol = prepare_interpolation_date(cube)
+interpolation_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 stop.append(time.time())
 print(f'[Data loading] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
@@ -167,10 +169,6 @@ A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean
 
 stop.append(time.time())
 print(f'[Inversion] Inversion took {round((stop[2] - start[2]), 4)} s')
-
-# Plot the results of the inversion
-if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=inversion_kwargs['unit'], 
-                         show=True, figsize=(12, 6))
 if save: result.to_csv(f'{path_save}/ILF_result.csv')
 
 
@@ -180,19 +178,19 @@ if save: result.to_csv(f'{path_save}/ILF_result.csv')
 
 start.append(time.time())
 
-if interpolation_kwargs['interval_output'] == False: 
+if interpolation_kwargs['interval_output'] == False:
     interpolation_kwargs['interval_output'] = 1
 start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))
 
 # Proceed to interpolation
-dataf_lp = interpolation_core(result, path_save=path_save, data=dataf, first_date_interpol=start_date_interpol, 
-                              last_date_interpol=last_date_interpol, **interpolation_kwargs)
+dataf_lp = interpolation_core(result, path_save=path_save, data=dataf, **interpolation_kwargs)
 
 stop.append(time.time())
 print(f'[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s')
 
-if save: 
+if save:
     dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
+if visual:visualization_core([dataf, result], option_visual=option_visual, save=True, show=True, path_save=path_save, A=A, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange'])
 
 print(f'[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s')
