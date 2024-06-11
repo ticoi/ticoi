@@ -21,8 +21,8 @@ from ticoi.cube_data_classxr import cube_data_class
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
-cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
-path_save = 'examples/results/pixel/' # Path where to store the results
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/pixel/' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation
@@ -125,7 +125,7 @@ cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]
-print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[Data loading] Loading the data cube.s took {round((stop[-1] - start[-1]), 4)} s')
 print(f'[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
 
 start.append(time.time())
@@ -141,7 +141,7 @@ start_date_interpol = np.min(cube2_date1)
 last_date_interpol = np.max(cube.date2_())
 
 stop.append(time.time())
-print(f'[Data loading] Loading the pixel took {round((stop[1] - start[1]), 4)} s')
+print(f'[Data loading] Loading the pixel took {round((stop[-1] - start[-1]), 4)} s')
 
 
 # %% ======================================================================== #
@@ -154,7 +154,7 @@ start.append(time.time())
 A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, **inversion_kwargs)
 
 stop.append(time.time())
-print(f'[Inversion] Inversion took {round((stop[2] - start[2]), 4)} s')
+print(f'[Inversion] Inversion took {round((stop[-1] - start[-1]), 4)} s')
 
 # Plot the results of the inversion
 if visual: visualisation(dataf, result, option_visual, path_save, A=A, dataf=dataf, unit=inversion_kwargs['unit'], 
@@ -178,9 +178,9 @@ dataf_lp = interpolation_core(result, path_save=path_save, data=dataf, first_dat
                               last_date_interpol=last_date_interpol, **interpolation_kwargs)
 
 stop.append(time.time())
-print(f'[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s')
+print(f'[Interpolation] Interpolation took {round((stop[-1] - start[-1]), 4)} s')
 
 if save: 
     dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
 
-print(f'[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s')
+print(f'[Overall] Overall processing took {round((stop[-1] - start[0]), 4)} s')

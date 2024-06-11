@@ -4,8 +4,9 @@ It can be divided in three parts:
     - Data loading : Load one or several data cube.s, eventually considering a given subset or buffer to limit its size. Additionnal data
     cubes are aligned and merged to the main cube.
     - TICOI : Compute TICOI on the selection of data using the given method (split in blocks or direct processing, think of reading the comments
-    about those methods) to get a list of the results.
-    - Save the results : Format the data to a new data cube, which can be saved to a netCDF file. The mean velocity can also be saved as an example.
+    about those methods) to get a list of the results (after inversion and/or after interpolation).
+    - Save the results : Format the data to a new data cube, which can be saved to a netCDF file. The mean velocity can also be computed as an example.
+Please follow the commentaries to understand the role of each parameters and what are the available options at your disposal.
 
 Author : Laurane Charrier, Lei Guo, Nathan Lioret
 Reference:
@@ -48,7 +49,7 @@ warnings.filterwarnings("ignore")
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (name can be
-# 'interp', 'invert' or 'raw' as for returned, path can be a single str or a list of str to merge cubes) in cube_name
+# 'interp', 'invert' or 'raw' as for returned, path can be a single str or a list of str to merge cubes) in cube_name, or a single str to a TICOI cube
 
 TICOI_process = 'block_process'
 
@@ -60,14 +61,15 @@ compute_result_load = False
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
-cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
-# If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
-# cube_name = {'raw': 'test_data/Alps_Mont-Blanc_Argentiere_example.nc',
-#              'invert': 'examples/results/Argentiere_example_invert.nc',
-#              'interp': 'examples/results/Argentiere_example_interp.nc'}
-flag_file = 'test_data/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+# If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
+# If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
+# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
+#              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_invert.nc',
+#              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_interp.nc'}
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc' # Path to flags file
 mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
-path_save = 'examples/results/' # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
@@ -161,26 +163,25 @@ if not os.path.exists(path_save):
 
 start, stop = [], []
 
-result = None
-if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.keys()):
+if TICOI_process != 'load' or (TICOI_process == 'load' and type(cube_name) == dict and 'raw' in cube_name.keys()):
     start.append(time.time())
     
     # Load the cube.s
     cube = cube_data_class()
     
-    if TICOI_process == 'load': 
+    if TICOI_process == 'load' and type(cube_name) == dict:
         cube.load(cube_name['raw'], **load_kwargs)
-    else:
+    elif TICOI_process != 'load':
         cube.load(cube_name, **load_kwargs)
     
     # Load raw data at pixels if required
     if (TICOI_process == 'load' and 'raw' in cube_name.keys()) and compute_result_load:
         print('[Data loading] Loading raw data...')
-        result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
-        result = [pd.DataFrame(data={'date1': raw[0][0][:, 0], 'date2': raw[0][0][:, 1],
-                                     'vx': raw[0][1][:, 0], 'vy': raw[0][1][:, 1],
-                                     'errorx': raw[0][1][:, 2], 'errory': raw[0][1][:, 3],
-                                     'temporal_baseline': raw[0][1][:, 4]}) for raw in result]
+        data_raw = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
+        data_raw = [pd.DataFrame(data={'date1': raw[0][0][:, 0], 'date2': raw[0][0][:, 1],
+                                       'vx': raw[0][1][:, 0], 'vy': raw[0][1][:, 1],
+                                       'errorx': raw[0][1][:, 2], 'errory': raw[0][1][:, 3],
+                                       'temporal_baseline': raw[0][1][:, 4]}) for raw in data_raw]
     
     # Prepare interpolation dates
     cube_date1 = cube.date1_().tolist()
@@ -224,22 +225,22 @@ elif TICOI_process == 'direct_process':
 
 elif TICOI_process == 'load':    
     # Load inversion results
-    if 'invert' in cube_name.keys():
+    if type(cube_name) == dict and 'invert' in cube_name.keys():
         cube_invert = cube_data_class()
         cube_invert.load(cube_name['invert'], **load_kwargs)
         
     # Load interpolation results
-    if 'interp' in cube_name.keys():
+    if (type(cube_name) == dict and 'interp' in cube_name.keys()) or type(cube_name) == str:
         cube_interp = cube_data_class()
-        cube_interp.load(cube_name['interp'], **load_kwargs)
+        cube_interp.load(cube_name['interp'] if type(cube_name) == dict else cube_name, **load_kwargs)
         
         if compute_result_load:
             print('[TICOI processing] Loading TICOI data...')
-            data_interp = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
-            if result is None:
-                result = data_interp
-            else:
-                result = [[result[i], data_interp[i]] for i in range(len(result))]
+            result = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
+            result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
+                                         'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
+                                         'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
+                                         'temporal_baseline': r[0][1][:, 4]}) for r in result]
             
 stop.append(time.time())
 print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s')
@@ -306,7 +307,7 @@ if save_mean_velocity and cube_interp is not None:
     srs.SetWellKnownGeogCS('EPSG:32632')
     
     dst_ds_temp = driver.Create(f'{path_save}{result_fn}_mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
-    if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.keys()):
+    if TICOI_process != 'load' or (TICOI_process == 'load' and type(cube_name) == dict and 'raw' in cube_name.keys()):
         resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
         dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
     else:
