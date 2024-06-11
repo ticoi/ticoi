@@ -30,6 +30,7 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from osgeo import gdal, osr
 
+from typing import List, Optional, Union
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -806,7 +807,7 @@ class cube_data_class:
     def load_pixel(self, i: int | float, j: int | float, unit: int = 365, regu: int | str = 1, coef: int = 100,
                    flags: xr.Dataset | None = None, solver: str = 'LSMR', interp: str = 'nearest',
                    proj: str = 'EPSG:4326', rolling_mean: xr.Dataset | None = None,
-                   visual: bool = False, verbose = False):
+                   visual: bool = False, output_format='np')-> (Optional[list],Optional[list],Optional[np.array],Optional[np.array],Optional[np.array]):
 
         '''
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
@@ -821,7 +822,7 @@ class cube_data_class:
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
         :param visual: [bool] [default is False] --- Return additional informations (sensor and source) for future plots
-        :param verbose: [bool] [default is False] --- Plot informations throughout the process
+        :param output_format [str] [default is np] ---
 
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
@@ -878,9 +879,13 @@ class cube_data_class:
 
         # data_values is composed of vx, vy, errorx, errory, temporal baseline
         if visual:
-            data_str = data[['sensor', 'source']].to_array().values.T
-            data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
-            data = [data_dates, data_values, data_str]
+            if output_format == 'nc':
+                data_str = data[['sensor', 'source']].to_array().values.T
+                data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
+                data = [data_dates, data_values, data_str]
+            elif output_format == 'df':
+                data = data.to_pandas()
+            else: raise ValueError ('Please enter nc if want to have as output a numpy array, and df if you want a pandas dataframe')
         else:
             data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
             data = [data_dates, data_values]
