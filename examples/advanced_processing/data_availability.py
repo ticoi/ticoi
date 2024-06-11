@@ -108,8 +108,9 @@ for ind in index:
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc',]
-               # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
+# cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03675_all_filt-multi.nc',]
+#                # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
+cube_names = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
 flag_file = None  # Path where the flag file is stored
 mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored
 path_save = 'nathan/Tests_MB/' # Path where to store the results
@@ -138,22 +139,6 @@ load_kwargs = {'chunks': {},
                'proj': proj, # EPSG system of the given coordinates
                'verbose': False # Print information throughout the loading process 
                }
-
-## ----------------------- Data preparation parameters --------------------- ##
-preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
-                  's_win': 3, # Size of the spatial window
-                  't_win': 90, # Time window size for 'ewma' smoothing
-                  'sigma': 3, # Standard deviation for 'gaussian' filter
-                  'order': 3, # Order of the smoothing function
-                  'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
-                  'flags': flags, # Divide the data in several areas where different methods should be used
-                  'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
-                  'solver': solver, # Solver for the inversion
-                  'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-                  'verbose': True # Print information throughout the filtering process 
-                  }
 
 ## ---------------- Parameters for the pixel loading part ------------------ ##
 load_pixel_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
@@ -214,8 +199,7 @@ start.append(time.time())
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 if load_pixel_process == 'block_process': 
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', preData_kwargs=preData_kwargs, 
-                                   inversion_kwargs=load_pixel_kwargs)
+    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned='raw', inversion_kwargs=load_pixel_kwargs)
 
 # Direct loading of the whole cube
 elif load_pixel_process == 'direct_process':    

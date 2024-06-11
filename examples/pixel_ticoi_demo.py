@@ -35,7 +35,7 @@ unit = 365 # 1 for m/d, 365 for m/y
 result_quality = 'X_contribution' # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
 
 ## ----------------------- Visualization parameters ------------------------ ##
-verbose = False # Print information throughout TICOI processing
+verbose = True # Print information throughout TICOI processing
 visual = True # Plot informations along the way
 save = True # Save the results or not
 # Visualisation options
@@ -112,9 +112,7 @@ interpolation_kwargs = {'interval_output': 30, # Temporal baseline of the time s
 # Create a subfolder if it doesnt exist
 if not os.path.exists(path_save):
     os.mkdir(path_save)
-
-if type(cube_name) == str:
-    cube_name = [cube_name]
+    
 
 # %% ======================================================================== #
 #                                DATA LOADING                                 #
@@ -122,17 +120,9 @@ if type(cube_name) == str:
 
 start = [time.time()]
 
-# Load the main cube
+# Load data cube.s
 cube = cube_data_class()
-cube.load(cube_name[0], **load_kwargs)
-
-# Several cubes have to be merged together
-if len(cube_name) > 1:
-    for n in range(1, len(cube_name)):
-        cube2 = cube_data_class()
-        cube2.load(cube_name[n], **load_kwargs)
-        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
-        cube.merge_cube(cube2)
+cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]
 print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')

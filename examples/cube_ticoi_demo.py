@@ -50,7 +50,10 @@ warnings.filterwarnings("ignore")
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (name can be
 # 'interp', 'invert' or 'raw' as for returned, path can be a single str or a list of str to merge cubes) in cube_name
 
-TICOI_process = 'block_process'
+TICOI_process = 'load'
+
+# For TICOI_process = 'load', generate TICOI and/or TICO results as a list of pd DataFrames from the cubes
+compute_result_load = True
 
 save = True # If True, save TICOI results to a netCDF file
 save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
@@ -59,9 +62,9 @@ save_mean_velocity = True # Save a .tiff file with the mean reulting velocities,
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
 cube_name = 'test_data/Alps_Mont-Blanc_Argentiere_example.nc'
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
-# cube_name = {'raw': 'test_data/Alps_Mont-Blanc_Argentiere_example.nc',
-#              'invert': 'examples/results/Argentiere_example_invert.nc',
-#              'interp': 'examples/results/Argentiere_example_interp.nc'}
+cube_name = {'raw': 'test_data/Alps_Mont-Blanc_Argentiere_example.nc',
+             'invert': 'examples/results/Argentiere_example_invert.nc',
+             'interp': 'examples/results/Argentiere_example_interp.nc'}
 flag_file = 'test_data/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
 mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
 path_save = 'examples/results/' # Path where to store the results
@@ -168,6 +171,12 @@ if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.ke
     else:
         cube.load(cube_name, **load_kwargs)
     
+    # Load raw data at pixels if required
+    result = None
+    if (TICOI_process == 'load' and 'raw' in cube_name.keys()) and compute_result_load:
+        print('[Data loading] Loading raw data...')
+        result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
+    
     # Prepare interpolation dates
     cube_date1 = cube.date1_().tolist()
     cube_date1.remove(np.min(cube_date1))
@@ -187,8 +196,7 @@ if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.ke
 
 start.append(time.time())
 
-cube_interp = None
-cube_invert = None
+cube_interp, cube_invert = None, None
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
@@ -215,11 +223,33 @@ elif TICOI_process == 'load':
         cube_invert = cube_data_class()
         cube_invert.load(cube_name['invert'], **load_kwargs)
         
+        # TODO Implement TICO pixel loading
+        # # Load inversion results at pixels
+        # if compute_result_load:
+        #     print('[TICOI processing] Loading TICO data...')
+        #     data_invert = process_blocks_refine(cube_invert, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
+        #     if result is None:
+        #         result = data_invert
+        #     else:
+        #         result = [[result[i], data_invert[i]] for i in range(len(result))]
+        #     del data_invert
+        
     # Load interpolation results
     if 'interp' in cube_name.keys():
         cube_interp = cube_data_class()
         cube_interp.load(cube_name['interp'], **load_kwargs)
-
+        
+        if compute_result_load:
+            print('[TICOI processing] Loading TICOI data...')
+            data_interp = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
+            if result is None:
+                result = data_interp
+            elif type(result[0]) != list:
+                result = [[result[i], data_interp[i]] for i in range(len(result))]
+            else:
+                result = [[result[i][0], result[i][1], data_interp[i]] for i in range(len(result))]
+            del data_interp
+            
 stop.append(time.time())
 print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s')
 
