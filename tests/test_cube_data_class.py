@@ -56,6 +56,6 @@ class Testclass_cube_data_xr:
         actual = data[1][0,:]
         print('actual',actual)
         print('expected',expected)
-        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-2, err_msg=f"Arrays at coordinates ({x},{y}) do not match.")
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-5, err_msg=f"Arrays at coordinates ({x},{y}) do not match.")
         # np.testing.assert_array_equal(actual, expected, err_msg=f"Arrays at coordinates ({x},{y}) do not match.")
 

@@ -257,19 +257,19 @@ class cube_data_class:
 
         # self.ds = self.ds.unify_chunks()  # to avoid error ValueError: Object has inconsistent chunks along
         # dimension mid_date. This can be fixed by calling unify_chunks(). Create new variable and chunk them
-        self.ds['sensor'] = xr.DataArray(sensor, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['sensor'] = xr.DataArray(sensor, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
-        self.ds['date1'] = xr.DataArray(date1, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['date1'] = xr.DataArray(date1, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
-        self.ds['date2'] = xr.DataArray(date2, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['date2'] = xr.DataArray(date2, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
-        self.ds['source'] = xr.DataArray(['ITS_LIVE'] * self.nz, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['source'] = xr.DataArray(['ITS_LIVE'] * self.nz, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
         self.ds['errorx'] = xr.DataArray(errorx, dims=['mid_date'], coords={'mid_date': self.ds.mid_date}).chunk(
-                                         chunks=self.ds.chunks['mid_date'])
+                                         {'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
         self.ds['errory'] = xr.DataArray(errory, dims=['mid_date'], coords={'mid_date': self.ds.mid_date}).chunk(
-                                         chunks=self.ds.chunks['mid_date'])
+                                         {'mid_date': self.ds.chunks['mid_date']})
 
         if pick_sensor is not None:
             self.ds = self.ds.sel(mid_date=self.ds['sensor'].isin(pick_sensor))
@@ -358,10 +358,10 @@ class cube_data_class:
         self.ds = self.ds.transpose('mid_date', 'y', 'x')
 
         # Store the variable in xarray dataset
-        self.ds['sensor'] = xr.DataArray(sensor, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['sensor'] = xr.DataArray(sensor, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         del sensor
         self.ds = self.ds.unify_chunks()
-        self.ds['source'] = xr.DataArray(['IGE'] * self.nz, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['source'] = xr.DataArray(['IGE'] * self.nz, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         self.ds = self.ds.unify_chunks()
         self.ds['errorx'] = xr.DataArray(np.tile(errorx[:, np.newaxis, np.newaxis], (1, self.ny, self.nx)),
                                          dims=['mid_date', 'y', 'x'],
@@ -421,9 +421,9 @@ class cube_data_class:
         date1 = [date_str.split(' ')[0] for date_str in self.ds['mid_date'].values]
         date2 = [date_str.split(' ')[1] for date_str in self.ds['mid_date'].values]
         self.ds['date1'] = xr.DataArray(np.array(date1).astype('datetime64[ns]'), dims='mid_date').chunk(
-                                        chunks=self.ds.chunks['mid_date'])
+                                        {'mid_date': self.ds.chunks['mid_date']})
         self.ds['date2'] = xr.DataArray(np.array(date2).astype('datetime64[ns]'), dims='mid_date').chunk(
-                                        chunks=self.ds.chunks['mid_date'])
+                                        {'mid_date': self.ds.chunks['mid_date']})
         del date1, date2
 
         # Temporal subset between two dates
@@ -441,8 +441,8 @@ class cube_data_class:
         self.ds = self.ds.transpose('mid_date', 'y', 'x')
 
         # Store the variable in xarray dataset
-        self.ds['sensor'] = xr.DataArray(['Pleiades'] * self.nz, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
-        self.ds['source'] = xr.DataArray(['IGE'] * self.nz, dims='mid_date').chunk(chunks=self.ds.chunks['mid_date'])
+        self.ds['sensor'] = xr.DataArray(['Pleiades'] * self.nz, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
+        self.ds['source'] = xr.DataArray(['IGE'] * self.nz, dims='mid_date').chunk({'mid_date': self.ds.chunks['mid_date']})
         self.ds['vy'] = -self.ds['vy']
 
         # Pick sensors or temporal baselines
@@ -454,9 +454,9 @@ class cube_data_class:
 
         # Set errors equal to one (no information on the error here)
         self.ds['errorx'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
-                                                 chunks=self.ds.chunks['mid_date'])
+                                                 {'mid_date': self.ds.chunks['mid_date']})
         self.ds['errory'] = xr.DataArray(np.ones(self.ds['mid_date'].size), dims='mid_date').chunk(
-                                                 chunks=self.ds.chunks['mid_date'])
+            {'mid_date': self.ds.chunks['mid_date']})
 
     def load_charrier(self, filepath: str, conf: bool = False, subset: list | None = None, buffer: list | None = None,
                       pick_date: list | None = None,
@@ -543,10 +543,10 @@ class cube_data_class:
             # For cube writen with write_result_TICOI
             if 'source' not in self.ds.variables:
                 self.ds['source'] = xr.DataArray([self.ds.author] * self.nz, dims='mid_date').chunk(
-                                                chunks=self.ds.chunks['mid_date'])
+                                                {'mid_date': self.ds.chunks['mid_date']})
             if 'sensor' not in self.ds.variables:
                 self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
-                                                chunks=self.ds.chunks['mid_date'])
+                                                {'mid_date': self.ds.chunks['mid_date']})
 
     def load(self, filepath: list | str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
              buffer: str | None = None, pick_date: str | None = None, pick_sensor: str | None = None,
@@ -612,13 +612,13 @@ class cube_data_class:
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                    self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
-                    time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
-                    var_name = "vx" if not self.is_TICO else "dx"
+                self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
+                var_name = "vx" if not self.is_TICO else "dx"
 
-                    if chunks == {}: # Rechunk with optimal chunk size
-                        tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
-                        self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
+                if chunks == {}: # Rechunk with optimal chunk size
+                    tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
+                    self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
                 elif filepath.split(".")[-1] == "zarr":
                     if chunks == {}:
