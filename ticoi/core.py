@@ -104,8 +104,7 @@ def inversion_iteration(data: np.ndarray, A: np.ndarray, dates_range: np.ndarray
     weighty = weightf(compute_residual(A, data[:, 1], result_dy), Weight[1])
 
     if A.shape[0] < A.shape[1]:
-        if verbose: print(
-            f'If the number of row is lower than the number of colomns, the results are not updated {A.shape}')
+        if verbose: print(f'[Inversion] If the number of row is lower than the number of colomns, the results are not updated {A.shape}')
         return result_dx, result_dy, weightx, weighty, None, None
 
     if regu == 'directionxy':
@@ -296,12 +295,11 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
 
                 i += 1
 
-                if verbose: print(i, 'dx', np.mean(abs(result_dx_i - result_dx)), 'dy',
-                                  np.mean(abs(result_dy_i - result_dy)))
+                if verbose: print('[Inversion] ', i, 'dx', np.mean(abs(result_dx_i - result_dx)), 'dy', np.mean(abs(result_dy_i - result_dy)))
 
             if verbose:
-                print('end loop', i, np.mean(abs(result_dy_i - result_dy)))
-                print('nb iteration', i)
+                print('[Inversion] End loop', i, np.mean(abs(result_dy_i - result_dy)))
+                print('[Inversion] Nb iteration', i)
 
             if i == 2:
                 weight_iy = weight_2y
@@ -378,7 +376,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
             dataf, A = None, None
 
     else:  # If there is no data over this pixel
-        if verbose: print(f'NO DATA TO INVERSE AT POINT {i, j}')
+        if verbose: print(f'[Inversion] NO DATA TO INVERSE AT POINT {i, j}')
         return None, None, None
 
     # pandas dataframe with the saved results
@@ -625,8 +623,7 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
     returned_list = []
     
     # Loading data at pixel location
-    data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver, coef=coef, regu=regu, 
-                           rolling_mean=obs_filt, flags=flags)
+    data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver, coef=coef, regu=regu, rolling_mean=obs_filt, flags=flags)
 
     if 'raw' in returned:
         returned_list.append(data)
@@ -700,7 +697,7 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
         nblocks_y = int(np.ceil(len(cube.ds.chunks['y']) / y_step))
         
         nblocks = nblocks_x * nblocks_y
-        if verbose: print(f'[TICOI processing] Divide into {nblocks} blocks\n blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
+        if verbose: print(f'[Block process] Divide into {nblocks} blocks\n   blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}')
 
         for i in range(nblocks_y):
             for j in range(nblocks_x):
@@ -711,7 +708,7 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
                 blocks.append([x_start, x_end, y_start,y_end])
     else:
         blocks.append([0, cube.ds.dims['x'], 0, cube.ds.dims['y']])
-        if verbose: print(f'[TICOI processing] Cube size smaller than {block_size}GB, no need to divide')
+        if verbose: print(f'[Block process] Cube size smaller than {block_size}GB, no need to divide')
 
     return blocks
 
@@ -735,7 +732,7 @@ def load_block(cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_
     block = cube_data_class()
     block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
     block.ds = block.ds.persist()
-    block.update_dimension()
+    block.update_dimension(time_dim='mid_date' if not block.is_TICO else 'second_date')
 
     if flags is not None:
         flags_block = flags.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
@@ -795,14 +792,14 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         return result_block
     
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
-        flags = preData_kwargs['flags']
+        flags = preData_kwargs['flags'] if preData_kwargs is not None else None
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True) # Split the cube in smaller blocks
         
         dataf_list = [None] * ( cube.nx * cube.ny )
 
         loop = asyncio.get_event_loop()
         for n in range(len(blocks)):
-            print(f'Processing block {n+1}/{len(blocks)}')
+            print(f'[Block process] Processing block {n+1}/{len(blocks)}')
 
             # Load the first block and start the loop
             if n == 0:
@@ -810,9 +807,10 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
 
             block, flags_block, duration = await future
-            preData_kwargs['flags'] = flags_block
-            inversion_kwargs['flags'] = flags_block
-            print(f'Block {n+1} loaded in {duration:.2f} s')
+            if preData_kwargs is not None:
+                preData_kwargs['flags'] = flags_block
+                inversion_kwargs['flags'] = flags_block
+            print(f'[Block process] Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # Load the next block while processing the current block
