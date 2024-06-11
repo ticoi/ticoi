@@ -46,15 +46,19 @@ Then replace all conda commands by mamba.
 * 
 #### Examples:
 
+##### Basic examples:
 * **test_data**: test data for demonstration
-* 
+
 * **examples/ticoi_cube_demo.py**: Demonstration of how to process one cube
 * **examples/ticoi_pixel_demo.py**: Demonstration of how to process one pixel
 
 * **examples/results/cube**: Expected results for the demo cube
 * **examples/results/pixel**: Expected results for the demo pixel
 
+##### More advanced examples:
 
+* **examples/advances_processing/ticoi_cube_demo_with_flag.py**: Demonstration of how to process one cube, by using different parameters for different areas (stable, surge)
+* **examples/ticoi_pixel_demo.py**: Demonstration of how to process one pixel
 
 ### OUTPUTS
 * to understand to output of pixel_demo please check README_visualization_pixel_output.md

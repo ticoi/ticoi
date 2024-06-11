@@ -210,10 +210,10 @@ if __name__ == '__main__':
     
     ## ---------------------------- Data selection ------------------------- ##
     # List of the paths where the data cubes are stored
-    cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01470_y03675_all_filt-multi.nc',]
+    cube_names = [ f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/c_x01470_y03675_all_filt-multi.nc',]
                    # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
     cube_authors = None # Specify the author of the data cubes (list), keep None if the authors are specified in the dataset
-    path_save = 'nathan/Tests_MB/' # Path where to store the results
+    path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/' # Path where to store the results
     proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
     i, j = 338913.8, 5081510.3 # Point (pixel) where to carry on the computation

@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore")
 
 ## ---------------------------- Data selection ------------------------- ##
 # List of the paths where the data cubes are stored
-cube_names = ['nathan/Donnees/Cubes_de_donnees/cubes_Sentinel_2/c_x01225_y03920_all_filt-multi.nc',]
+cube_names = [f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/c_x01225_y03920_all_filt-multi.nc',]
                # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
 cube_authors = None # Specify the author of the data cubes (list), keep None if the authors are specified in the dataset
 mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored

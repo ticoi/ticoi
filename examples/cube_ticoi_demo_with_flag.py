@@ -107,13 +107,13 @@ load_kwargs = {'chunks': {},
                'verbose': False} # Print information throughout the loading process
                
 ## ----------------------- Data preparation parameters --------------------- ##
-preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+preData_kwargs = {'smooth_method': 'savgol', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
                   's_win': 3, # Size of the spatial window
                   't_win': 90, # Time window size for 'ewma' smoothing
                   'sigma': 3, # Standard deviation for 'gaussian' filter
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': 'vcc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
                   'flags': flags, # Divide the data in several areas where different methods should be used
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                   'solver': solver, # Solver for the inversion
