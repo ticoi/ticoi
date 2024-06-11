@@ -1,4 +1,4 @@
-"""
+'''
 Class object to store and manipulate velocity observation data
 
 Author : Laurane Charrier, Lei Guo, Nathan Lioret
@@ -7,7 +7,7 @@ Reference:
     observation networks. IEEE Transactions on Geoscience and Remote Sensing.
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
-"""
+'''
 
 import os
 import dask
@@ -38,6 +38,9 @@ from osgeo import gdal, osr
 class cube_data_class:
 
     def __init__(self):
+        
+        ''' Initialisation of the main attributes '''
+        
         self.filedir = ''
         self.filename = ''
         self.nx = 250
@@ -47,14 +50,19 @@ class cube_data_class:
         self.source = ''
         self.ds = xr.Dataset({})
         self.resolution = 50
+        self.is_TICO = False
 
-    def update_dimension(self):
+    def update_dimension(self, time_dim: str = 'mid_date'):
 
-        ''' Update the attributes corresponding to cube dimensions: nx, ny, and nz '''
+        '''
+        Update the attributes corresponding to cube dimensions: nx, ny, and nz
+
+        :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
+        '''
 
         self.nx = self.ds['x'].sizes['x']
         self.ny = self.ds['y'].sizes['y']
-        self.nz = self.ds['mid_date'].sizes['mid_date']
+        self.nz = self.ds[time_dim].sizes[time_dim]
         self.resolution = self.ds['x'].values[1] - self.ds['x'].values[0]
 
     def subset(self, proj: str, subset: list):
@@ -81,7 +89,7 @@ class cube_data_class:
                                   y=slice(np.max([subset[2], subset[3]]), np.min([subset[2], subset[3]])))
 
         if len(self.ds['x'].values) == 0 and len(self.ds['y'].values) == 0:
-            print(f'[Cube loading] The given subset is not part of cube {self.filename}')
+            print(f'[Data loading] The given subset is not part of cube {self.filename}')
 
     def buffer(self, proj: str, buffer: list):
 
@@ -113,7 +121,7 @@ class cube_data_class:
             del i1, i2, j1, j2, buffer
 
         if len(self.ds['x'].values) == 0 and len(self.ds['y'].values) == 0:
-            print(f'[Cube loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
+            print(f'[Data loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
                                      time_dim: str = 'mid_date', verbose: bool = False) -> (int, int, int):
@@ -195,7 +203,7 @@ class cube_data_class:
         '''
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+            print(f'[Data loading] Path to cube file : {filepath}')
 
         self.filedir = os.path.dirname(filepath)  # Path were is stored the netcdf file
         self.filename = os.path.basename(filepath)  # Name of the netcdf file
@@ -291,7 +299,7 @@ class cube_data_class:
         """
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+            print(f'[Data loading] Path to cube file : {filepath}')
 
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)  # name of the netcdf file
@@ -393,7 +401,7 @@ class cube_data_class:
         """
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+               print(f'[Data loading] Path to cube file : {filepath}')
 
         self.ds = self.ds.chunk({'x': 125, 'y': 125, 'time': 2000})  # set chunk
         self.filedir = os.path.dirname(filepath)
@@ -470,74 +478,88 @@ class cube_data_class:
         """
 
         if verbose:
-            print(f'[Cube loading] Path to cube file : {filepath}')
+            print(f'[Data loading] Path to cube file {"(TICO cube)" if self.is_TICO else ""} : {filepath}')
 
+        # Informations about the cube
         self.filedir = os.path.dirname(filepath)
-        self.filename = os.path.basename(filepath)  # name of the netcdf file
+        self.filename = os.path.basename(filepath)  # Name of the netcdf file
         if self.ds.author == 'J. Mouginot, R.Millan, A.Derkacheva_aligned':
-            self.author = 'IGE'  # name of the author
+            self.author = 'IGE'  # Name of the author
         else:
             self.author = self.ds.author
-
         self.source = self.ds.source
         del filepath
 
+        # Select specific data within the cube
         if subset is not None:  # Crop according to 4 coordinates
             self.subset(proj, subset)
-
         elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
-        self.update_dimension()
+        time_dim = 'mid_date' if not self.is_TICO else 'second_date' # 'second_date' if we load TICO data
+        self.update_dimension(time_dim)
 
-        if pick_date is not None:  # Temporal subset between two dates
-            self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
-                                      self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+        # Temporal subset between two dates
+        if pick_date is not None:
+            if not self.is_TICO:
+                self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
+                                        self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+            else:
+                self.ds = self.ds.where(((self.ds['second_date'] >= np.datetime64(pick_date[0])) & (
+                    self.ds['second_date'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
         del pick_date
 
-        self.update_dimension()
+        self.update_dimension(time_dim)
 
         # Pick sensors or temporal baselines
         if pick_sensor is not None:
-            self.ds = self.ds.sel(mid_date=self.ds['sensor'].isin(pick_sensor))
+            if not self.is_TICO:
+                self.ds = self.ds.sel(mid_date=self.ds['sensor'].isin(pick_sensor))
+            else:
+                self.ds = self.ds.sel(second_date=self.ds['sensor'].isin(pick_sensor))
 
-        if pick_temp_bas is not None:
-            self.ds = self.ds.sel(mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
-                                ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
+        # Following properties are not available for TICO cubes
+        if not self.is_TICO:
+            # Pick specific temporal baselines
+            if pick_temp_bas is not None:
+                self.ds = self.ds.sel(mid_date=(pick_temp_bas[0] < ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D'))) & (
+                                    ((self.ds['date2'] - self.ds['date1']) / np.timedelta64(1, 'D')) < pick_temp_bas[1]))
 
-        if conf and 'confx' not in self.ds.data_vars:  # Convert the errors into confidence indicators between 0 and 1
-            minconfx = np.nanmin(self.ds['errorx'].values[:])
-            maxconfx = np.nanmax(self.ds['errorx'].values[:])
-            minconfy = np.nanmin(self.ds['errory'].values[:])
-            maxconfy = np.nanmax(self.ds['errory'].values[:])
-            errorx = 1 - (self.ds['errorx'].values - minconfx) / (maxconfx - minconfx)
-            errory = 1 - (self.ds['errory'].values - minconfy) / (maxconfy - minconfy)
-            self.ds['errorx'] = xr.DataArray(errorx, dims=['mid_date', 'y', 'x'],
-                                             coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
-                                                     'x': self.ds.x}).chunk(chunks=self.ds.chunks)
-            self.ds['errory'] = xr.DataArray(errory, dims=['mid_date', 'y', 'x'],
-                                             coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
-                                                     'x': self.ds.x}).chunk(chunks=self.ds.chunks)
+            # Convert the errors into confidence indicators between 0 and 1
+            if conf and 'confx' not in self.ds.data_vars:
+                minconfx = np.nanmin(self.ds['errorx'].values[:])
+                maxconfx = np.nanmax(self.ds['errorx'].values[:])
+                minconfy = np.nanmin(self.ds['errory'].values[:])
+                maxconfy = np.nanmax(self.ds['errory'].values[:])
+                errorx = 1 - (self.ds['errorx'].values - minconfx) / (maxconfx - minconfx)
+                errory = 1 - (self.ds['errory'].values - minconfy) / (maxconfy - minconfy)
+                self.ds['errorx'] = xr.DataArray(errorx, dims=['mid_date', 'y', 'x'],
+                                                coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
+                                                        'x': self.ds.x}).chunk(chunks=self.ds.chunks)
+                self.ds['errory'] = xr.DataArray(errory, dims=['mid_date', 'y', 'x'],
+                                                coords={'mid_date': self.ds.mid_date, 'y': self.ds.y,
+                                                        'x': self.ds.x}).chunk(chunks=self.ds.chunks)
 
-        # For cube writen with write_result_TICOI
-        if 'source' not in self.ds.variables:
-            self.ds['source'] = xr.DataArray([self.ds.author] * self.nz, dims='mid_date').chunk(
-                                             chunks=self.ds.chunks['mid_date'])
-        if 'sensor' not in self.ds.variables:
-            self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
-                                             chunks=self.ds.chunks['mid_date'])
+            # For cube writen with write_result_TICOI
+            if 'source' not in self.ds.variables:
+                self.ds['source'] = xr.DataArray([self.ds.author] * self.nz, dims='mid_date').chunk(
+                                                chunks=self.ds.chunks['mid_date'])
+            if 'sensor' not in self.ds.variables:
+                self.ds['sensor'] = xr.DataArray([self.ds.sensor] * self.nz, dims='mid_date').chunk(
+                                                chunks=self.ds.chunks['mid_date'])
 
-    def load(self, filepath: str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
+    def load(self, filepath: list | str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
              buffer: str | None = None, pick_date: str | None = None, pick_sensor: str | None = None,
-             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', verbose: bool = False):
+             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', mask_file: str | xr.DataArray = None,
+             verbose: bool = False):
 
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
-        :param filepath: [str] --- Filepath of the dataset
-        :param chunks: Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays. 
-                       chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays, 
-                       chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
+        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
+        :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays.
+                                  chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays,
+                                  chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
         :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
         :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
         :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
@@ -545,90 +567,121 @@ class cube_data_class:
         :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
         :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
+        :param mask_file: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
 
-        time_dim_name = {
-            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
-            "J. Mouginot, R.Millan, A.Derkacheva": 'z',
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": 'mid_date',
-            "L. Charrier, L. Guo": 'mid_date',
-            "L. Charrier": 'mid_date',
-            "E. Ducasse": 'time',
-            "S. Leinss, L. Charrier": 'mid_date'
-        }
+        assert type(filepath) == list or type(filepath) == str, (f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}.")
+
+        if type(filepath) == list: # Merge several cubes
+            self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                      proj=proj, mask_file=mask_file, verbose=verbose)
+
+            cube2 = None
+            for n in range(1, len(filepath)):
+                cube2 = cube_data_class()
+                # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
+                sub = [self.ds['x'].min().values, self.ds['x'].max().values, self.ds['y'].min().values, self.ds['y'].max().values]
+                cube2.load(filepath[n], chunks=chunks, conf=conf, subset=sub, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                           proj=proj, mask_file=mask_file, verbose=verbose)
+                # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
+                cube2 = self.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
+                self.merge_cube(cube2) # Merge the new cube to the main one
+            del cube2
+
+        else: # Load one cube
+            time_dim_name = {
+                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": 'mid_date',
+                "J. Mouginot, R.Millan, A.Derkacheva": 'z',
+                "J. Mouginot, R.Millan, A.Derkacheva_aligned": 'mid_date',
+                "L. Charrier, L. Guo": 'mid_date',
+                "L. Charrier": 'mid_date',
+                "E. Ducasse": 'time',
+                "S. Leinss, L. Charrier": 'mid_date'
+            }
 
         self.__init__()
-        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
+        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks       
             if filepath.split(".")[-1] == "nc":
                 try:
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
                 except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
-
+                
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                if chunks == {}:  # Rechunk with optimal chunk size
-                    tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", 
-                                                                   time_dim=time_dim_name[self.ds.author], verbose=True)
-                    self.ds = self.ds.chunk({time_dim_name[self.ds.author]: tc, "x": xc, "y": yc})
+                    self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+                    time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
+                    var_name = "vx" if not self.is_TICO else "dx"
 
-            elif filepath.split(".")[-1] == "zarr":
-                if chunks == {}:
-                    chunks = "auto"  # Change the default value to auto
+                    if chunks == {}: # Rechunk with optimal chunk size
+                        tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
+                        self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-                self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr",
-                                          consolidated=True, chunks=chunks)
+                elif filepath.split(".")[-1] == "zarr":
+                    if chunks == {}:
+                        chunks = "auto" # Change the default value to auto
 
-        if verbose:
-            print('[Cube loading] File open')
+                    self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
 
-        dico_load = {
-            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
-            "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
-            "L. Charrier, L. Guo": self.load_charrier,
-            "L. Charrier": self.load_charrier,
-            "E. Ducasse": self.load_ducasse,
-            "S. Leinss, L. Charrier": self.load_charrier,
-        }
-        dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
-                                  pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj
-                                  )
-        # rechunk again if the size of the cube is changed:
-        if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-            tc, yc, xc = self.determine_optimal_chunk_size(variable_name="vx", x_dim="x", y_dim="y", time_dim='mid_date', verbose=True)
-            self.ds = self.ds.chunk({'mid_date': tc, "x": xc, "y": yc})
+            if verbose:
+                print('[Data loading] File open')
 
-        # Reorder the coordinates to keep the consistency
-        self.ds = self.ds.copy().sortby("mid_date").transpose("x", "y", "mid_date")
-        self.standardize_cube_for_processing()
+            dico_load = {
+                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
+                "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
+                "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
+                "L. Charrier, L. Guo": self.load_charrier,
+                "L. Charrier": self.load_charrier,
+                "E. Ducasse": self.load_ducasse,
+                "S. Leinss, L. Charrier": self.load_charrier,
+            }
+            dico_load[self.ds.author](filepath, pick_date=pick_date, subset=subset, conf=conf, pick_sensor=pick_sensor,
+                                    pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
 
-        # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
-        #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
-        #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
-        #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
+            # Rechunk again if the size of the cube is changed:
+            time_dim = 'mid_date' if not self.is_TICO else 'second_date'
+            if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
+                tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
+                self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-        if verbose:
-            print(f'[Cube loading] Author : {self.ds.author}')
+            # Reorder the coordinates to keep the consistency
+            self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
+            self.standardize_cube_for_processing(time_dim)
 
-    def standardize_cube_for_processing(self):
+            if mask_file is not None:
+                self.mask_cube(mask_file)
 
-        ''' Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist '''
+            # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
+            #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
+            #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
+            #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
 
+            if verbose:
+                print(f'[Data loading] Author : {self.ds.author}')
+
+    def standardize_cube_for_processing(self, time_dim='mid_date'):
+
+        '''
+        Prepare the xarray dataset for the processing: transpose the dimension, add a varibale temporal_baseline, errors if they do not exist
+
+        :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
+        '''
+        
         self.ds = self.ds.unify_chunks()
-        if self.ds.chunksizes['mid_date'] != (self.nz,):
-            self.ds = self.ds.chunk({'mid_date': self.nz})
+        if self.ds.chunksizes[time_dim] != (self.nz,):
+            self.ds = self.ds.chunk({time_dim: self.nz})
 
-        # Create a variable for temporal_baseline
-        self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
+        if not self.is_TICO:
+            # Create a variable for temporal_baseline
+            self.ds["temporal_baseline"] = xr.DataArray((self.ds["date2"] - self.ds["date1"]).dt.days.values, dims='mid_date')
 
-        # Add errors if not already there
-        if "errorx" not in self.ds.variables:
-            self.ds["errorx"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
-            self.ds["errory"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
+            # Add errors if not already there
+            if "errorx" not in self.ds.variables:
+                self.ds["errorx"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
+                self.ds["errory"] = (("mid_date", np.ones((len(self.ds["mid_date"])))))
 
 
     # %% ==================================================================== #
@@ -739,12 +792,12 @@ class cube_data_class:
         if proj == 'EPSG:4326':
             myproj = Proj(self.ds.proj4)
             i, j = myproj(i, j)
-            if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+            if verbose: print(f'[Data loading] Converted to projection {self.ds.proj4}: {i, j}')
         else:
             if CRS(self.ds.proj4) != CRS(proj):
                 transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
                 i, j = transformer.transform(i, j)
-                if verbose: print(f'Converted to projection {self.ds.proj4}: {i, j}')
+                if verbose: print(f'[Data loading] Converted to projection {self.ds.proj4}: {i, j}')
         return i, j
 
 
@@ -840,7 +893,6 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    
     def delete_outliers(self, delete_outliers: str | float, flags: xr.Dataset | None = None):
 
         '''
@@ -872,6 +924,13 @@ class cube_data_class:
         self.ds = self.ds.persist()
 
     def mask_cube(self, mask : xr.DataArray | str):
+
+        '''
+        Mask some of the data of the cube (putting it to np.nan).
+
+        :param mask: [str | xr dataarray] --- Either a DataArray with 1 the data to keep and 0 the ones to remove, or a path to a file containing a DataArray or a shapefile to be rasterized
+        '''
+
         if type(mask) is str:
             if mask[-3:] == 'shp': # Convert the shp file to an xarray dataset (rasterize the shapefile)
                 polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
@@ -882,9 +941,14 @@ class cube_data_class:
             mask.load()
 
         # Mask the velocities and the errors
-        self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
-                .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
-                .astype('float32')
+        if not self.is_TICO:
+            self.ds[['vx', 'vy', 'errorx', 'errory']] = self.ds[['vx', 'vy', 'errorx', 'errory']] \
+                    .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                    .astype('float32')
+        else:
+            self.ds[['dx', 'dy', 'xcount_x', 'xcount_y']] = self.ds[['dx', 'dy', 'xcount_x', 'xcount_y']] \
+                    .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
+                    .astype('float32')
 
 
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
@@ -956,7 +1020,7 @@ class cube_data_class:
                 filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out, smooth_method=smooth_method,
                                                        sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
-            if verbose: print(f'Smoothing observations took {round((time.time() - start), 1)} s')
+            if verbose: print(f'[Data filtering] Smoothing observations took {round((time.time() - start), 1)} s')
 
             # Spatial average
             if np.min([da_arr['x'].size,da_arr['y'].size]) > s_win :# The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
@@ -970,12 +1034,12 @@ class cube_data_class:
             return spatial_mean.compute(), np.unique(date_out)
 
         if np.isnan(self.ds['date1'].values).all():
-            print('Empty sub-cube (masked data ?)')
+            print('[Data filtering] Empty sub-cube (masked data ?)')
             return None
 
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
-            if verbose: print(f"Clipping dataset to individual pixel: (x, y) = ({i},{j})")
+            if verbose: print(f"[Data filtering] Clipping dataset to individual pixel: (x, y) = ({i},{j})")
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
@@ -1000,7 +1064,7 @@ class cube_data_class:
         start = time.time()
         if delete_outliers is not None: 
             self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
-            if verbose: print(f'Delete outlier took {round((time.time() - start), 1)} s')
+            if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)],
@@ -1025,7 +1089,7 @@ class cube_data_class:
             del vx_filtered, vy_filtered
 
             if verbose:
-                print("Calculating smoothing mean of the observations completed in {:.2f} seconds".format(time.time() - start))
+                print("[Data filtering] Calculating smoothing mean of the observations completed in {:.2f} seconds".format(time.time() - start))
 
         elif solver == 'LSMR_ini':  # The initialization is based on the averaged velocity over the period, for every pixel
             obs_filt = self.ds[['vx', 'vy']].mean(dim='mid_date')
@@ -1129,12 +1193,21 @@ class cube_data_class:
         :param cube: (cube_data_class) The cube to be merged to self
         '''
 
-        self.ds = xr.concat([self.ds, cube.ds], dim='mid_date')
+        # Merge the cubes (must be previously aligned before using align_cube)
+        self.ds = xr.concat([self.ds, cube.ds.sel(x=self.ds['x'], y=self.ds['y'])], dim='mid_date')
+
+        # Update the attributes
         self.ds = self.ds.chunk(chunks={'mid_date': self.ds['mid_date'].size})
         self.nz = self.ds['mid_date'].size
-
-        if cube.author not in self.author.split('\n'):
-            self.author += f'\n{cube.author}'
+        if type(self.filedir) != list and type(self.filename) != list and type(self.author) != list and type(self.source) != list:
+            self.filedir = [self.filedir]
+            self.filename = [self.filename]
+            self.author = [self.author]
+            self.source = [self.source]
+        self.filedir.append(cube.filedir)
+        self.filename.append(cube.filename)
+        self.author.append(cube.author)
+        self.source.append(cube.source)
 
     def average_cube(self,return_format = 'geotiff', return_variable=['vv'],save=True,path_save=None):
         """
@@ -1219,7 +1292,7 @@ class cube_data_class:
         # Find the index of the dates that have to be averaged, to get the heatmap
         # Each value of the heatmap corresponds to an average of all the velocities which are overlapping a given period
         save_line = [[] for _ in range(len(date_range) - 1)]
-        for i_date, date in enumerate(date_range[:-1]):
+        for i_date, _ in enumerate(date_range[:-1]):
             i = 0
             while i < data.shape[0] and date_range[i_date + 1] >= data[i, 0]:
                 if date_range[i_date] <= data[i, 1]:
@@ -1256,6 +1329,7 @@ class cube_data_class:
                 vvmean = [np.ma.median(vvmasked[lines]) for lines in save_line]
 
             vvdf = pd.DataFrame(vvmean, index=dates_c, columns=[points_heatmap['distance'].iloc[k] / 1000])
+            line_df_vv = None
             if k > 0:
                 line_df_vv = pd.concat([line_df_vv, vvdf], join='inner', axis=1)
             else:
@@ -1280,40 +1354,42 @@ class cube_data_class:
     def write_result_ticoi(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
                            savepath: str | None = None, result_quality: list | None = None,
                            verbose: bool = False) -> Union["cube_data_class", str]:
-        """
+
+        '''
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
-        units has been changed to unit, since it was producing an error while wirtting the netcdf file
-        :param result: list of pd xarray, resulut from the TICOI method
-        :param source: name of the source
-        :param sensor: sensors which have been used
-        :param filename: filename of file to saved
-        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
-        :param savepath: string, path where to save the file
-        :param verbose: Print information throughout the process (default is False)
+        units has been changed to unit, since it was producing an error while writting the netcdf file
 
-        :return: new cube where the results are saved
-        """
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        '''
+
         # TODO: need to check the order of dimension: do we need to transpose?
         non_null_results = [result[i * self.ny + j]['vx'].shape[0] for i in range(self.nx) for j in range(self.ny)
                             if
                             result[i * self.ny + j]['vx'].shape[
-                                0] != 0]  # temporal size of the results which are not empty
+                                0] != 0]  # Temporal size of the results which are not empty
         first_date_results = [result[i * self.ny + j]['First_date'].iloc[0] for i in range(self.nx) for j in
                               range(self.ny) if
                               result[i * self.ny + j]['vx'].shape[
-                                  0] != 0]  # temporal size of the results which are not empty
+                                  0] != 0]  # Temporal size of the results which are not empty
         if len(non_null_results) == 0:
-            print('There is no results to write and/or save')
+            print('[Writing results] There is no results to write and/or save')
             return 'There is no results to write and/or save'
 
         if np.min(non_null_results) == np.max(non_null_results) and all(
                 element == first_date_results[0] for element in
-                first_date_results):  # if the dates of the results are the same for every pixel
+                first_date_results):  # If the dates of the results are the same for every pixel
             non_null_el = next((element for element in result if element.shape[0] != 0),
                                None)  # First result array which is not empty, and have size corresponding to the time period common between every pixel
             del non_null_results, first_date_results
-            print('Same time dimension for every pixels')
+            print('[Writing results] Same time dimension for every pixels')
         else:
             print('Not the same time dimension for every pixels')
             raise ValueError('Not the same time dimension for every pixels, cannot save cube')
@@ -1346,7 +1422,7 @@ class cube_data_class:
             result_arr = result_arr.reshape((self.nx, self.ny, len(time_variable)))
             cubenew.ds[var] = xr.DataArray(result_arr, dims=['x', 'y', 'mid_date'],
                                            coords={'x': self.ds['x'], 'y': self.ds['y'], 'mid_date': time_variable})
-            cubenew.ds[var] = cubenew.ds[var].transpose('mid_date', 'y', 'x')
+            cubenew.ds[var] = cubenew.ds[var].transpose('x', 'y', 'mid_date')
             cubenew.ds[var].attrs = {'standard_name': short_name[i], 'unit': 'm/y', 'long_name': long_name[i]}
 
         if result_quality is not None and 'Norm_residual' in result_quality:
@@ -1384,8 +1460,8 @@ class cube_data_class:
                 cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose('y', 'x')
                 cubenew.ds[short_name[k]].attrs = {'standard_name': short_name[k], 'unit': 'm',
                                                    'long_name': long_name[k]}
-
         del non_null_el, long_name, result_arr
+
         cubenew.ds['x'] = self.ds['x']
         cubenew.ds['x'].attrs = {'standard_name': 'projection_x_coordinate', 'unit': 'm',
                                  'long_name': 'x coordinate of projection'}
@@ -1406,28 +1482,31 @@ class cube_data_class:
         cubenew.nz = cubenew.ds['mid_date'].sizes['mid_date']
         cubenew.filename = filename
 
-        if savepath is not None:  # save the dataset to a netcdf file
+        if savepath is not None:  # Save the dataset to a netcdf file
             cubenew.ds.to_netcdf(f'{savepath}/{filename}.nc')
-            if verbose: print(f'Saved to {savepath}/{filename}.nc')
+            if verbose: print(f'[Writing results] Saved to {savepath}/{filename}.nc')
 
         return cubenew
 
     def write_result_tico(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
                           savepath: str | None = None, result_quality: list | None = None,
                           verbose: bool = False) -> Union["cube_data_class", str]:
-        """
+
+        '''
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
         units has been changed to unit, since it was producing an error while wirtting the netcdf file
-        :param result: list of pd xarray, resulut from the TICOI method
-        :param source: name of the source
-        :param sensor: sensors which have been used
-        :param filename:  filename of file to saved
-        :param savepath: path where to save the file
-        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
-        :param verbose: Print information throughout the process (default is False)
-        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
-        """
+
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        '''
+
         cubenew = cube_data_class()
         cubenew.ds['x'] = self.ds['x']
         cubenew.ds['x'].attrs = {'standard_name': 'projection_x_coordinate', 'unit': 'm',
@@ -1500,31 +1579,32 @@ class cube_data_class:
 
         if savepath is not None:  # save the dataset to a netcdf file
             cubenew.ds.to_netcdf(f'{savepath}/{filename}.nc')
-            if verbose: print(f'Saved to {savepath}/{filename}.nc')
+            if verbose: print(f'[Writing results] Saved to {savepath}/{filename}.nc')
 
         return cubenew
 
-
     def write_results_ticoi_or_tico(self, result: list, source: str, sensor: str, filename: str = 'Time_series',
                           savepath: str | None = None, result_quality: list | None = None,verbose: bool = False) -> Union["cube_data_class", str]:
-        """
+
+        '''
         Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
-        It reconize whatever the results are irregular or regular
+        It recognizes whether the results are irregular or regular and uses the appropriate saving method
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
         units has been changed to unit, since it was producing an error while wirtting the netcdf file
-        :param result: list of pd xarray, resulut from the TICOI method
-        :param source: name of the source
-        :param sensor: sensors which have been used
-        :param filename:  filename of file to saved
-        :param savepath: path where to save the file
-        :param result_quality: if not None, list of the criterium used to evaluate the quality of the results
-        :param verbose: Print information throughout the process (default is False)
-        :return: new cube where the results are saved, the dimension time corresponds to the second date of the cumulative displacement time series
-        """
+
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        '''
+
         if result[0].columns[0] == 'First_date':
             self.write_result_ticoi(result=result, source=source, sensor=sensor, filename= filename,
                           savepath=savepath, result_quality=result_quality,verbose=verbose)
         else:
             self.write_result_tico(result=result, source=source, sensor=sensor, filename= filename,
                           savepath=savepath, result_quality=result_quality,verbose=verbose)
-
