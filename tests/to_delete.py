@@ -4,8 +4,8 @@ from ticoi.cube_data_classxr import cube_data_class
 from ticoi.inversion_functions import construction_a_lf,inversion_one_component
 from ticoi.core import mu_regularisation
 import numpy as np
-# name= f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/c_x18620_y08085_2016-2022_crop_GPS_Lower.nc'
-name = '/home/charriel/Documents/Bettik/Yukon/STACK/Data_2021/c_x18620_y08085_2016-2022_crop_GPS_Lower.nc'
+name= f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
+# name = '/home/charriel/Documents/Bettik/Yukon/STACK/Data_2021/c_x18620_y08085_2016-2022_crop_GPS_Lower.nc'
 print(name)
 #
 cube = cube_data_class()

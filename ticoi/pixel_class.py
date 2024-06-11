@@ -3,26 +3,45 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 import seaborn as sns
+from typing import List, Optional, Union
 
 class dataframe_data():
+    '''
+    Object to define a pd.Dataframe storing velocity observations
+    '''
     def __init__(self,dataf:pd.DataFrame=pd.DataFrame()):
         self.dataf = dataf
+
     def set_temporal_baseline_central_date_offset_bar(self):
+        '''
+        Compte temporal baselines ('temporal_baseline'), centrale date (date_cori), and offset bar ('offset_bar'), used for plotting
+        '''
         delta = self.dataf['date2'] - self.dataf['date1']  # temporal baseline of the observations
         self.dataf['date_cori'] = np.asarray(self.dataf['date1'] + delta // 2).astype('datetime64[D]')  # central date
         self.dataf['temporal_baseline'] = np.asarray((delta).dt.days).astype('int')  # temporal basline as an integer
         self.dataf['offset_bar'] = delta // 2  # to plot the temporal baseline of the plots
 
-    def set_vx_vy_invert(self, conversion:int):
+    def set_vx_vy_invert(self, conversion:int=365):
+        '''
+        Convert displacements into velocity
+        :param conversion:  [int] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
+        :return:
+        '''
         self.dataf['result_dx'] = self.dataf['result_dx'] / self.dataf['temporal_baseline'] * conversion
         self.dataf['result_dy'] = self.dataf['result_dy'] / self.dataf['temporal_baseline'] * conversion
         self.dataf = self.dataf.rename(columns={'result_dx': 'vx', 'result_dy': 'vy'})
 
     def set_vv(self):
+        '''
+        Set velocity maggnitude variable (here vv) in the dataframe
+        '''
         self.dataf['vv'] = np.round(np.sqrt((self.dataf['vx'] ** 2 + self.dataf['vy'] ** 2).astype('float')),
                                     2)  # Compute the magnitude of the velocity
 
     def set_minmax(self):
+        '''
+        Set the attribute minimum and maximum fir vx, vy, and possibly vv
+        '''
         self.vxymin = int(self.dataf['vx'].min())
         self.vxymax = int(self.dataf['vx'].max())
         self.vyymin = int(self.dataf['vy'].min())
@@ -32,25 +51,47 @@ class dataframe_data():
             self.vvymax = int(self.dataf['vv'].max())
 
 class pixel_class():
+    '''
+    Object class to store the data on a given pixel
+    '''
 
-    def __init__(self,save=False,show=False,figsize = (10,6),unit='m/y',path_save='',A=None,dataobs=None):
-        self.dataobs = dataobs
-        self.datainvert = None
-        self.save = save
-        self.path_save = path_save
-        self.show = show
-        self.figsize = figsize
-        self.unit = unit
-        self.A = A
+    def __init__(self,
+                 save: bool = False,
+                 show: bool = False,
+                 figsize: tuple[int, int] = (10, 6),
+                 unit: str = 'm/y',
+                 path_save: str = '',
+                 A: Optional[np.array] = None,dataobs: Optional[pd.DataFrame] = None):
+        self.dataobs = dataobs #observation data
+        self.datainvert = None #results from the inversion, tico data
+        self.save = save #if True, the figures are saved
+        self.show = show #if True, the figures are plotted
+        self.path_save = path_save #path where to store the data
+        self.figsize = figsize #size of the figure
+        self.unit = unit #unit wanted for plotting
+        self.A = A #design matrix
 
 
-    def set_obs_data_from_pandas_df(self, dataf_obs, variables = ['vv']):
+    def set_obs_data_from_pandas_df(self, dataf_obs:pd.DataFrame, variables: List[str] = ['vv']):
+        '''
+
+        :param dataf_obs: [pd.DataFrame] --- observations dataframe
+        :param variables: [List[str]] [default is ['vv'] --- list of variable to plot
+        :return:
+        '''
         self.dataobs = dataframe_data(dataf_obs)
         self.dataobs.set_temporal_baseline_central_date_offset_bar()
         if 'vv' in variables:  self.dataobs.set_vv()
         self.dataobs.set_minmax()
 
-    def set_ilf_results_from_pandas_df(self, dataf_ilf, conversion=365, variables = ['vv']):
+    def set_ilf_results_from_pandas_df(self, dataf_ilf:pd.DataFrame, conversion:int=365, variables: List[str] = ['vv']):
+        '''
+
+        :param dataf_ilf: [pd.DataFrame] --- results from the inversion
+        :param conversion: [int] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
+        :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
+        :return:
+        '''
 
         self.datainvert = dataframe_data(dataf_ilf)
         self.datainvert.set_temporal_baseline_central_date_offset_bar()  #set the temporal baseline,
@@ -58,12 +99,34 @@ class pixel_class():
         if 'vv' in variables:  self.datainvert.set_vv()
         self.datainvert.set_minmax()
 
-    def load(self,dataf, type_data = 'obs',dataformat='df',save=False,show=False,figsize = (10,6),unit='m/y',path_save='',variables = ['vv','vx','vy'],A=None):
+    def load(self,dataf:pd.DataFrame, type_data:str = 'obs',dataformat:str ='df',save:bool=False,show:bool=False,figsize:tuple[int, int] = (10,6),unit:str='m/y',path_save:str='',variables: List[str] = ['vv','vx','vy'],A:Optional[np.array]=None):
+        '''
+
+        :param dataf: [pd.DataFrame] --- observations orresults from the inversion
+        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
+        :param save: [bool] [default is False]  --- if True, save the figures
+        :param show: [bool] [default is True]  --- if True, show the figures
+        :param figsize: tuple[int, int]  --- size of the figure
+        :param unit: [str]   --- unit wanted for plotting
+        :param path_save:[str] --- path where to store the data
+        :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
+        :param A: [np.array] --- design matrix
+        :return:
+        '''
         self.__init__(save=save,show=show,figsize=figsize,unit=unit,path_save=path_save,A=A)
+
         if  isinstance(dataf, list): self.load_two_dataset(dataf,dataformat=dataformat,variables=variables)
         else: self.load_one_dataset(dataf,dataformat=dataformat,type_data=type_data,variables=variables)
 
-    def load_one_dataset(self,dataf, type_data = 'obs',dataformat='df',variables = ['vv','vx','vy']):
+    def load_one_dataset(self,dataf:pd.DataFrame, type_data:str = 'obs',dataformat:str ='df',variables: List[str]  = ['vv','vx','vy']):
+        '''
+        Load two dataset, observations or inversion
+        :param dataf: [pd.DataFrame] --- observations orresults from the inversion
+        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
+        :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
+        '''
 
         conversion = self.get_conversion()
         if type_data == 'obs':
@@ -73,22 +136,22 @@ class pixel_class():
         else: raise ValueError ('Please enter invert for inverted results and obs for observation')
 
 
-    def load_two_dataset(self,list_dataf,dataformat='df',variables=['vv','vx','vy']):
-        """
-        Must be first observations then inverted results
-        :param list_dataf:
-        :param dataformat:
-        :param save:
-        :param show:
-        :param figsize:
-        :param unit:
-        :param path_save:
-        :return:
-        """
+    def load_two_dataset(self,list_dataf:pd.DataFrame,dataformat:str='df',variables: List[str] =['vv','vx','vy']):
+        '''
+        Load two dataset, observations and inversion
+        :param dataf: [pd.DataFrame] --- observations or results from the inversion
+        :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
+        :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
+        '''
         self.load_one_dataset(list_dataf[0], type_data = 'obs',dataformat=dataformat,variables=variables)
         self.load_one_dataset(list_dataf[1], type_data='invert', dataformat=dataformat,variables=variables)
 
-    def get_dataf_invert_or_obs(self,type_data = 'obs'):
+    def get_dataf_invert_or_obs(self,type_data:str = 'obs')-> pd.DataFrame:
+        '''
+        Get dataframe either obs or invert
+        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :return [pd.DataFrame] --- dataframe from obs or invert
+        '''
         if self.dataobs is None: return self.datainvert
         elif self.datainvert is None: return self.dataobs
         else:
@@ -96,10 +159,20 @@ class pixel_class():
             else: return self.dataobs
 
     def get_conversion(self):
+        '''
+        Get convertion factor
+        :return: [int] --- conversion factor
+        '''
         conversion = 365 if self.unit == 'm/y' else 1
         return conversion
 
-    def plot_vx_vy(self,color='blueviolet',type_data='invert'):
+    def plot_vx_vy(self,color:str='blueviolet',type_data:str='invert'):
+        '''
+        Plot vx and vy in the same figure
+        :param color: [str] --- color used by plt.plot
+        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :return: axis, and figure
+        '''
 
         if type_data == 'invert' : label = 'Results from the inversion'
         else: label = 'Observations'
@@ -122,7 +195,14 @@ class pixel_class():
         if self.save:fig1.savefig(f'{self.path_save}/vx_vy_{type_data}.png')
         return ax1, fig1
 
-    def plot_vx_vy_overlayed(self,colors = ['blueviolet','orange']):
+    def plot_vx_vy_overlayed(self,colors:List[str] = ['blueviolet','orange']):
+        '''
+        Plot vx and vy in the same figure, inverted results are overlayed on observations
+        :param colors: List[str] --- list color used by plt.plot
+        '''
+
+        if self.datainvert.dataf is None: raise ValueError ('Cannot use plot_vx_vy_overlayed because inverted data have not been loaded')
+
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show,self.save  = False, False
@@ -146,7 +226,13 @@ class pixel_class():
         if self.save:fig1.savefig(f'{self.path_save}/vx_vy_overlayed.png')
 
 
-    def plot_vv(self,color='blueviolet',type_data='invert'):
+    def plot_vv(self,color:str='blueviolet',type_data:str='invert'):
+        '''
+           Plot the velocity magnitude
+           :param color: [str] [default is 'blueviolet'] --- color used by plt.plot
+           :param type_data: [str] [default is 'invert'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+           :return: axis, and figure
+           '''
 
         if type_data == 'invert' : label = 'Results from the inversion'
         else: label = 'Observations'
@@ -164,6 +250,12 @@ class pixel_class():
         return ax, fig
 
     def plot_vv_overlayed(self, colors=['blueviolet', 'orange']):
+        '''
+         Plot the velocity magnitude, inverted results are overlayed on observations
+         :param colors: List[str] --- list color used by plt.plot
+         '''
+        if self.datainvert.dataf is None: raise ValueError ('Cannot use plot_vx_vy_overlayed because inverted data have not been loaded')
+
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
@@ -181,6 +273,12 @@ class pixel_class():
 
 
     def plot_vx_vy_quality(self,cmap='rainbow',type_data='obs'):
+        '''
+        Plot error on top of velocity vx and vy
+        :param cmap: [str] [default is 'rainbow''] --- color map used in the plots
+        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :return: axis, and figure
+        '''
         if 'errorx' not in self.dataobs.dataf.columns:
             return ('There is no error, impossible to plot errors')
 
@@ -203,8 +301,14 @@ class pixel_class():
         ax[1].legend(loc='lower left', bbox_to_anchor=(0.15, 0), bbox_transform=fig.transFigure, fontsize=14)
         if self.show: plt.show(block=False)
         if self.save:fig.savefig(f'{self.path_save}/vxvy_quality_bas_{type_data}.png')
+        return ax,fig
 
     def plot_xcount_vx_vy(self,cmap='rainbow'):
+        '''
+        Plot contributions from observations on the inversion on top of velocity vx and vy
+        :param cmap: [str] [default is 'rainbow''] --- color map used in the plots
+        :return: axis, and figure
+        '''
         if self.datainvert is None: return ('You should this function, once a data of inverted have been loaded')
         if 'xcount_x' not in self.datainvert.dataf.columns:
             return ('There is no error, impossible to plot errors')
@@ -222,8 +326,14 @@ class pixel_class():
         ax[1].add_artist(legend1)
         if self.show: plt.show(block=False)
         if self.save:fig.savefig(f'{self.path_save}/X_dates_contribution_vx_vy.png')
+        return ax,fig
 
     def plot_xcount_vv(self,cmap='rainbow'):
+        '''
+         Plot contributions from observations on the inversion on top of velocity vv
+         :param cmap: [str] [default is 'rainbow''] --- color map used in the plots
+         :return: axis, and figure
+         '''
         if self.datainvert is None: return ('You should this function, once a data of inverted have been loaded')
         if 'xcount_x' not in self.datainvert.dataf.columns:
             return ('There is no error, impossible to plot errors')
@@ -240,9 +350,12 @@ class pixel_class():
         plt.setp(legend1.get_title(), fontsize=16)
         if self.show: plt.show(block=False)
         if self.save:fig.savefig(f'{self.path_save}/X_dates_contribution_vv.png')
+        return ax,fig
 
 
     def plot_weights_inversion(self):
+        '''
+        Plot initial and final weights used in the inversion '''
 
         ##WEIGHTS USED IN THE FIRST INVERSION
         fig, ax = plt.subplots(2, 1, figsize=(8, 4))
@@ -290,7 +403,16 @@ class pixel_class():
         if self.save: fig.savefig(f'{self.path_save}/weightlast_vx_vy.png')
 
 
-    def plot_residuals(self,log_scale=False):
+    def plot_residuals(self,log_scale:bool=False):
+        '''
+        Statistics about the residuals from the inversion:
+            - Plot of the final residuals overlayed in colors on vx and vy measurements ('residuals_vx_vy_final_residual.png').
+            - Plot of the recontructed velocity observations (from AX) overlayed on the original velocity observations ('residuals_vx_vy_mismatch.png').
+            - Comparison of residuals according to the temporal baseline (residuals_tempbaseline.png),
+            - the type of sensor and authors (residuals_author_abs.png,residuals_vy_author.png,residuals_vx_author_abs.png),
+            - and the quality indicators (residuals_quality.png).
+        :param log_scale: [bool] [default is False] --- if True, plot the figure in a log scale
+        '''
         if self.A is None:
             print ('Please provide A inside load')
             return ('Please provide A inside load')

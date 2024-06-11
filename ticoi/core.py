@@ -40,6 +40,8 @@ from ticoi.inversion_functions import construction_a_lf, class_linear_operator, 
 from ticoi.interpolation_functions import reconstruct_common_ref, set_function_for_interpolation, \
     visualisation_interpolation
 
+from typing import List, Optional, Union
+
 warnings.filterwarnings("ignore")
 
 
@@ -145,8 +147,8 @@ def inversion_iteration(data: np.ndarray, A: np.ndarray, dates_range: np.ndarray
 
 
 def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.ndarray | None = None, solver: str = 'LSMR',
-                   regu: int | str = 1, coef: int = 100, weight: bool = False, iteration: bool = True, threshold_it: float = 0.1,
-                   unit: int = 365, conf: bool = False,  mean: list | None = None, detect_temporal_decorrelation: bool = True,
+                   regu: int | str = 1, coef: int = 100, apriori_weight: bool = False, iteration: bool = True, threshold_it: float = 0.1,
+                   unit: int = 365, conf: bool = False, mean: list | None = None, detect_temporal_decorrelation: bool = True,
                    linear_operator: bool = False, result_quality: list | str | None = None, nb_max_iteration: int = 10,
                    visual: bool = True, verbose: bool = False) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
 
@@ -159,7 +161,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
     :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
     :param regu: [int | str] [default is 1] --- Type of regularization
     :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
-    :param weight: [bool] [default is False] --- If True use of aprori weight
+    :param apriori_weight: [bool] [default is False] --- If True use of aprori weight, based on the provided observation errors
     :param iteration: [bool] [default is True] --- If True, use of iterations
     :param threshold_it: [float] [default is 0.1] --- Threshold to test the stability of the results between each iteration, use to stop the process
     :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
@@ -203,11 +205,11 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
 
         # Set a weight of 0, for large temporal baseline in the first inversion
         # 115 µs ± 1.2 µs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-        aprio_weight = np.where(data_values[:, 4] > 200, 0, 1) if detect_temporal_decorrelation else None
+        weight_temporal_decorrelation = np.where(data_values[:, 4] > 200, 0, 1) if detect_temporal_decorrelation else None
         # First weight of the inversion
-        Weightx = weight_for_inversion(weight, conf, data_values, 2, inside_Tukey=False, apriori_weight=aprio_weight)
-        Weighty = weight_for_inversion(weight, conf, data_values, 3, inside_Tukey=False, apriori_weight=aprio_weight)
-        del aprio_weight
+        Weightx = weight_for_inversion(apriori_weight, conf, data_values, 2, inside_Tukey=False, apriori_weight=weight_temporal_decorrelation)
+        Weighty = weight_for_inversion(apriori_weight, conf, data_values, 3, inside_Tukey=False, apriori_weight=weight_temporal_decorrelation)
+        del weight_temporal_decorrelation
         if not visual: data_values = np.delete(data_values, [2, 3],
                                                1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
@@ -592,7 +594,7 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
 
     '''
     :params i, j: [float | int] --- Coordinates of the point in pixel
-    :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
+    :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
     :param regu: [int | str] [default is 1] --- Type of regularization
     :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
     :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
@@ -635,7 +637,7 @@ def process(cube: cube_data_class, i: float | int, j: float | int, path_save, so
         
         # Inversion
         if delete_outliers == 'median_angle': conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-        result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, weight=apriori_weight, unit=unit, conf=conf,
+        result = inversion_core(data[0], i, j, dates_range=data[2], solver=solver, coef=coef, apriori_weight=apriori_weight, unit=unit, conf=conf,
                                 regu=regu, mean=data[1], iteration=iteration, threshold_it=threshold_it,
                                 detect_temporal_decorrelation=detect_temporal_decorrelation, linear_operator=linear_operator,
                                 result_quality=result_quality, nb_max_iteration=nb_max_iteration, visual=visual, verbose=verbose)
@@ -845,18 +847,19 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
 #                               VISUALISATION                                 #
 # =========================================================================%% #
 
-def visualization_core(list_dataf, option_visual, save=False, show=True, path_save=None, A=None, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange']):
+def visualization_core(list_dataf: pd.DataFrame, option_visual: List, save: bool = False, show: bool = True, path_save: Optional[str] = None, A: Optional[np.array] = None, log_scale: bool = False, cmap: str = 'rainbow', colors: List[str] = ['blueviolet', 'orange'],figsize:tuple[int, int] = (10,6)):
     """
-    Visualisa
-    :param list_dataf:
-    :param option_visual:
-    :param save:
-    :param show:
-    :param path_save:
-    :param A:
-    :param log_scale:
-    :param cmap:
-    :param colors:
+    Visualization function for the output of pixel_ticoi
+
+    :param list_dataf: [pd.DataFrame] --- cube dataset
+    :param option_visual: [list] --- list of options for visualization
+    :param save:[bool] [default is False]  --- if True, save the figures
+    :param show: [bool] [default is True]  --- if True, show the figures
+    :param path_save: [str|None] [default is None] --- path where to save the figures
+    :param A: [np.array] [default is None]  --- design matrix
+    :param log_scale: [bool] [default is False]  ---  if True, plot the figures into log scale
+    :param cmap: [str] [default is 'rainbow''] --- color map used in the plots
+    :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :return:
     """
     pixel_object = pixel_class()
@@ -1532,13 +1535,13 @@ def visualisation(data: pd.DataFrame, result: np.ndarray, option_visual: list, p
         print(f'NO DATA')
 
 
-def save_cube_parameters(cube:"ticoi.cube_data_classxr.cube_data_class",load_kwargs:dict,preData_kwargs:dict,inversion_kwargs:dict,returned:list|None=None):
+def save_cube_parameters(cube:"ticoi.cube_data_classxr.cube_data_class",load_kwargs:dict,preData_kwargs:dict,inversion_kwargs:dict,returned:list|None=None)->(str,str):
     """
 
-    :param cube:
-    :param load_kwargs:
-    :param prep_kwargs:
-    :param inversion_kwargs:
+    :param cube: [cube_data_class] --- cube dataset
+    :param load_kwargs: [dict] --- parameters used to load the cube
+    :param prep_kwargs: [dict] --- parameters used to pre the cube
+    :param inversion_kwargs: [dict] --- parameters used to load the cube
     :return:
     """
     sensor_array = np.unique(cube.ds['sensor'])
