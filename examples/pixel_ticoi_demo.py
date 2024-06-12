@@ -29,10 +29,11 @@ from ticoi.cube_data_classxr import cube_data_class
 # proj = 'EPSG:4326'  # EPSG system of the given coordinates
 
 cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_subset.nc' # Path where the Sentinel-2 IGE cubes are stored
+dem_file = '/media/tristan/Data3/Hala_lake/Landsat8/hala_cop30_utm_30m.tif'
 proj = 'EPSG:32647'  # EPSG system of the given coordinates
 
 i, j = 396343, 4259420# Point (pixel) where to carry on the computation
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/{i}-{j}-test-vvc2/' # Path where to store the results
+path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/{i}-{j}-test-vvc_15/' # Path where to store the results
 
 ## --------------------------- Main parameters ----------------------------- ##
 #For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
@@ -75,6 +76,7 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                   'delete_outliers': delete_outlier, # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
                   'flag': None, # Divide the data in several areas where different methods should be used
+                  'dem_file': dem_file, # Path to the DEM file for calculating the slope and aspect
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
                   'solver': 'LSMR_ini', # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates

@@ -16,11 +16,15 @@ import itertools
 import warnings
 import time
 import geopandas
+import rasterio as rio
+import richdem as rd
 import pandas as pd
 from pyproj import Proj, Transformer, CRS
+from scipy.ndimage import median_filter
 from datetime import date
 from dask.diagnostics import ProgressBar
 from rasterio.features import rasterize
+import rasterio.warp
 from ticoi.mjd2date import mjd2date
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
@@ -901,7 +905,7 @@ class cube_data_class:
     # =====================================================================%% #
 
     
-    def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None):
+    def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None, slope: xr.Dataset | None = None, aspect: xr.Dataset | None = None,):
         
         '''
         Delete outliers according to a certain criterium.
@@ -915,7 +919,7 @@ class cube_data_class:
         else:
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
             axis = self.ds['vx'].dims.index('mid_date')
-            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, axis=axis)
+            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope, aspect=aspect, axis=axis)
             
             if flag is not None:
                 if delete_outliers != 'vvc_angle':
@@ -1005,11 +1009,47 @@ class cube_data_class:
                         y=(["y"], self.ds.y.data),))
         
         return flag
+    
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5):
 
+        with rio.open(dem_file) as src:
+            dem = src.read(1)
+        
+        dem_warped = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
+        
+        dem_warped, _ = rio.warp.reproject(
+            source=dem,
+            destination=dem_warped,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_crs=CRS.from_proj4(self.ds.proj4),
+            dst_transform=self.ds.rio.transform(),
+            dst_shape=self.ds.rio.shape,
+            resampling=rio.warp.Resampling.bilinear,
+        )
+
+        dem_warped = median_filter(dem_warped, size=blur_size)
+
+        dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
+        dem_rd.geotransform = self.ds.rio.transform().to_gdal()
+
+        slope = rd.TerrainAttribute(dem_rd, attrib='slope_degrees')
+        aspect = rd.TerrainAttribute(dem_rd, attrib='aspect')
+        
+        slope[slope == slope.no_data] = np.nan
+        aspect[aspect == aspect.no_data] = np.nan
+        
+        slope = xr.Dataset(data_vars=dict(slope=(["y", "x"], np.array(slope)),),
+                          coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)))
+        aspect = xr.Dataset(data_vars=dict(aspect=(["y", "x"], np.array(aspect)),),
+                          coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)))
+        
+        return slope, aspect
+        
     def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
                     s_win: int = 3, t_win: int = 90, sigma: int = 3, order: int = 3, unit: int = 365, 
-                    delete_outliers: str | float | None = None, flag: xr.Dataset | str | None = None, regu: int | str = 1, 
-                    solver: str = 'LSMR_ini', proj: str = "EPSG:4326", velo_or_disp: str = "velo",
+                    delete_outliers: str | float | None = None, flag: xr.Dataset | str | None = None, dem_file: str | None = None,
+                    regu: int | str = 1, solver: str = 'LSMR_ini', proj: str = "EPSG:4326", velo_or_disp: str = "velo",
                     select_baseline: int | None = None, verbose: bool = False) -> xr.Dataset:
 
         '''
@@ -1125,8 +1165,15 @@ class cube_data_class:
                 regu = list(regu.split())
         
         start = time.time()
-        if delete_outliers is not None: 
-            self.delete_outliers(delete_outliers=delete_outliers, flag=flag)
+        if delete_outliers is not None:
+            slope, aspect = None, None
+            if delete_outliers == 'topo_angle':
+                if isinstance(dem_file, str):
+                    slope, aspect = self.compute_slo_asp(dem_file=dem_file)
+                else:
+                    raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
+            
+            self.delete_outliers(delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect)
             if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
