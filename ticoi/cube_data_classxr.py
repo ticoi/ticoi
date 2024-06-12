@@ -602,6 +602,11 @@ class cube_data_class:
             }
 
         self.__init__()
+
+        self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+        time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
+        var_name = "vx" if not self.is_TICO else "dx"
+
         with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks       
             if filepath.split(".")[-1] == "nc":
                 try:
@@ -613,10 +618,6 @@ class cube_data_class:
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
-                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
-                var_name = "vx" if not self.is_TICO else "dx"
-
                 if chunks == {}: # Rechunk with optimal chunk size
                     tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
                     self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
@@ -626,7 +627,6 @@ class cube_data_class:
                         chunks = "auto" # Change the default value to auto
 
                     self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
-                    time_dim = 'mid_date'
                     var_name = 'vx'
 
             if verbose:
@@ -645,7 +645,6 @@ class cube_data_class:
                                     pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
 
             # Rechunk again if the size of the cube is changed:
-            time_dim = 'mid_date' if not self.is_TICO else 'date2'
             if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
                 tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
                 self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
@@ -1544,13 +1543,13 @@ class cube_data_class:
 
         # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
         second_date_list = list(set(list(
-            itertools.chain.from_iterable([df['date2'].values for df in df_list if not np.isnan(df['dx'].iloc[0])]))))
+            itertools.chain.from_iterable([df['Second_date'].values for df in df_list if not np.isnan(df['dx'].iloc[0])]))))
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
         df_list2 = []
         for i, df in enumerate(df_list):
-            df.index = df['date2']
+            df.index = df['Second_date']
             df_list2.append(df.reindex(second_date_list))
         del df_list
 
@@ -1567,10 +1566,10 @@ class cube_data_class:
             result_arr = np.array(
                 [df_list2[i][var] for i in range(len(df_list2))])
             result_arr = result_arr.reshape((self.nx, self.ny, len(second_date_list)))
-            cubenew.ds[var] = xr.DataArray(result_arr, dims=['x', 'y', 'date2'],
+            cubenew.ds[var] = xr.DataArray(result_arr, dims=['x', 'y', 'second_date'],
                                            coords={'x': self.ds['x'], 'y': self.ds['y'],
-                                                   'date2': second_date_list})
-            cubenew.ds[var] = cubenew.ds[var].transpose('date2', 'y', 'x')
+                                                   'second_date': second_date_list})
+            cubenew.ds[var] = cubenew.ds[var].transpose('second_date', 'y', 'x')
             cubenew.ds[var].attrs = {'standard_name': short_name[i], 'unit': unit[i], 'long_name': long_name[i]}
 
         cubenew.ds['grid_mapping'] = self.ds.proj4
@@ -1581,7 +1580,7 @@ class cube_data_class:
                             'history': f'Created on the {date.today()}'}
         cubenew.nx = self.nx
         cubenew.ny = self.ny
-        cubenew.nz = cubenew.ds.dims['date2']
+        cubenew.nz = cubenew.ds.dims['second_date']
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
