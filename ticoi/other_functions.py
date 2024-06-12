@@ -93,8 +93,8 @@ def find_granule_by_point(input_dict, input_point):  # [lon,lat]
 # =========================================================================%% #
 
 def RMSE_TICOI_GT(data: list, mean: list | None, dates_range: np.ndarray | None, data_gt: pd.DataFrame, i: float | int, 
-                  j: float | int, coef: int, inversion_kwargs: dict, interpolation_kwargs: dict, unit : int = 365,
-                  visual: bool = False, plot_raw: bool = False, vminmax: list | None = None, savedir: str | None = None):
+                  j: float | int, coef: int, inversion_kwargs: dict, interpolation_kwargs: dict, regu: int | str | None = None, 
+                  unit : int = 365, visual: bool = False, plot_raw: bool = False, vminmax: list | None = None, savedir: str | None = None):
     
     '''
     Compute the RMSE between TICOI results with a given coefficient and "ground truth" data.
@@ -117,7 +117,11 @@ def RMSE_TICOI_GT(data: list, mean: list | None, dates_range: np.ndarray | None,
     '''
     
     # Proceed to inversion
-    A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, coef=coef, **inversion_kwargs)
+    if regu is None:
+        A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, coef=coef, **inversion_kwargs)
+    else:
+        A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, coef=coef, regu=regu, **inversion_kwargs)
+    
     if not visual or not plot_raw:
         del data
     del dates_range, mean
@@ -189,8 +193,8 @@ def RMSE_TICOI_GT(data: list, mean: list | None, dates_range: np.ndarray | None,
     return RMSE
 
 def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | int, j: float | int, obs_filt: xr.Dataset, 
-                  load_pixel_kwargs: dict, inversion_kwargs: dict, interpolation_kwargs: dict,
-                  cmin: int = 10, cmax: int = 1000, step: int = 10, coefs : list | None = None, 
+                  load_pixel_kwargs: dict, inversion_kwargs: dict, interpolation_kwargs: dict, regu: dict | None = None,
+                  flags: xr.DataArray | None = None, cmin: int = 10, cmax: int = 1000, step: int = 10, coefs : list | None = None, 
                   stats: bool = False, **visual_options):
     
     '''
@@ -203,6 +207,8 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
     :param load_pixel_kwargs: [dict] --- Pixel loading parameters
     :param inversion_kwargs: [dict] --- Inversion parameters
     :param interpolation_kwargs: [dict] --- Parameters for the interpolation to GT dates (less parameters than for core interpolation)
+    :parma regu: [dict | None] [default is None] --- Must be a dictionnary if flags is not None, otherwise the regularisation method must be passed in the kwargs
+    :param flags: [xr dataarray | None] [default is None] --- Divide the cube in several areas where the coefficient is optimized independantly
     :param cmin: [int] [default is 10] --- If coefs=None, start point of the range of coefs to be tested
     :param cmax: [int] [default is 1000] --- If coefs=None, stop point of the range of coefs to be tested
     :param step: [int] [default is 10] --- If coefs=None, step for the range of coefs to be tested
@@ -214,14 +220,20 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
     '''
     
     # Load data at pixel
-    data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
+    if flags is not None:
+        if 'regu' in inversion_kwargs.keys(): 
+            inversion_kwargs.pop('regu')
+        data, mean, dates_range, regu, _  = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs, flags=flags)
+    else:
+        data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
+        regu = None
     dataf = pd.DataFrame(data={'date1': data[0][:, 0], 'date2': data[0][:, 1],
-                              'vx': data[1][:, 0], 'vy': data[1][:, 1],
-                              'errorx': data[1][:, 2], 'errory': data[1][:, 3],
-                              'temporal_baseline': data[1][:, 4]})
+                               'vx': data[1][:, 0], 'vy': data[1][:, 1],
+                               'errorx': data[1][:, 2], 'errory': data[1][:, 3],
+                               'temporal_baseline': data[1][:, 4]})
     
     # Load ground truth pixel and convert to pd dataframe
-    data_gt, _, _ = cube_gt.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
+    data_gt = cube_gt.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)[0]
     data_gt = pd.DataFrame(data={'date1': data_gt[0][:, 0], 'date2': data_gt[0][:, 1],
                                  'vx': data_gt[1][:, 0], 'vy': data_gt[1][:, 1],
                                  'errorx': data_gt[1][:, 2], 'errory': data_gt[1][:, 3],
@@ -234,19 +246,21 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
     # Must have enough data to make an interpolation
     if data_gt.shape[0] == 0 and data[0].shape[0] <= 2:
         if stats:
-            return pd.DataFrame({'coefs':[], 'RMSEs':[], 'nb_data':[], 'temporal_baseline':[], 'std':[], 'mean_v':[], 'position':[]}) 
-        return pd.DataFrame({'coefs':[], 'RMSEs':[]})
+            return None
+        return None
     
     # Coefficients to be tested
     if coefs is None:
         coefs = np.arange(cmin, cmax+1, step)
+    else:
+        coefs = np.array(coefs)
         
     # Compute RMSE for every coefficient
-    RMSEs = [RMSE_TICOI_GT(data, mean, dates_range, data_gt, i, j, coef, inversion_kwargs, interpolation_kwargs, **visual_options) for coef in coefs]
+    RMSEs = [RMSE_TICOI_GT(data, mean, dates_range, data_gt, i, j, coef, inversion_kwargs, interpolation_kwargs, regu=regu, **visual_options) for coef in coefs]
     
     if stats:
-        # Statistics on raw and GT data
-        nb_data = (dataf.shape[0], data_gt.shape[0]) # Amount of data in each dataset
+        # Average temporal baseline
+        temporal_baseline = (dataf['temporal_baseline'].mean(), data_gt['temporal_baseline'].mean())
         # Mean of similar data (same acquisition dates) of raw and GT data
         mean_raw = dataf.groupby(['date1', 'date2'], as_index=False)[['vx', 'vy', 'errorx', 'errory']].mean()[['vx', 'vy']].mean()
         mean_gt = data_gt.groupby(['date1', 'date2'], as_index=False)[['vx', 'vy', 'errorx', 'errory']].mean()[['vx', 'vy']].mean()
@@ -256,15 +270,16 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
         # Standard deviation of raw and GT data
         std_raw_all = dataf[['vx', 'vy']].std(ddof=0)
         std_gt_all = data_gt[['vx', 'vy']].std(ddof=0)
-        temporal_baseline = (dataf['temporal_baseline'].mean(), data_gt['temporal_baseline'].mean()) # Average temporal baseline
         
-        return pd.DataFrame({'coefs': coefs,
-                             'RMSEs': RMSEs,
-                             'nb_data':[nb_data for _ in range(len(coefs))],
-                             'temporal_baseline':[temporal_baseline for _ in range(len(coefs))],
-                             'std': [(std_raw['vx'], std_raw['vy'], std_gt['vx'], std_gt['vy']) for _ in range(len(coefs))],
-                             'std_all': [(std_raw_all['vx'], std_raw_all['vy'], std_gt_all['vx'], std_gt_all['vy']) for _ in range(len(coefs))],
-                             'mean_v': [(mean_raw['vx'], mean_raw['vy'], mean_gt['vx'], mean_gt['vy']) for _ in range(len(coefs))],
-                             'position': [(i, j) for _ in range(len(coefs))]})
+        return xr.DataArray(data=RMSEs,
+                            attrs={'regu': inversion_kwargs['regu'] if flags is None else regu,
+                                   'nb_data': (dataf.shape[0], data_gt.shape[0]),
+                                   'mean_temporal_baseline': temporal_baseline,
+                                   'mean_v_similar_data': (mean_raw['vx'], mean_raw['vy'], mean_gt['vx'], mean_gt['vy']),
+                                   'std_v_similar_data': (std_raw['vx'], std_raw['vy'], std_gt['vx'], std_gt['vy']),
+                                   'std_raw_data': (std_raw_all['vx'], std_raw_all['vy'], std_gt_all['vx'], std_gt_all['vy'])})
     
-    return pd.DataFrame({'coefs': coefs, 'RMSEs': RMSEs})
+    # return pd.DataFrame({'coefs': coefs, 'RMSEs': RMSEs})
+    return xr.DataArray(data=RMSEs, 
+                        attrs={'regu': inversion_kwargs['regu'] if flags is None else regu,
+                               'nb_data': (dataf.shape[0], data_gt.shape[0])})

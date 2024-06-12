@@ -24,7 +24,7 @@ from ticoi.cube_data_classxr import cube_data_class
 
 ####  Selection of data
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results", "pixel"))}/'  # Path where to stored the results
 i, j = -138.18069, 60.29076
 proj = 'EPSG:4326'  # EPSG system of the given coordinates
 

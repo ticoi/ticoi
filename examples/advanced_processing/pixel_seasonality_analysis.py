@@ -33,7 +33,7 @@ from ticoi.cube_data_classxr import cube_data_class
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/pixel/' # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation

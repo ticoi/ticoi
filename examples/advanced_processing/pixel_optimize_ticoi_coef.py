@@ -30,7 +30,7 @@ warnings.filterwarnings('ignore')
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
 # Path to the "ground truth" cube used to optimize the regularisation
 cube_gt_name = 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc' 
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/optimize_coef/' # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel", "optimize_coef"))}/' # Path where to store the results
 proj = 'EPSG:32632' # EPSG system of the given coordinates
 
 i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation
@@ -140,7 +140,7 @@ cube_gt = cube_data_class()
 cube_gt.load(cube_gt_name, **load_kwargs)
 
 stop = [time.time()]
-print(f'[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s')
+print(f'[Data loading] Loading the data cube.s took {round((stop[-1] - start[-1]), 4)} s')
 print(f'[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ')
 print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})')
 
@@ -150,7 +150,7 @@ start.append(time.time())
 obs_filt = cube.filter_cube(**preData_kwargs)
 
 stop.append(time.time())
-print(f'[Data loading] Filtering the cube took {round((stop[1] - start[1]), 4)} s')
+print(f'[Data loading] Filtering the cube took {round((stop[-1] - start[-1]), 4)} s')
 
 
 # %%========================================================================= #
@@ -165,7 +165,7 @@ result = optimize_coef(cube, cube_gt, i, j, obs_filt, load_pixel_kwargs, inversi
                        plot_raw=plot_raw, vminmax=vminmax, savedir=savedir)
 
 stop.append(time.time())
-print(f'[Coef optimization] Coefficient optimization took {round((stop[1] - start[1]), 1)} s')
+print(f'[Coef optimization] Coefficient optimization took {round((stop[-1] - start[-1]), 1)} s')
 
 
 # %%========================================================================= #
@@ -190,6 +190,7 @@ good_coefs = coefs[RMSEs < good_RMSE]
 
 if verbose: 
     print(f'[Coef optimization] Best RMSE {best_RMSE} obtained for coef = {best_coef}')
+    print(f'[Coef optimization] Good RMSE {good_RMSE} obtained for coef in [{np.min(good_coefs)}, {np.max(good_coefs)}]')
 
 # Plot result
 fig, ax = plt.subplots(figsize=(12, 6))

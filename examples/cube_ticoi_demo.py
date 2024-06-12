@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore")
 # Choose the TICOI cube processing method you want to use :
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
-# than every other TICOI processing methods.
+# than the 'direct_process' method.
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal, 
 # there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it 
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
@@ -50,11 +50,11 @@ save_mean_velocity = True # Save a .tiff file with the mean resulting velocities
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
-result_fn = 'test'# Name of the netCDF file to be created
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results", "cube"))}/'  # Path where to stored the results
+result_fn = 'Argentiere_example'# Name of the netCDF file to be created
 
-proj = 'EPSG:3413'  # EPSG system of the given coordinates
+proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion
@@ -69,9 +69,8 @@ load_kwargs = {'chunks': {},
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
-               'verbose': False # Print information throughout the loading process 
-               }
-
+               'verbose': False} # Print information throughout the loading process 
+               
 ## ----------------------- Data preparation parameters --------------------- ##
 #For the folling parts we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
@@ -92,8 +91,7 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'solver': 'LSMR_ini', # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
                   'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-                  'verbose': True # Print information throughout the filtering process 
-                  }
+                  'verbose': True} # Print information throughout the filtering process 
 
 ## ---------------- Inversion and interpolation parameters ----------------- ##
 inversion_kwargs = {'coef': coef, # Regularization coefficient.s to be used (for each flag if flags is not None)
@@ -115,8 +113,8 @@ inversion_kwargs = {'coef': coef, # Regularization coefficient.s to be used (for
                     'result_quality': 'X_contribution', # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
                     'visual': False, # Plot results along the way
                     'path_save': path_save, # Path where to store the results
-                    'verbose': False # Print information throughout TICOI processing
-                    }
+                    'verbose': False} # Print information throughout TICOI processing
+                    
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 12 # Number of CPU to be used for parallelization
 block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method

@@ -839,8 +839,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
 
     # /!\ The use of asyncio can cause problems when the code is launched from an IDE if it has its own event loop
     # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
-    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs, 
-                                           inversion_kwargs=inversion_kwargs, verbose=verbose))
+    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, verbose=verbose))
 
 
 # %% ======================================================================== #

@@ -29,6 +29,7 @@ from scipy.optimize import curve_fit
 
 from ticoi.core import process_blocks_refine, process
 from ticoi.cube_data_classxr import cube_data_class
+from ticoi.interpolation_functions import prepare_interpolation_date
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
@@ -40,7 +41,7 @@ warnings.filterwarnings("ignore")
 # Choose the TICOI cube processing method you want to use :
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
-# than every other TICOI processing methods.
+# than the 'direct_process' method.
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal, 
 # there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it 
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
@@ -57,23 +58,24 @@ save_mean_velocity = True # Save a .tiff file with the mean reulting velocities,
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/Argentiere_example_interp.nc'}
 flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc' # Path to flags file
 mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/' # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
 assign_flag = True
-flags = None
 if assign_flag:
     flags = xr.open_dataset(flag_file)
     flags.load()
+else:
+    flags = None
 
 # Regularization method.s to be used (for each flag if flags is not None)
 regu = {0: 1, 1: '1accelnotnull'} # With flags (0: stable ground, 1: glaciers)
@@ -82,12 +84,6 @@ regu = {0: 1, 1: '1accelnotnull'} # With flags (0: stable ground, 1: glaciers)
 coef = {0: 500, 1: 200} # With flags (0: stable ground, 1: glaciers)
 # coef = 200 # Without flags
 solver = 'LSMR_ini' # Solver for the inversion
-
-# What results must be returned from TICOI processing (not used for TICOI_process='load')
-#   - 'raw' for loading raw data at pixels too
-#   - 'invert' for the results of the inversion
-#   - 'interp' for the results of the interpolation
-returned = ['invert', 'interp']
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
@@ -102,13 +98,13 @@ load_kwargs = {'chunks': {},
                'verbose': False} # Print information throughout the loading process
                
 ## ----------------------- Data preparation parameters --------------------- ##
-preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+preData_kwargs = {'smooth_method': 'savgol', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
                   's_win': 3, # Size of the spatial window
                   't_win': 90, # Time window size for 'ewma' smoothing
                   'sigma': 3, # Standard deviation for 'gaussian' filter
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': 'median_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
+                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
                   'flags': flags, # Divide the data in several areas where different methods should be used
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                   'solver': solver, # Solver for the inversion
@@ -176,14 +172,9 @@ start.append(time.time())
 
 # Load the cube.s
 cube = cube_data_class()
+cube.load(cube_name if TICOI_process != 'load' else cube_name['raw'], **load_kwargs)
 
-if TICOI_process == 'load': 
-    assert 'raw' in cube_name.keys(), "'raw' data must be loaded by giving the associated path in cube_name"
-    cube.load(cube_name['raw'], **load_kwargs)
-else:
-    cube.load(cube_name, **load_kwargs)
-
-# Load raw data at pixels if required
+# Load raw data at pixels if required
 if TICOI_process == 'load':
     print('[Data loading] Loading raw data...')
     data_raw = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
@@ -193,11 +184,7 @@ if TICOI_process == 'load':
                                     'temporal_baseline': raw[0][1][:, 4]}) for raw in data_raw]
 
 # Prepare interpolation dates
-cube_date1 = cube.date1_().tolist()
-cube_date1.remove(np.min(cube_date1))
-first_date_interpol = np.min(cube_date1)
-last_date_interpol = np.max(cube.date2_())
-
+first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 stop.append(time.time())
@@ -216,7 +203,7 @@ cube_interp, cube_invert = None, None
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
 if TICOI_process == 'block_process':
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, 
+    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw', 'interp'], 
                                    preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
 
 # Direct computation of the whole TICOI cube
@@ -229,27 +216,28 @@ elif TICOI_process == 'direct_process':
     xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
     
     # Main processing of the data with TICOI algorithm, individually for each pixel
-    result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(process)(cube, i, j, returned=returned, obs_filt=obs_filt,
+    result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(process)(cube, i, j, returned=['raw', 'interp'], obs_filt=obs_filt,
                                                                  **inversion_kwargs) for i, j in xy_values_tqdm)
 
 elif TICOI_process == 'load':    
-    # Load inversion results
-    if 'invert' in cube_name.keys():
-        cube_invert = cube_data_class()
-        cube_invert.load(cube_name['invert'], **load_kwargs)
-        
-    # Load interpolation results
-    if 'interp' in cube_name.keys():
-        cube_interp = cube_data_class()
-        cube_interp.load(cube_name['interp'], **load_kwargs)
-        
-        print('[TICOI processing] Loading TICOI data...')
-        result = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
-        result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
-                                     'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
-                                     'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
-                                     'temporal_baseline': r[0][1][:, 4]}) for r in result]
-            
+    cube_interp = cube_data_class()
+    cube_interp.load(cube_name['interp'], **load_kwargs)
+    
+    print('[TICOI processing] Loading TICOI data...')
+    result = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned='raw', inversion_kwargs=inversion_kwargs)
+    result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
+                                    'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
+                                    'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
+                                    'temporal_baseline': r[0][1][:, 4]}) for r in result]
+
+if TICOI_process == 'block_process' or TICOI_process == 'direct_process':
+    # Raw data
+    data_raw = [pd.DataFrame(data={'date1': r[0][0][0][:, 0], 'date2': r[0][0][0][:, 1],
+                                   'vx': r[0][0][1][:, 0], 'vy': r[0][0][1][:, 1],
+                                   'errorx': r[0][0][1][:, 2], 'errory': r[0][0][1][:, 3],
+                                   'temporal_baseline': r[0][0][1][:, 4]}) for r in result]
+    result = [r[1] for r in result] # Result of the interpolation
+
 stop.append(time.time())
 print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s')
 
@@ -258,7 +246,8 @@ print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "
 #                                INITIALISATION                               #
 # =========================================================================%% #
 
-if TICOI_process != 'load':    
+returned = ['raw', 'interp']
+if TICOI_process != 'load':
     # Write down some informations about the data and the TICOI processing performed
     if save:
         start.append(time.time())
@@ -291,19 +280,10 @@ if TICOI_process != 'load':
 
 start.append(time.time())
 if TICOI_process != 'load':
-    # Save TICO.I results to a netCDF file, thus obtaining a new data cube    
-    several = (type(returned) == list and len(returned) >= 2)
+    # Save TICOI results to a netCDF file, thus obtaining a new data cube    
     j = 1 if 'raw' in returned else 0
-    if 'invert' in returned:
-        cube_invert = cube.write_result_tico([result[i][j] for i in range(len(result))] if several else result, source, sensor, 
-                                             filename=f'{result_fn}_invert' if several else result_fn, 
-                                             savepath=path_save if save else None, 
-                                             result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
-    if 'interp' in returned:
-        cube_interp = cube.write_result_ticoi([result[i][j+1] for i in range(len(result))] if several else result, source_interp, sensor, 
-                                              filename=f'{result_fn}_interp' if several else result_fn, 
-                                              savepath=path_save if save else None, 
-                                              result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
+    cube_interp = cube.write_result_ticoi(result, source_interp, sensor, filename=f'{result_fn}_interp', savepath=path_save if save else None, 
+                                          result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
 
 # Plot the mean velocity as an example
 if save_mean_velocity and cube_interp is not None:    
@@ -338,7 +318,7 @@ if TICOI_process != 'load':
 # %%========================================================================= #
 #                               PERIODICITY MAPS                              #
 # =========================================================================%% #
-# Match a sinus to the data (frequency which can be fixed to 1/365.25, amplitude, phase which gives the date of the f)
+# Match a sinus to the data (frequency which can be fixed to 1/365.25, amplitude, phase which gives the date of the f)
 
 start.append(time.time())
 
@@ -458,8 +438,8 @@ def AtoVar(A, raw, dataf_lp, local_var_method='uniform_7d'):
     elif local_var_method == 'residu':
         dataf_lp.index = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2
         dataf_lp['vv'] = np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
-        dataf_lp = dataf_lp.reindex(index=np.unique(dataf.index)).interpolate().dropna()
-        dataf = dataf[dataf.index >= dataf_lp.index[0]]
+        dataf_lp = dataf_lp.reindex(index=np.unique(raw.index)).interpolate().dropna()
+        dataf = raw[raw.index >= dataf_lp.index[0]]
         dataff_vv_c = dataf['vv'] - dataf_lp['vv']
         var = dataff_vv_c.std(ddof=0)
       
@@ -477,12 +457,10 @@ usefull_data_raw = [data_raw[i] for i in empty]
 
 # Coordinates informations
 resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
-longitude = np.array([positions[i][0] for i in range(len(positions))])
-latitude = np.array([positions[i][1] for i in range(len(positions))])
-long_data = (longitude - np.min(cube.ds['x'].values)).astype(int) // resolution
-lat_data = (latitude - np.min(cube.ds['y'].values)).astype(int) // resolution
+long_data = (positions[:, 0] - np.min(cube.ds['x'].values)).astype(int) // resolution
+lat_data = (positions[:, 1] - np.min(cube.ds['y'].values)).astype(int) // resolution
 
-####  Best matching sinus map (amplitude and phase, and period if not fixed)
+##  Best matching sinus map (amplitude and phase, and period if not fixed)
 print('[Fourier analysis] Computing periodicity map...')
 if not impose_frequency:
     period_map = np.empty([cube.nx, cube.ny])

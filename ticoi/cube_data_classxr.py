@@ -557,7 +557,7 @@ class cube_data_class:
         """        
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
         
-        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
+        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
         :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays.
                                   chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays,
                                   chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
@@ -574,7 +574,7 @@ class cube_data_class:
 
         assert type(filepath) == list or type(filepath) == str, (f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}.")
 
-        if type(filepath) == list: # Merge several cubes
+        if type(filepath) == list: # Merge several cubes
             self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
                       proj=proj, mask=mask, verbose=verbose)
 
@@ -1071,7 +1071,7 @@ class cube_data_class:
         start = time.time()
         if delete_outliers is not None: 
             self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
-            if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
+            if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
 
         if ("1accelnotnull" in regu or "directionxy" in regu):
             date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)],
