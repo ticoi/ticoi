@@ -121,7 +121,7 @@ def construction_a_lf(dates: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
 #                             WEIGHT                                          #
 # =========================================================================%% #
 def weight_for_inversion(weight_origine: bool, conf: bool, data: np.ndarray, pos: int, inside_Tukey: bool = False,
-                         apriori_weight: np.ndarray | None = None) -> np.ndarray:
+                         temporal_decorrelation: np.ndarray | None = None) -> np.ndarray:
     """
     Initialisation of the weights
 
@@ -130,7 +130,7 @@ def weight_for_inversion(weight_origine: bool, conf: bool, data: np.ndarray, pos
     :param data:the data array
     :param pos: the position of the variable dx or dy
     :param inside_Tukey: if True the weight will be injected inside the Tukey biweight function
-    :param apriori_weight: apriori weight, for examples a list of 0 and 1 to detect temporal decorrelation
+    :param temporal_decorrelation: apriori weight, for examples a list of 0 and 1 to detect temporal decorrelation
 
     :return Weight: np array of the initial weights
     """
@@ -148,15 +148,15 @@ def weight_for_inversion(weight_origine: bool, conf: bool, data: np.ndarray, pos
             # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
             Weight = TukeyBiweight(Weight, 4.685)
 
-        if apriori_weight is not None:
-            Weight = np.multiply(apriori_weight, Weight)
+        if temporal_decorrelation is not None:
+            Weight = np.multiply(temporal_decorrelation, Weight)
 
     # Apriori weights (ex : detection of temporal decorrelation)
-    elif apriori_weight is not None:
-        Weight = apriori_weight
-
-    # If no apriori knowledge, identity matrix
-    else:
+    elif temporal_decorrelation is not None:
+        Weight = temporal_decorrelation
+    elif weight_origine == True:
+        Weight = data[:, pos]
+    else: # If no apriori knowledge, identity matrix
         Weight = np.ones(data.shape[0])
 
     return Weight

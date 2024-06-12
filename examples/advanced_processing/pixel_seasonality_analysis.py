@@ -242,7 +242,7 @@ if not os.path.exists(f'{path_save}Fourier/'):
     
 dataf_lp = dataf_lp.dropna()
 
-dates_c = dataf_lp['date1'] + (dataf_lp['Second_date'] - dataf_lp['date1']) // 2
+dates_c = dataf_lp['date1'] + (dataf_lp['date2'] - dataf_lp['date1']) // 2
 dates = (dates_c - dataf_lp['date1'].min()).dt.days.to_numpy()
 vv = np.sqrt(dataf_lp['vx']**2 + dataf_lp['vy']**2).to_numpy()
 vv_c = vv - np.mean(vv)
@@ -364,7 +364,7 @@ plt.plot(dataff.index, dataff['vv'], linestyle='', marker='x', markersize=2, col
 plt.plot(dates_c, vv, 'black', alpha=0.5, label='TICOI velocities')
 plt.plot(dates_c, vv_filt + np.mean(vv), 'red', alpha=0.7, label='Filtered TICOI velocities')
 plt.plot(dates_c, sine + np.mean(vv), 'cyan', linewidth=3, label='Best matching sinus')
-plt.vlines(pd.date_range(start=first_max_day, end=dataf_lp['Second_date'].max(), freq=f'{int(1/f)}D'), 
+plt.vlines(pd.date_range(start=first_max_day, end=dataf_lp['date2'].max(), freq=f'{int(1/f)}D'), 
                          np.min(vv), np.max(vv), 'black', label='Maximum')
 plt.xlabel('Central dates', fontsize=16)
 plt.ylabel('Velocity', fontsize=16)
@@ -392,7 +392,7 @@ elif local_var_method.split('_')[0] == 'uniform':
     var = local_var[local_var > 0].dropna().median()  
     
 elif local_var_method == 'residu':
-    dataf_lp.index = dataf_lp['date1'] + (dataf_lp['Second_date'] - dataf_lp['date1']) // 2
+    dataf_lp.index = dataf_lp['date1'] + (dataf_lp['date2'] - dataf_lp['date1']) // 2
     dataf_lp['vv'] = np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
     dataf_lp = dataf_lp.reindex(index=np.unique(dataff.index)).interpolate().dropna()
     dataff = dataff[dataff.index >= dataf_lp.index[0]]

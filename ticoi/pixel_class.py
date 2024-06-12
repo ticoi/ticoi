@@ -5,6 +5,9 @@ import copy
 import seaborn as sns
 from typing import List, Optional, Union
 
+import ticoi.pixel_class
+
+
 class dataframe_data():
     '''
     Object to define a pd.Dataframe storing velocity observations
@@ -64,6 +67,7 @@ class pixel_class():
                  A: Optional[np.array] = None,dataobs: Optional[pd.DataFrame] = None):
         self.dataobs = dataobs #observation data
         self.datainvert = None #results from the inversion, tico data
+        self.datainterp = None  # results from the inversion, tico data
         self.save = save #if True, the figures are saved
         self.show = show #if True, the figures are plotted
         self.path_save = path_save #path where to store the data
@@ -71,20 +75,7 @@ class pixel_class():
         self.unit = unit #unit wanted for plotting
         self.A = A #design matrix
 
-
-    def set_obs_data_from_pandas_df(self, dataf_obs:pd.DataFrame, variables: List[str] = ['vv']):
-        '''
-
-        :param dataf_obs: [pd.DataFrame] --- observations dataframe
-        :param variables: [List[str]] [default is ['vv'] --- list of variable to plot
-        :return:
-        '''
-        self.dataobs = dataframe_data(dataf_obs)
-        self.dataobs.set_temporal_baseline_central_date_offset_bar()
-        if 'vv' in variables:  self.dataobs.set_vv()
-        self.dataobs.set_minmax()
-
-    def set_ilf_results_from_pandas_df(self, dataf_ilf:pd.DataFrame, conversion:int=365, variables: List[str] = ['vv']):
+    def set_data_from_pandas_df(self, dataf_ilf:pd.DataFrame, type_data:str = 'invert', conversion:int=365, variables: List[str] = ['vv']):
         '''
 
         :param dataf_ilf: [pd.DataFrame] --- results from the inversion
@@ -93,11 +84,22 @@ class pixel_class():
         :return:
         '''
 
-        self.datainvert = dataframe_data(dataf_ilf)
-        self.datainvert.set_temporal_baseline_central_date_offset_bar()  #set the temporal baseline,
-        self.datainvert.set_vx_vy_invert(conversion) #convert displacement in vx and vy
-        if 'vv' in variables:  self.datainvert.set_vv()
-        self.datainvert.set_minmax()
+        if type_data == 'invert':
+            self.datainvert = dataframe_data(dataf_ilf)
+            datatemp = self.datainvert
+        elif type_data == 'interp':
+            self.datainterp = dataframe_data(dataf_ilf)
+            datatemp = self.datainterp
+        elif type_data == 'obs':
+            self.dataobs = dataframe_data(dataf_ilf)
+            datatemp = self.dataobs
+        else: raise ValueError ('Please enter invert for inverted results and obs for observation')
+
+
+        datatemp.set_temporal_baseline_central_date_offset_bar()  #set the temporal baseline,
+        if type_data == 'invert': datatemp.set_vx_vy_invert(conversion) #convert displacement in vx and vy
+        if 'vv' in variables:  datatemp.set_vv()
+        datatemp.set_minmax()
 
     def load(self,dataf:pd.DataFrame, type_data:str = 'obs',dataformat:str ='df',save:bool=False,show:bool=False,figsize:tuple[int, int] = (10,6),unit:str='m/y',path_save:str='',variables: List[str] = ['vv','vx','vy'],A:Optional[np.array]=None):
         '''
@@ -116,7 +118,7 @@ class pixel_class():
         '''
         self.__init__(save=save,show=show,figsize=figsize,unit=unit,path_save=path_save,A=A)
 
-        if  isinstance(dataf, list): self.load_two_dataset(dataf,dataformat=dataformat,variables=variables)
+        if  isinstance(dataf, list): self.load_several_dataset(dataf, dataformat=dataformat, variables=variables,list_data_type=type_data)
         else: self.load_one_dataset(dataf,dataformat=dataformat,type_data=type_data,variables=variables)
 
     def load_one_dataset(self,dataf:pd.DataFrame, type_data:str = 'obs',dataformat:str ='df',variables: List[str]  = ['vv','vx','vy']):
@@ -129,34 +131,33 @@ class pixel_class():
         '''
 
         conversion = self.get_conversion()
-        if type_data == 'obs':
-            if dataformat == 'df': self.set_obs_data_from_pandas_df(dataf, variables=variables)
-        elif type_data == 'invert':
-            if dataformat == 'df': self.set_ilf_results_from_pandas_df(dataf, conversion=conversion, variables=variables)
-        else: raise ValueError ('Please enter invert for inverted results and obs for observation')
+        if dataformat == 'df': self.set_data_from_pandas_df(dataf, conversion=conversion, variables=variables,type_data=type_data)
 
-
-    def load_two_dataset(self,list_dataf:pd.DataFrame,dataformat:str='df',variables: List[str] =['vv','vx','vy']):
+    def load_several_dataset(self, list_dataf:pd.DataFrame, list_data_type=['obs', 'invert'], dataformat:str= 'df', variables: List[str] =['vv', 'vx', 'vy']):
         '''
         Load two dataset, observations and inversion
         :param dataf: [pd.DataFrame] --- observations or results from the inversion
         :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
         :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
         '''
-        self.load_one_dataset(list_dataf[0], type_data = 'obs',dataformat=dataformat,variables=variables)
-        self.load_one_dataset(list_dataf[1], type_data='invert', dataformat=dataformat,variables=variables)
+        for i in range(len(list_dataf)): self.load_one_dataset(list_dataf[i], type_data = list_data_type[i],dataformat=dataformat,variables=variables)
 
-    def get_dataf_invert_or_obs(self,type_data:str = 'obs')-> pd.DataFrame:
+    def get_dataf_invert_or_obs_or_interp(self, type_data:str = 'obs')-> (pd.DataFrame, str):
         '''
         Get dataframe either obs or invert
         :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :return [pd.DataFrame] --- dataframe from obs or invert
+        :return [pd.DataFrame] --- dataframe from obs, invert or interp
+        :return [str] --- label used in the legend of the figures
         '''
-        if self.dataobs is None: return self.datainvert
-        elif self.datainvert is None: return self.dataobs
+        if self.dataobs is None and self.datainterp is None: return self.datainvert, 'Results from the inversion'
+        elif self.datainvert is None and self.datainterp is None: return self.dataobs, 'Observations'
+        elif self.datainvert is None and self.dataobs is None: return self.datainterp, 'Results from TICOI'
+        elif self.datainvert is None and self.dataobs is None and self.datainterp is None: raise ValueError ('Please load at least one dataframe')
         else:
-            if type_data == 'invert': return self.datainvert
-            else: return self.dataobs
+            if type_data == 'invert': return self.datainvert, 'Results from the inversion'
+            elif type_data == 'obs': return self.dataobs, 'Observations'
+            else: return self.datainterp, 'Results from TICOI'
+
 
     def get_conversion(self):
         '''
@@ -166,6 +167,23 @@ class pixel_class():
         conversion = 365 if self.unit == 'm/y' else 1
         return conversion
 
+    def get_direction(self,data:"ticoi.pixel_class.dataframe_data")-> (np.array,np.array):
+        '''
+        Get the direction of the provided data
+        :param data: [ticoi.pixel_class.dataframe_data] --- dataframe from obs, invert or interp
+        :return directionm: [np.array] directions of the data
+        :return directionm_mean: [np.array] averaged direction of the data
+        '''
+        directionm = np.arctan2(data.dataf['vy'].astype('float32'), data.dataf['vy'].astype('float32'))
+        directionm[directionm < 0] += 2 * np.pi
+        directionm_mean = np.arctan2(np.mean(data.dataf['vy']), np.mean(data.dataf['vy']))
+        if directionm_mean < 0: directionm_mean += 2 * np.pi
+
+        # Convert to degrees
+        directionm *= 360 / (2 * np.pi)
+        directionm_mean *= 360 / (2 * np.pi)
+        return directionm, directionm_mean
+
     def plot_vx_vy(self,color:str='blueviolet',type_data:str='invert'):
         '''
         Plot vx and vy in the same figure
@@ -174,20 +192,18 @@ class pixel_class():
         :return: axis, and figure
         '''
 
-        if type_data == 'invert' : label = 'Results from the inversion'
-        else: label = 'Observations'
-        data = self.get_dataf_invert_or_obs(type_data)
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         fig1, ax1 = plt.subplots(2, 1, figsize=self.figsize)
         ax1[0].set_ylim(data.vxymin, data.vxymax)
         ax1[0].plot(data.dataf['date_cori'], data.dataf['vx'], linestyle='', marker='o', markersize=3,
                     color=color)  # Display the vx components
-        ax1[0].errorbar(data.dataf['date_cori'], data.dataf['vx'], xerr=data.dataf['offset_bar'], color='b', alpha=0.5, fmt=',', zorder=1)
+        ax1[0].errorbar(data.dataf['date_cori'], data.dataf['vx'], xerr=data.dataf['offset_bar'], color=color, alpha=0.5, fmt=',', zorder=1)
         ax1[0].set_ylabel(f'Vx [{self.unit}]', fontsize=16)
         ax1[1].set_ylim(data.vyymin, data.vyymax)
         ax1[1].plot(data.dataf['date_cori'], data.dataf['vy'], linestyle='', marker='o', markersize=3, color=color,
                     label=label)  # Display the vx components
-        ax1[1].errorbar(data.dataf['date_cori'], data.dataf['vy'], xerr=data.dataf['offset_bar'], color='b', alpha=0.2, fmt=',', zorder=1)
+        ax1[1].errorbar(data.dataf['date_cori'], data.dataf['vy'], xerr=data.dataf['offset_bar'], color=color, alpha=0.2, fmt=',', zorder=1)
         ax1[1].set_ylabel(f'Vy [{self.unit}]', fontsize=16)
         plt.subplots_adjust(bottom=0.2)
         ax1[1].legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, fontsize=12)
@@ -195,13 +211,15 @@ class pixel_class():
         if self.save:fig1.savefig(f'{self.path_save}/vx_vy_{type_data}.png')
         return ax1, fig1
 
-    def plot_vx_vy_overlayed(self,colors:List[str] = ['blueviolet','orange']):
+    def plot_vx_vy_overlayed(self,colors:List[str] = ['blueviolet','orange'],type_data:str='invert',zoom_on_results=False):
         '''
         Plot vx and vy in the same figure, inverted results are overlayed on observations
         :param colors: List[str] --- list color used by plt.plot
+        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :param zoom_on_results: [bool] [default is False] --- set the limites of the axis accoring to the results min and max
         '''
 
-        if self.datainvert.dataf is None: raise ValueError ('Cannot use plot_vx_vy_overlayed because inverted data have not been loaded')
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         show = copy.copy(self.show)
         save = copy.copy(self.save)
@@ -210,20 +228,23 @@ class pixel_class():
 
         self.show,self.save  = show,save
 
-        ax1[0].set_ylim(self.datainvert.vxymin, self.datainvert.vxymax)
-        ax1[0].plot(self.datainvert.dataf['date_cori'], self.datainvert.dataf['vx'], linestyle='', marker='o', markersize=3,
+        if zoom_on_results: ax1[0].set_ylim(data.vxymin, data.vxymax)
+        ax1[0].plot(data.dataf['date_cori'], data.dataf['vx'], linestyle='', marker='o', markersize=3,
                     color=colors[1])  # Display the vx components
-        ax1[0].errorbar(self.datainvert.dataf['date_cori'], self.datainvert.dataf['vx'], xerr=self.datainvert.dataf['offset_bar'], color=colors[1], alpha=0.5, fmt=',', zorder=1)
-        ax1[1].set_ylim(self.datainvert.vyymin, self.datainvert.vyymax)
-        ax1[1].plot(self.datainvert.dataf['date_cori'], self.datainvert.dataf['vy'], linestyle='', marker='o', markersize=3,
+        ax1[0].errorbar(data.dataf['date_cori'], data.dataf['vx'], xerr=data.dataf['offset_bar'], color=colors[1], alpha=0.5, fmt=',', zorder=1)
+        if zoom_on_results: ax1[1].set_ylim(data.vyymin, data.vyymax)
+        ax1[1].plot(data.dataf['date_cori'], data.dataf['vy'], linestyle='', marker='o', markersize=3,
                     color=colors[1],
-                    label='Results from the inversion')  # Display the vx components
-        ax1[1].errorbar(self.datainvert.dataf['date_cori'], self.datainvert.dataf['vy'], xerr=self.datainvert.dataf['offset_bar'],
+                    label=label)  # Display the vx components
+        ax1[1].errorbar(data.dataf['date_cori'], data.dataf['vy'], xerr=data.dataf['offset_bar'],
                         color='b', alpha=0.2, fmt=',', zorder=1)
         ax1[1].legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, fontsize=14)
 
         if self.show: plt.show()
-        if self.save:fig1.savefig(f'{self.path_save}/vx_vy_overlayed.png')
+        if self.save:
+            if zoom_on_results: fig1.savefig(f'{self.path_save}/vx_vy_overlayed_zoom_on_results_{type_data}.png')
+            else: fig1.savefig(f'{self.path_save}/vx_vy_overlayed_{type_data}.png')
+
 
 
     def plot_vv(self,color:str='blueviolet',type_data:str='invert'):
@@ -234,27 +255,27 @@ class pixel_class():
            :return: axis, and figure
            '''
 
-        if type_data == 'invert' : label = 'Results from the inversion'
-        else: label = 'Observations'
-        data = self.get_dataf_invert_or_obs(type_data)
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         fig, ax = plt.subplots(figsize=self.figsize)
         ax.set_ylim(data .vvymin, data .vvymax)
         ax.set_ylabel(f'Velocity magnitude  [{self.unit}]')
-        p = ax.plot(data .dataf['date_cori'], data.dataf['vv'], linestyle='', zorder=1, marker='o', lw=0.7, markersize=2, color=color, label=label)
-        ax.errorbar(data .dataf['date_cori'], data.dataf['vv'], xerr=data .dataf['offset_bar'], color='b', alpha=0.2, fmt=',', zorder=1)
+        p = ax.plot(data .dataf['date_cori'], data.dataf['vv'], linestyle='', zorder=1, marker='o', lw=0.7, markersize=3, color=color, label=label)
+        ax.errorbar(data .dataf['date_cori'], data.dataf['vv'], xerr=data .dataf['offset_bar'], color=color, alpha=0.2, fmt=',', zorder=1)
         plt.subplots_adjust(bottom=0.2)
         ax.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=14)
         if self.show: plt.show(block=False)
         if self.save:fig.savefig(f'{self.path_save}/vv_{type_data}.png')
         return ax, fig
 
-    def plot_vv_overlayed(self, colors=['blueviolet', 'orange']):
+    def plot_vv_overlayed(self, colors=['blueviolet', 'orange'],type_data:str='invert',zoom_on_results=False):
         '''
          Plot the velocity magnitude, inverted results are overlayed on observations
          :param colors: List[str] --- list color used by plt.plot
+         :param type_data: [str] [default is 'invert'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+         :param zoom_on_results: [bool] [default is False] --- set the limites of the axis accoring to the results min and max
          '''
-        if self.datainvert.dataf is None: raise ValueError ('Cannot use plot_vx_vy_overlayed because inverted data have not been loaded')
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         show = copy.copy(self.show)
         save = copy.copy(self.save)
@@ -262,15 +283,16 @@ class pixel_class():
         ax, fig = self.plot_vv(color=colors[0], type_data='obs')
         self.show,self.save  = show,save
 
-        ax.set_ylim(self.datainvert.vvymin, self.datainvert.vvymax)
-        p = ax.plot(self.datainvert.dataf['date_cori'], self.datainvert.dataf['vv'], linestyle='', zorder=1, marker='o', lw=0.7,
-                    markersize=2, color=colors[1], label=f'Results from the inversion')
-        ax.errorbar(self.datainvert.dataf['date_cori'], self.datainvert.dataf['vv'], xerr=self.datainvert.dataf['offset_bar'],
+        ax.set_ylim(data.vvymin, data.vvymax)
+        p = ax.plot(data.dataf['date_cori'], data.dataf['vv'], linestyle='', zorder=1, marker='o', lw=0.7,
+                    markersize=3, color=colors[1], label=f'Results from the inversion')
+        ax.errorbar(data.dataf['date_cori'], data.dataf['vv'], xerr=data.dataf['offset_bar'],
                     color=colors[1], alpha=0.2, fmt=',', zorder=1)
         ax.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=14)
         if self.show: plt.show()
-        if self.save:fig.savefig(f'{self.path_save}/vv_overlayed.png')
-
+        if self.save:
+            if zoom_on_results: fig.savefig(f'{self.path_save}/vv_overlayed_zoom_on_results_{type_data}.png')
+            else: fig.savefig(f'{self.path_save}/vv_overlayed_{type_data}.png')
 
     def plot_vx_vy_quality(self,cmap='rainbow',type_data='obs'):
         '''
@@ -282,9 +304,7 @@ class pixel_class():
         if 'errorx' not in self.dataobs.dataf.columns:
             return ('There is no error, impossible to plot errors')
 
-        if type_data == 'invert' : label = 'Results from the inversion'
-        else: label = 'Observations'
-        data = self.get_dataf_invert_or_obs(type_data)
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         qualityx = data.dataf['errorx']
         qualityy = data.dataf['errory']
@@ -302,6 +322,55 @@ class pixel_class():
         if self.show: plt.show(block=False)
         if self.save:fig.savefig(f'{self.path_save}/vxvy_quality_bas_{type_data}.png')
         return ax,fig
+
+
+    def plot_direction(self,type_data='obs',color='blue'):
+
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
+
+        directionm, directionm_mean = self.get_direction(data)
+        fig1, ax1 = plt.subplots(figsize=self.figsize)
+        ax1.plot(data.dataf['date_cori'], directionm, linestyle='', marker='o', markersize=3,
+                 color=color,
+                 label=label)
+        ax1.hlines(directionm_mean, np.min(data.dataf['date_cori']),
+                   np.max(data.dataf['date_cori']),
+                   label=f'Mean direction of {label}')
+        ax1.set_ylim(0, 360)
+        ax1.set_ylabel('Direction [°]')
+        ax1.set_xlabel('Central Dates')
+        plt.subplots_adjust(bottom=0.25)
+        ax1.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, ncol=2, fontsize=14)
+        if self.show: plt.show(block=False)
+        if self.save:fig1.savefig(f'{self.path_save}/direction_{type_data}.png')
+        return ax1,fig1
+
+    def plot_direction_overlayed(self, type_data='interp', colors=['blue','orange']):
+
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
+
+        show = copy.copy(self.show)
+        save = copy.copy(self.save)
+        self.show, self.save = False, False
+        ax, fig = self.plot_direction(color=colors[0], type_data='obs')
+        self.show,self.save  = show,save
+
+        directionm, directionm_mean = self.get_direction(data)
+
+        ax.plot(data.dataf['date_cori'], directionm, linestyle='', marker='o', markersize=3,
+                 color=colors[1],
+                 label=label)
+        ax.set_ylim(0, 360)
+        ax.set_ylabel('Direction [°]',fontsize=14)
+        ax.set_xlabel('Central Dates',fontsize=14)
+        ax.legend(loc='lower left', bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, ncol=2, fontsize=14)
+        if self.show: plt.show(block=False)
+        if self.save: fig.savefig(f'{self.path_save}/direction_overlayed_{type_data}.png')
+
+
+
+
+
 
     def plot_xcount_vx_vy(self,cmap='rainbow'):
         '''

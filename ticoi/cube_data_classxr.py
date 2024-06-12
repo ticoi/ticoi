@@ -497,7 +497,7 @@ class cube_data_class:
         elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
-        time_dim = 'mid_date' if not self.is_TICO else 'second_date' # 'second_date' if we load TICO data
+        time_dim = 'mid_date' if not self.is_TICO else 'date2' # 'date2' if we load TICO data
         self.update_dimension(time_dim)
 
         # Temporal subset between two dates
@@ -506,8 +506,8 @@ class cube_data_class:
                 self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
                                         self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
             else:
-                self.ds = self.ds.where(((self.ds['second_date'] >= np.datetime64(pick_date[0])) & (
-                    self.ds['second_date'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+                self.ds = self.ds.where(((self.ds['date2'] >= np.datetime64(pick_date[0])) & (
+                    self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
         del pick_date
 
         self.update_dimension(time_dim)
@@ -645,7 +645,7 @@ class cube_data_class:
                                     pick_temp_bas=pick_temp_bas, buffer=buffer, proj=proj)
 
             # Rechunk again if the size of the cube is changed:
-            time_dim = 'mid_date' if not self.is_TICO else 'second_date'
+            time_dim = 'mid_date' if not self.is_TICO else 'date2'
             if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
                 tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
                 self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
@@ -822,7 +822,7 @@ class cube_data_class:
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
         :param visual: [bool] [default is False] --- Return additional informations (sensor and source) for future plots
-        :param output_format [str] [default is np] ---
+        :param output_format [str] [default is np] --- output format of the results, if np return a numpy array, elif pd return a panda dataframe
 
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
@@ -879,7 +879,7 @@ class cube_data_class:
 
         # data_values is composed of vx, vy, errorx, errory, temporal baseline
         if visual:
-            if output_format == 'nc':
+            if output_format == 'np':
                 data_str = data[['sensor', 'source']].to_array().values.T
                 data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
                 data = [data_dates, data_values, data_str]
@@ -1382,7 +1382,7 @@ class cube_data_class:
                             if
                             result[i * self.ny + j]['vx'].shape[
                                 0] != 0]  # Temporal size of the results which are not empty
-        first_date_results = [result[i * self.ny + j]['First_date'].iloc[0] for i in range(self.nx) for j in
+        first_date_results = [result[i * self.ny + j]['date1'].iloc[0] for i in range(self.nx) for j in
                               range(self.ny) if
                               result[i * self.ny + j]['vx'].shape[
                                   0] != 0]  # Temporal size of the results which are not empty
@@ -1402,12 +1402,12 @@ class cube_data_class:
             raise ValueError('Not the same time dimension for every pixels, cannot save cube')
 
         cubenew = cube_data_class()
-        time_variable = non_null_el['First_date'] + (non_null_el['Second_date'] - non_null_el['First_date']) // 2
-        cubenew.ds['date1'] = xr.DataArray(non_null_el['First_date'], dims='mid_date', coords={'mid_date': time_variable})
-        cubenew.ds['date1'].attrs = {'standard_name': 'first_date', 'unit': 'days',
+        time_variable = non_null_el['date1'] + (non_null_el['date2'] - non_null_el['date1']) // 2
+        cubenew.ds['date1'] = xr.DataArray(non_null_el['date1'], dims='mid_date', coords={'mid_date': time_variable})
+        cubenew.ds['date1'].attrs = {'standard_name': 'date1', 'unit': 'days',
                                      'long_name': 'first date between which the velocity is estimated'}
-        cubenew.ds['date2'] = xr.DataArray(non_null_el['Second_date'], dims='mid_date', coords={'mid_date': time_variable})
-        cubenew.ds['date2'].attrs = {'standard_name': 'second_date', 'unit': 'days',
+        cubenew.ds['date2'] = xr.DataArray(non_null_el['date2'], dims='mid_date', coords={'mid_date': time_variable})
+        cubenew.ds['date2'].attrs = {'standard_name': 'date2', 'unit': 'days',
                                      'long_name': 'second date between which the velocity is estimated'}
 
         long_name = ['velocity in the East/West direction [m/y]', 'velocity in the North/South direction [m/y]',
@@ -1524,10 +1524,10 @@ class cube_data_class:
 
         long_name = ['first date between which the velocity is estimated',
                      'second date between which the velocity is estimated',
-                     'displacement in the East/West direction [m]', 'displacement in the North/South direction [d]',
+                     'displacement in the East/West direction [m]', 'displacement in the North/South direction [m]',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction',
                      'number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction']
-        short_name = ['first_date', 'second_date', 'x_displacement', 'y_displacement', 'xcount_x', 'xcount_y']
+        short_name = ['date1', 'date2', 'x_displacement', 'y_displacement', 'xcount_x', 'xcount_y']
         unit = ['days', 'days', 'm', 'm', 'no unit', 'no unit']
 
         # Build cumulative displacement time series
@@ -1544,13 +1544,13 @@ class cube_data_class:
 
         # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
         second_date_list = list(set(list(
-            itertools.chain.from_iterable([df['Second_date'].values for df in df_list if not np.isnan(df['dx'].iloc[0])]))))
+            itertools.chain.from_iterable([df['date2'].values for df in df_list if not np.isnan(df['dx'].iloc[0])]))))
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
         df_list2 = []
         for i, df in enumerate(df_list):
-            df.index = df['Second_date']
+            df.index = df['date2']
             df_list2.append(df.reindex(second_date_list))
         del df_list
 
@@ -1567,10 +1567,10 @@ class cube_data_class:
             result_arr = np.array(
                 [df_list2[i][var] for i in range(len(df_list2))])
             result_arr = result_arr.reshape((self.nx, self.ny, len(second_date_list)))
-            cubenew.ds[var] = xr.DataArray(result_arr, dims=['x', 'y', 'second_date'],
+            cubenew.ds[var] = xr.DataArray(result_arr, dims=['x', 'y', 'date2'],
                                            coords={'x': self.ds['x'], 'y': self.ds['y'],
-                                                   'second_date': second_date_list})
-            cubenew.ds[var] = cubenew.ds[var].transpose('second_date', 'y', 'x')
+                                                   'date2': second_date_list})
+            cubenew.ds[var] = cubenew.ds[var].transpose('date2', 'y', 'x')
             cubenew.ds[var].attrs = {'standard_name': short_name[i], 'unit': unit[i], 'long_name': long_name[i]}
 
         cubenew.ds['grid_mapping'] = self.ds.proj4
@@ -1581,7 +1581,7 @@ class cube_data_class:
                             'history': f'Created on the {date.today()}'}
         cubenew.nx = self.nx
         cubenew.ny = self.ny
-        cubenew.nz = cubenew.ds.dims['second_date']
+        cubenew.nz = cubenew.ds.dims['date2']
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
@@ -1609,7 +1609,7 @@ class cube_data_class:
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         '''
 
-        if result[0].columns[0] == 'First_date':
+        if result[0].columns[0] == 'date1':
             self.write_result_ticoi(result=result, source=source, sensor=sensor, filename= filename,
                           savepath=savepath, result_quality=result_quality,verbose=verbose)
         else:

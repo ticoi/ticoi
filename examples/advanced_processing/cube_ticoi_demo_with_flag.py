@@ -232,7 +232,7 @@ elif TICOI_process == 'load':
         if compute_result_load:
             print('[TICOI processing] Loading TICOI data...')
             result = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
-            result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
+            result = [pd.DataFrame(data={'date1': r[0][0][:, 0], 'date2': r[0][0][:, 1],
                                          'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
                                          'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
                                          'temporal_baseline': r[0][1][:, 4]}) for r in result]

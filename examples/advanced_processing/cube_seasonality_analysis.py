@@ -245,7 +245,7 @@ elif TICOI_process == 'load':
         
         print('[TICOI processing] Loading TICOI data...')
         result = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
-        result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
+        result = [pd.DataFrame(data={'date1': r[0][0][:, 0], 'date2': r[0][0][:, 1],
                                      'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
                                      'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
                                      'temporal_baseline': r[0][1][:, 4]}) for r in result]
@@ -354,7 +354,7 @@ def match_sine(d, impose_frequency=True, filt=None):
     '''
     
     d = d.dropna()
-    dates = (d['First_date'] + (d['Second_date'] - d['First_date']) // 2 - d['First_date'].min()).dt.days.to_numpy()
+    dates = (d['date1'] + (d['date2'] - d['date1']) // 2 - d['date1'].min()).dt.days.to_numpy()
     N = len(dates)
     if N <= 4: return np.nan, np.nan
     vv = np.sqrt(d['vx']**2 + d['vy']**2).to_numpy()
@@ -411,7 +411,7 @@ def match_sine(d, impose_frequency=True, filt=None):
         return 5*np.pi/2 - phi
     
     if phi < 0: phi += 2*np.pi
-    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['date1'].min()
     max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
     
     return 1/f, A, max_day # Period, amplitude and phase of the periodicity
@@ -456,7 +456,7 @@ def AtoVar(A, raw, dataf_lp, local_var_method='uniform_7d'):
         var = local_var[local_var > 0].dropna().median()  
         
     elif local_var_method == 'residu':
-        dataf_lp.index = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2
+        dataf_lp.index = dataf_lp['date1'] + (dataf_lp['date2'] - dataf_lp['date1']) // 2
         dataf_lp['vv'] = np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
         dataf_lp = dataf_lp.reindex(index=np.unique(dataf.index)).interpolate().dropna()
         dataf = dataf[dataf.index >= dataf_lp.index[0]]

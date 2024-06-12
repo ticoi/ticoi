@@ -14,7 +14,7 @@ import os
 import numpy as np
 
 from ticoi.core import inversion_core, visualization_core, interpolation_core
-from ticoi.interpolation_functions import prepare_interpolation_date
+from ticoi.interpolation_functions import prepare_interpolation_date, visualisation_interpolation
 from ticoi.cube_data_classxr import cube_data_class
 
 
@@ -33,7 +33,7 @@ proj = 'EPSG:4326'  # EPSG system of the given coordinates
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outlier = 'vvc_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
-apriori_weight = False #Use the error as apriori
+apriori_weight = True #Use the error as apriori
 interval_output = 30 #temporal sampling of the output results
 unit = 365 # 1 for m/d, 365 for m/y
 result_quality = ['X_contribution'] # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
@@ -82,8 +82,8 @@ load_pixel_kwargs = {'regu': regu, # Regularization method to be used
                      'solver': 'LMSR_ini', # Solver for the inversion
                      'proj': proj, # EPSG system of the given coordinates
                      'interp': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
-                     'visual': visual, # Plot results along the way
-                     'verbose':verbose} # Print information throughout TICOI processing
+                     'visual': visual} # Plot results along the way
+
 
 ## --------------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {'regu': regu,  # Regularization method to be used
@@ -191,6 +191,8 @@ print(f'[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s')
 
 if save:
     dataf_lp.to_csv(f'{path_save}/RLF_result.csv')
-if visual:visualization_core([dataf, result], option_visual=option_visual, save=True, show=True, path_save=path_save, A=A, log_scale=False, cmap='rainbow', colors=['blueviolet', 'orange'])
+if visual:
+    visualization_core([dataf, result], option_visual=option_visual, save=True, show=True, path_save=path_save, A=A, log_scale=False, cmap='rainbow', colors=['orange','blue'])
+    visualisation_interpolation([dataf, dataf_lp], save=True, show=True, path_save=path_save, colors=['orange','blue'])
 
 print(f'[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s')
