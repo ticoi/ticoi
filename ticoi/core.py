@@ -797,7 +797,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         #                 for i, j in xy_values_tqdm]
         return result_block
     
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', verbose=False):
         flags = preData_kwargs['flags'] if preData_kwargs is not None else None
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True) # Split the cube in smaller blocks
         

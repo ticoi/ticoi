@@ -177,7 +177,7 @@ print(f'[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s
 
 
 # %%========================================================================= #
-#                         INITIALISATION    FOR SAVING                        #
+#                           INITIALISATION FOR SAVING                         #
 # =========================================================================%% #
 
 start.append(time.time())

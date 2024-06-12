@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
-from examples.advanced_processing.pixel_optimize_ticoi_coef import optimize_coef
+from ticoi.other_functions import optimize_coef
 
 
 # %%========================================================================= #
@@ -30,14 +30,11 @@ warnings.filterwarnings("ignore")
 
 ## ---------------------------- Data selection ------------------------- ##
 # List of the paths where the data cubes are stored
-cube_names = [f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/c_x01225_y03920_all_filt-multi.nc',]
-               # 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc']
-cube_authors = None # Specify the author of the data cubes (list), keep None if the authors are specified in the dataset
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
 mask_file = 'nathan/Tests_MB/Areas/Full_MB/mask/Full_MB.shp' # Path where the mask file is stored
-path_save = 'nathan/Tests_MB/' # Path where to store the results
+mask_file = None
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/optimize_coef' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
-
-subset = None
 
 ## ------------------------- Main parameters --------------------------- ##
 regu = '1accelnotnull' # Regularization method to be used
@@ -46,6 +43,8 @@ unit = 365 # 1 for m/d, 365 for m/y
 result_quality = 'X_contribution' # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
 
 ## --------------------- Optimization parameters ----------------------- ##
+# 'block_process' or 'direct_process' 
+optimization_process = 'block_process'
 # Path to the "ground truth" cube used to optimize the regularisation
 cube_gt_name = 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc' 
 # Specify the coefficients you want to test
@@ -61,11 +60,12 @@ plot_them_all = True
 ## ------------------------ Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': subset, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+               'subset': [343448.4, 343779.4, 5091223.5, 5091454.3], # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
                'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
+               'mask': mask_file, # Path to mask file (.shp file) to mask some of the data on cube
                'verbose': False} # Print information throughout the loading process 
 
 ## ------------------- Data preparation parameters --------------------- ##
@@ -87,8 +87,7 @@ load_pixel_kwargs = {'regu': regu, # Regularization method to be used
                      'solver': solver, # Solver for the inversion
                      'proj': proj, # EPSG system of the given coordinates
                      'interp': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
-                     'visual': False, # Plot results along the way
-                     'verbose':False} # Print information throughout TICOI processing
+                     'visual': False} # Plot results along the way
                      
 ## ----------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {'regu': regu, # Regularization method to be used
@@ -99,7 +98,7 @@ inversion_kwargs = {'regu': regu, # Regularization method to be used
                     'iteration': True, # Allow the inversion process to make several iterations
                     'nb_max_iteration': 10, # Maximum number of iteration during the inversion process
                     'threshold_it': 0.1, # Threshold to test the stability of the results between each iteration, used to stop the process
-                    'weight': True, # If True, use apriori weights
+                    'apriori_weight': True, # If True, use apriori weights
                     'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
                     'linear_operator': None, # Perform the inversion using this specific linear operator
                     'result_quality': result_quality, # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
@@ -113,7 +112,8 @@ interpolation_kwargs = {'option_interpol': 'spline', # Type of interpolation ('s
                         'unit': unit} # 365 if the unit is m/y, 1 if the unit is m/d
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 4 # Number of CPU to be used for parallelization
+nb_cpu = 8 # Number of CPU to be used for parallelization
+block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -127,15 +127,8 @@ start = [time.time()]
 
 # In the first place, we load the data
 cube = cube_data_class()
-cube.load(cube_names[0], author=cube_authors[0] if type(cube_authors) == list else cube_authors, **load_kwargs)
+cube.load(cube_name, **load_kwargs)
 
-# Several cubes have to be merged together
-if len(cube_names) > 1:
-    for n in range(1, len(cube_names)):
-        cube2 = cube_data_class()
-        cube2.load(cube_names[n], author=cube_authors[n] if type(cube_authors) == list else cube_authors, **load_kwargs)
-        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
-        cube.merge_cube(cube2)
 
 # Then we load the "ground truth"
 cube_gt = cube_data_class()
@@ -156,7 +149,9 @@ print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}
 #                         COEFFICIENT OPTIMIZATION                            #
 # =========================================================================%% #
 
-async def process_block(block, block_gt, nb_cpu=8):
+async def process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs,
+                        cmin=10, cmax=1000, step=10, coefs=None, stats=False, nb_cpu=8):
+    
     # Progression bar
     xy_values = itertools.product(block.ds['x'].values, block.ds['y'].values)
     xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
@@ -165,24 +160,16 @@ async def process_block(block, block_gt, nb_cpu=8):
     obs_filt = block.filter_cube(**preData_kwargs)
 
     # Optimization of the coefficient for every pixels of the block
-    result_block = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(block, block_gt, i, j, obs_filt, load_pixel_kwargs, 
-                           inversion_kwargs, interpolation_kwargs, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
+    result_block = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(block, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
+                           inversion_kwargs, interpolation_kwargs, cmin=cmin, cmax=cmax, step=step, coefs=coefs, 
                            stats=stats, visual=False) for i, j in xy_values_tqdm)
     
     return result_block
 
-async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
+async def process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs,
+                              cmin=10, cmax=1000, step=10, coefs=None, stats=False, nb_cpu=8, block_size=0.5, 
+                              verbose=False):
     
-    # Get the parameters
-    # if isinstance(preData_kwargs, dict) and isinstance(inversion_kwargs, dict):
-    #     for key, value in preData_kwargs.items():
-    #         globals()[key] = value
-    #     for key, value in inversion_kwargs.items():
-    #         globals()[key] = value
-    # else:
-    #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
-
-    flags = preData_kwargs['flags']
     blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
     
     dataf_list = [None] * ( cube.nx * cube.ny )
@@ -195,20 +182,19 @@ async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp',
         # Load the first block and start the loop
         if n == 0:
             x_start, x_end, y_start, y_end = blocks[0]
-            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
         block, flags_block, duration = await future
-        preData_kwargs['flags'] = flags_block
-        inversion_kwargs['flags'] = flags_block
         print(f'Block {n+1} loaded in {duration:.2f} s')
-        # if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
+        if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
         if n < len(blocks) - 1:
-            # load the next block while processing the current block
+            # Load the next block while processing the current block
             x_start, x_end, y_start, y_end = blocks[n+1]
-            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
-        block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose)
+        block_result = await process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs,
+                                           cmin=cmin, cmax=cmax, step=step, coefs=coefs, stats=stats, nb_cpu=nb_cpu)
 
         for i in range(len(block_result)):
             row = i % block.ny + blocks[n][2]
@@ -228,31 +214,31 @@ print(f'[Coef optimization] {nb_points} points to be computed within the given s
 
 start.append(time.time())
 
-# Progression bar
-xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
-xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
+if optimization_process == 'block_process':
+    result = asyncio.run(process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs,
+                                             cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, stats=stats, 
+                                             nb_cpu=nb_cpu, block_size=block_size, verbose=False))
 
-result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(cube, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
-                       inversion_kwargs, interpolation_kwargs, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
-                       stats=stats, visual=False) for i, j in xy_values_tqdm)
+elif optimization_process == 'direct_process':
+    obs_filt = cube.filter_cube(**preData_kwargs)
+    
+    # Progression bar
+    xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
+    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
 
-# Without parallelization (for debug purposes)
-# result = []
-# for i in cube.ds['x'].values:
-#     for j in cube.ds['y'].values:
-#         result.append(optimize_coef(cube, cube_p, i, j, proj=cube_proj, average_same=average_same, method=method, coef_min=coef_min, coef_max=coef_max, step=step, 
-#                         solver=solver, regu=regu, delete_outliers=delete_outliers, apriori_weight=apriori_weight, max_iteration=max_iteration, unit=unit, conf=conf, 
-#                         detect_temporal_decorrelation=detect_temporal_decorrelation, option_interpol=option_interpol, merged=merged, verbose=verbose))
+    result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(cube, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
+                        inversion_kwargs, interpolation_kwargs, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
+                        stats=stats, visual=False) for i, j in xy_values_tqdm)
 
-stop.append(time.time())
-print(f'[Coef optimization] Whole coefficient optimization took {round((stop[1] - start[1]), 1)} s')
+    stop.append(time.time())
+    print(f'[Coef optimization] Whole coefficient optimization took {round((stop[1] - start[1]), 1)} s')
 
 
 # %% ======================================================================== #
 #                                  RESULTS                                    #
 # =========================================================================%% #
 
-# Informations about Sentinel-2 and Pleiade datas over this cube
+# Informations about raw and GT datas over this cube
 nb_datas = (np.array([result[i]['nb_data'][0][0] if not result[i].empty else 0 for i in range(len(result))]),
             np.array([result[i]['nb_data'][0][1] if not result[i].empty else 0 for i in range(len(result))]))
 mean_nb_data = (np.mean(nb_datas[0]), np.mean(nb_datas[1]))
@@ -272,14 +258,16 @@ mean_std_all = (np.nanmedian([result[i]['std_all'][0][0] if not result[i].empty 
                 np.nanmedian([result[i]['std_all'][0][2] if not result[i].empty else np.nan for i in range(len(result))]),
                 np.nanmedian([result[i]['std_all'][0][3] if not result[i].empty else np.nan for i in range(len(result))]))
 
-print(f'[Coef optimization] Pixel with the greatest amount of Pleiade data : {result[np.argmax(nb_datas[1])]["position"][0]}', end='')
-print(f'      with {np.max(nb_datas[1])} available Pleiade data')
+print(f'[Coef optimization] Pixel with the greatest amount of GT data : {result[np.argmax(nb_datas[1])]["position"][0]} '
+      f'with {np.max(nb_datas[1])} available GT data')
 
 # Because tested coefficients are the same for each pixel (methods 'constant' and 'given_coef'), we compute the average RMSE 
 # for each coefficient and then select which one is the best (by plotting the curve showing the evolution of the RMSE with 
 # the regularisation coefficient)
 if coefs is None:
     coefs = np.arange(coef_min, coef_max, step)
+else:
+    coefs = np.array(coefs)
 
 RMSEs_result = np.array([result[i]['RMSEs'] if not result[i].empty else [np.nan for _ in range(len(coefs))] for i in range(len(result))])
 # Compute the RMSE over the entire area
@@ -297,8 +285,8 @@ ax.plot(coefs[RMSEs < good_RMSE], RMSEs[RMSEs < good_RMSE], marker='x', markersi
 ax.plot([coefs[0], coefs[-1]], [good_RMSE, good_RMSE], linestyle='--', color='midnightblue')
 ax.set_xlabel('Regularisation coefficient value')
 ax.set_xlim([coef_min if type(coef_min) == int else coef_min[0], coef_max if type(coef_min) == int else coef_min[-1]])
-ax.set_ylabel('RMSE between TICOI results from Sentinel-2 data and Pleiades data [m/y]')
-fig.suptitle(f'RMSE between TICOI results and Pleiades data when changing the regularisation coefficient\nBest for coef = {best_coef} (RMSE = {best_RMSE})')
+ax.set_ylabel('Average RMSE between TICOI results and GT data [m/y]')
+fig.suptitle(f'Average RMSE between TICOI results and GT data when changing the regularisation coefficient\nBest for coef = {best_coef} (RMSE = {best_RMSE})')
 plt.show()
 
 if save: fig.savefig(f'{path_save}RMSE_coef_{regu}.png')
@@ -336,7 +324,7 @@ if plot_them_all:
     ax[0].plot(coefs, RMSEs, linestyle='dashdot', linewidth=2, color='blueviolet')
     ax[1].plot(coefs, RMSEs - np.mean(RMSEs), linestyle='dashdot', linewidth=2, color='blueviolet')
         
-    fig.suptitle('RMSE between TICOI results and Pleiades data when changing the regularisation coefficient')
+    fig.suptitle('RMSE between TICOI results and GT data when changing the regularisation coefficient')
     plt.show()
     
     if save: fig.savefig(f'{path_save}RMSE_coef_{regu}_allplots.png')

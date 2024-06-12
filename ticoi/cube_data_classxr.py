@@ -551,7 +551,7 @@ class cube_data_class:
 
     def load(self, filepath: list | str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
              buffer: str | None = None, pick_date: str | None = None, pick_sensor: str | None = None,
-             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', mask_file: str | xr.DataArray = None,
+             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', mask: str | xr.DataArray = None,
              verbose: bool = False):
 
         """        
@@ -568,7 +568,7 @@ class cube_data_class:
         :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
         :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param mask_file: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
+        :param mask: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
 
@@ -576,7 +576,7 @@ class cube_data_class:
 
         if type(filepath) == list: # Merge several cubes
             self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
-                      proj=proj, mask_file=mask_file, verbose=verbose)
+                      proj=proj, mask=mask, verbose=verbose)
 
             cube2 = None
             for n in range(1, len(filepath)):
@@ -584,7 +584,7 @@ class cube_data_class:
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
                 sub = [self.ds['x'].min().values, self.ds['x'].max().values, self.ds['y'].min().values, self.ds['y'].max().values]
                 cube2.load(filepath[n], chunks=chunks, conf=conf, subset=sub, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
-                           proj=proj, mask_file=mask_file, verbose=verbose)
+                           proj=proj, mask=mask, verbose=verbose)
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
                 cube2 = self.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method='nearest')
                 self.merge_cube(cube2) # Merge the new cube to the main one
@@ -654,8 +654,8 @@ class cube_data_class:
             self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
             self.standardize_cube_for_processing(time_dim)
 
-            if mask_file is not None:
-                self.mask_cube(mask_file)
+            if mask is not None:
+                self.mask_cube(mask)
 
             # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
             #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')

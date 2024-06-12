@@ -103,7 +103,7 @@ load_kwargs = {'chunks': {},
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
-               'mask_file': mask_file, # Path to mask file (.shp file) to mask some of the data on cube
+               'mask': mask_file, # Path to mask file (.shp file) to mask some of the data on cube
                'verbose': False} # Print information throughout the loading process
                
 ## ----------------------- Data preparation parameters --------------------- ##
