@@ -22,26 +22,20 @@ from ticoi.cube_data_classxr import cube_data_class
 #                                    PARAMETERS                               #
 # =========================================================================%% #
 
-####  Selection of data
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-# path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
-# i, j = -138.18069, 60.29076
-# proj = 'EPSG:4326'  # EPSG system of the given coordinates
-
-cube_name = '/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_subset.nc' # Path where the Sentinel-2 IGE cubes are stored
-dem_file = '/media/tristan/Data3/Hala_lake/Landsat8/hala_cop30_utm_30m.tif'
-proj = 'EPSG:32647'  # EPSG system of the given coordinates
-
-i, j = 396343, 4259420# Point (pixel) where to carry on the computation
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat8/{i}-{j}-test-vvc_15/' # Path where to store the results
+###  Selection of data
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
+dem_file = ''
+i, j = -138.18069, 60.29076
+proj = 'EPSG:4326'  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 #For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 200  #Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier = 'vvc_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
+delete_outlier = 'topo_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False #Use the error as apriori
-interval_output = 90 #temporal sampling of the output results
+interval_output = 30 #temporal sampling of the output results
 unit = 365 # 1 for m/d, 365 for m/y
 result_quality = ['X_contribution'] # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
 
