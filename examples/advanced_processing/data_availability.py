@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 '''
 A few tools to evaluate the data availability on a set of data, its repartition throughout the period of measurement and its quality 
 in some cases, in order to see whether it is relevent or not to study glacier velocities at a point (seaonality, surge...). It uses 

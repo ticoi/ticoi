@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 '''
 Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method to compute entire data cubes.
 An aditional seasonality analysis is implemented, by matching a sinus to TICOI results for each pixel of the considered cube/subset,

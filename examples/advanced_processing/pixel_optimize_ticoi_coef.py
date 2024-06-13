@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 '''
 Coefficient optimization of the TICOI post-processing method, according to a "ground truth" given data cube (GPS, 
 more precise satellitarian data...). A range of coefficients is tested for a given regularisation method, by computing

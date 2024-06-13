@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 '''
 Visualization of the cube results from TICO (without interpolation), or TICOI (with interpolation)
 

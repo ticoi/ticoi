@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 '''
 Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method
 for one pixel. An additionnal seasonality analysis is implemented, the idea is to match a sine to TICOI results
