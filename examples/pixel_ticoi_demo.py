@@ -33,7 +33,7 @@ proj = 'EPSG:4326'  # EPSG system of the given coordinates
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outlier = 'vvc_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
-apriori_weight = True #Use the error as apriori
+apriori_weight = False #Use the error as apriori
 interval_output = 30 #temporal sampling of the output results
 unit = 365 # 1 for m/d, 365 for m/y
 result_quality = ['X_contribution'] # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
@@ -97,6 +97,7 @@ inversion_kwargs = {'regu': regu,  # Regularization method to be used
                     'threshold_it': 0.1,
                     # Threshold to test the stability of the results between each iteration, used to stop the process
                     'apriori_weight': True,  # If True, use apriori weights
+                    'apriori_weight_in_second_iteration':True,#it True use the error to weight each of the iterations, if not use it only in the first iteration
                     'detect_temporal_decorrelation': True,
                     # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
                     'linear_operator': None,  # Perform the inversion using this specific linear operator

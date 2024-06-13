@@ -283,7 +283,7 @@ class pixel_class():
         ax, fig = self.plot_vv(color=colors[0], type_data='obs')
         self.show,self.save  = show,save
 
-        ax.set_ylim(data.vvymin, data.vvymax)
+        if zoom_on_results: ax.set_ylim(data.vvymin, data.vvymax)
         p = ax.plot(data.dataf['date_cori'], data.dataf['vv'], linestyle='', zorder=1, marker='o', lw=0.7,
                     markersize=3, color=colors[1], label=f'Results from the inversion')
         ax.errorbar(data.dataf['date_cori'], data.dataf['vv'], xerr=data.dataf['offset_bar'],

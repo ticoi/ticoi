@@ -497,17 +497,17 @@ class cube_data_class:
         elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
             self.buffer(proj, buffer)
 
-        time_dim = 'mid_date' if not self.is_TICO else 'date2' # 'date2' if we load TICO data
+        time_dim = 'mid_date' if not self.is_TICO else 'second_date' # 'date2' if we load TICO data
         self.update_dimension(time_dim)
 
         # Temporal subset between two dates
         if pick_date is not None:
             if not self.is_TICO:
                 self.ds = self.ds.where(((self.ds['date1'] >= np.datetime64(pick_date[0])) & (
-                                        self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+                        self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
             else:
-                self.ds = self.ds.where(((self.ds['date2'] >= np.datetime64(pick_date[0])) & (
-                    self.ds['date2'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
+                self.ds = self.ds.where(((self.ds['second_date'] >= np.datetime64(pick_date[0])) & (
+                        self.ds['second_date'] <= np.datetime64(pick_date[1]))).compute(), drop=True)
         del pick_date
 
         self.update_dimension(time_dim)
@@ -577,8 +577,6 @@ class cube_data_class:
         if type(filepath) == list: # Merge several cubes
             self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
                       proj=proj, mask_file=mask_file, verbose=verbose)
-
-            cube2 = None
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
@@ -598,14 +596,11 @@ class cube_data_class:
                 "L. Charrier, L. Guo": 'mid_date',
                 "L. Charrier": 'mid_date',
                 "E. Ducasse": 'time',
-                "S. Leinss, L. Charrier": 'mid_date'
+                "S. Leinss, L. Charrier": 'mid_date', "IGE":'mid_date'
             }
 
         self.__init__()
 
-        self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
-        time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
-        var_name = "vx" if not self.is_TICO else "dx"
 
         with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks       
             if filepath.split(".")[-1] == "nc":
@@ -614,9 +609,13 @@ class cube_data_class:
                 except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                     chunks = {}
                     self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
-                
+
                 if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                     self.ds.attrs["author"] = self.ds.attrs.pop("Author")
+
+                self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else 'second_date'
+                var_name = "vx" if not self.is_TICO else "dx"
 
                 if chunks == {}: # Rechunk with optimal chunk size
                     tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
@@ -625,9 +624,10 @@ class cube_data_class:
                 elif filepath.split(".")[-1] == "zarr":
                     if chunks == {}:
                         chunks = "auto" # Change the default value to auto
-
                     self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
-                    var_name = 'vx'
+                    self.is_TICO = False
+                    time_dim = 'mid_date'
+                    var_name = "vx"
 
             if verbose:
                 print('[Data loading] File open')
@@ -646,6 +646,7 @@ class cube_data_class:
 
             # Rechunk again if the size of the cube is changed:
             if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
+                time_dim = 'mid_date' if not self.is_TICO else 'second_date'
                 tc, yc, xc = self.determine_optimal_chunk_size(variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True)
                 self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 

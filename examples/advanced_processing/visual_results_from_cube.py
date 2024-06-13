@@ -1,11 +1,5 @@
 '''
-Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method to compute entire data cubes.
-It can be divided in three parts:
-    - Data loading : Load one or several data cube.s, eventually considering a given subset or buffer to limit its size. Additionnal data
-    cubes are aligned and merged to the main cube.
-    - TICOI : Compute TICOI on the selection of data using the given method (split in blocks or direct processing, think of reading the comments
-    about those methods) to get a list of the results.
-    - Save the results : Format the data to a new data cube, which can be saved to a netCDF file. The mean velocity can also be saved as an example.
+Visualization of the cube results from TICO (without interpolation), or TICOI (with interpolation)
 
 Author : Laurane Charrier, Lei Guo, Nathan Lioret
 Reference:
@@ -18,15 +12,7 @@ Reference:
 import time
 import os
 import warnings
-import itertools
 import xarray as xr
-import pandas as pd
-
-from joblib import Parallel, delayed
-from tqdm import tqdm
-
-from ticoi.core import process_blocks_refine, process, save_cube_parameters
-from ticoi.interpolation_functions import prepare_interpolation_date
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.pixel_class import pixel_class
 # %%========================================================================= #
@@ -126,11 +112,13 @@ if save_mean_velocity and cube_interp is not None:
 if save or save_mean_velocity:
     print(f'[Writing results] Results saved at {path_save}')
 
-t=cube_interp.load_pixel(1,2,output_format='df',visual=True)[0]
-t2=cube.load_pixel(1,2,output_format='df',visual=True)[0]
+t = cube_interp.load_pixel(1,2,output_format='df',visual=True)[0]
+t2 = cube.load_pixel(1,2,output_format='df',visual=True)[0]
 pixel_object = pixel_class()
 pixel_object.load([t,t2], save=False, show=True, A=False, path_save=path_save,type_data=['interp','obs'])
 pixel_object.plot_vx_vy_overlayed(type_data='interp',colors=['orange','blue'],zoom_on_results=False)
 pixel_object.plot_vv_overlayed(type_data='interp',colors=['orange','blue'],zoom_on_results=False)
+
+
 stop.append(time.time())
 print(f'[Overall] Overall processing took {round(stop[-1] - start[0], 0)} s')

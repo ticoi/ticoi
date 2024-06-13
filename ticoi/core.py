@@ -97,8 +97,8 @@ def inversion_iteration(data: np.ndarray, A: np.ndarray, dates_range: np.ndarray
 
         r_std = residu / (stats.median_abs_deviation(residu) / 0.6745)
         if Weight is not None:  # The weight is a combination of apriori weight and the studentized residual
-            Weight = Weight/ (stats.median_abs_deviation(Weight) / 0.6745)
-            weight = TukeyBiweight(Weight, 4.685) * TukeyBiweight(r_std, 4.685)
+            # Weight = Weight / (stats.median_abs_deviation(Weight) / 0.6745)
+            weight = Weight * TukeyBiweight(r_std, 4.685)
         else:
             weight = TukeyBiweight((r_std), 4.685)
 
@@ -150,7 +150,7 @@ def inversion_iteration(data: np.ndarray, A: np.ndarray, dates_range: np.ndarray
 def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.ndarray | None = None, solver: str = 'LSMR',
                    regu: int | str = 1, coef: int = 100, apriori_weight: bool = False, iteration: bool = True, threshold_it: float = 0.1,
                    unit: int = 365, conf: bool = False, mean: list | None = None, detect_temporal_decorrelation: bool = True,
-                   linear_operator: bool = False, result_quality: list | str | None = None, nb_max_iteration: int = 10, apriori_weight_in_second_iteration:bool=True,
+                   linear_operator: bool = False, result_quality: list | str | None = None, nb_max_iteration: int = 10, apriori_weight_in_second_iteration:bool=False,
                    visual: bool = True, verbose: bool = False) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
 
     '''
@@ -172,6 +172,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
     :param linear_operator: [bool] [default is False] --- If linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
     :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param nb_max_iteration: [int] [default is 10] --- Maximum number of iterations
+    :param apriori_weight_in_second_iteration: [bool] [default is False] --- it True use the error to weight each of the iterations, if not use it only in the first iteration
     :param visual: [bool] [default is True] --- Keep the weights for future plots
     :param verbose: [bool] [default is False] --- Print informations along the way
 
@@ -269,18 +270,18 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
         # Second Iteration
         # 1.11 s ± 17.5 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
         if iteration:
-            if apriori_weight_in_second_iteration: #use apriori weight based on the error or quality indicator
-                Weightx = weight_for_inversion(weight_origine=apriori_weight, conf=conf, data=data_values, pos=2,
-                                               inside_Tukey=True)
-                Weighty = weight_for_inversion(weight_origine=apriori_weight, conf=conf, data=data_values, pos=3,
-                                               inside_Tukey=True)
-            else: Weightx,Weighty = None, None
+            if apriori_weight_in_second_iteration: #use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
+                Weightx2 = weight_for_inversion(weight_origine=apriori_weight, conf=conf, data=data_values, pos=2,
+                                               inside_Tukey=False)
+                Weighty2 = weight_for_inversion(weight_origine=apriori_weight, conf=conf, data=data_values, pos=3,
+                                               inside_Tukey=False)
+            else: Weightx2,Weighty2 = None, None
 
             result_dx_i, result_dy_i, weight_2x, weight_2y, residu_normx, residu_normy = inversion_iteration(
                 data_values, A,
                 dates_range,
                 solver, coef,
-                [Weightx,Weighty],
+                [Weightx2,Weighty2],
                 result_dx,
                 result_dy, mu=mu,
                 verbose=verbose,
@@ -296,7 +297,7 @@ def inversion_core(data: list, i: float | int, j: float | int, dates_range: np.n
                     data_values, A,
                     dates_range,
                     solver, coef,
-                    [Weightx,Weighty],
+                    [Weightx2,Weighty2],
                     result_dx,
                     result_dy, mu,
                     verbose=verbose, regu=regu,
@@ -454,7 +455,7 @@ def interpolation_core(result: pd.DataFrame, interval_output: int, path_save: st
     else:
         start_date = pd.to_datetime(first_date_interpol)
 
-    x = np.array((dataf['date2'] - np.datetime64(start_date)).dt.days)  # Number of days according to the start_date
+    x = np.array((dataf['Second_date'] - np.datetime64(start_date)).dt.days)  # Number of days according to the start_date
     if len(x) <= 1 or (np.isin('spline', option_interpol) and len(x) <= 3):  # It is not possible to interpolate, because too few estimation
         return pd.DataFrame({'date1': [], 'date2': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': [], 'dz': [],
              'vz': [], 'xcount_z': [], 'NormR': []})
