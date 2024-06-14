@@ -24,14 +24,13 @@ from ticoi.cube_data_classxr import cube_data_class
 
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results", "pixel"))}/'  # Path where to stored the results
-i, j = 343646.9,5091326.0
-proj = 'EPSG:4326'  # EPSG system of the given coordinates
+i, j = 343635.1, 5091344.6
+proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 #For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 200  #Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier = 'vvc_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False #Use the error as apriori
 interval_output = 30 #temporal sampling of the output results
 unit = 365 # 1 for m/d, 365 for m/y
@@ -66,9 +65,8 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'sigma': 3, # Standard deviation for 'gaussian' filter
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': delete_outlier, # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+                  'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
                   'flag': None, # Divide the data in several areas where different methods should be used
-                  'dem_file': dem_file, # Path to the DEM file for calculating the slope and aspect
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
                   'solver': 'LSMR_ini', # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates

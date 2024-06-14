@@ -120,13 +120,13 @@ solver = 'LSMR_ini' # Solver for the inversion
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {'chunks': {}, 
                'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+               'subset': [343386.1, 344020.8, 5091192.8, 5091499.5], # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
                'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
                'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
                'pick_sensor': None, # Select sensors (None to select all)
                'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
                'proj': proj, # EPSG system of the given coordinates
-               'mask_file': mask_file, # Path to mask file (.shp file) to mask some of the data on cube
+               'mask': mask_file, # Path to mask file (.shp file) to mask some of the data on cube
                'verbose': False} # Print information throughout the loading process 
                 
 ## ---------------- Parameters for the pixel loading part ------------------ ##
@@ -134,8 +134,7 @@ load_pixel_kwargs = {'regu': regu, # Regularization method.s to be used (for eac
                      'solver': solver, # Solver for the inversion
                      'proj': proj, # EPSG system of the given coordinates
                      'interpolation_load_pixel': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
-                     'visual': False, # Plot results along the way
-                     'verbose':False} # Print information throughout TICOI processing
+                     'visual': False} # Plot results along the way
                       
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 12 # Number of CPU to be used for parallelization
@@ -154,6 +153,9 @@ for ind in index:
         if 'monthly' not in index:
             index.append('monthly')
         break
+
+if load_pixel_process == 'direct_process':
+    load_pixel_kwargs['interp'] = load_pixel_kwargs.pop('interpolation_load_pixel')
 
 # %%========================================================================= #
 #                                 DATA LOADING                                #
@@ -282,7 +284,7 @@ def max_leap_frog(data, period=None):
 # To generate GeoTiff files
 driver = gdal.GetDriverByName('GTiff')
 srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS(proj)
+srs.ImportFromEPSG(int(proj.split(':')[1]))
 
 start.append(time.time())
 
@@ -419,7 +421,7 @@ if 'availability_maps' in index:
     # Generate GeoTiff files (each band = a season)
     driver = gdal.GetDriverByName('GTiff')
     srs = osr.SpatialReference()
-    srs.SetWellKnownGeogCS(proj)
+    srs.ImportFromEPSG(int(proj.split(':')[1]))
     
     tiff = driver.Create(f'{path_save}seasonal_data_availability.tiff', winter.shape[0], winter.shape[1], 4, gdal.GDT_Float32)
     tiff.SetGeoTransform([np.min(longitude), resolution, 0, np.max(latitude), 0, -resolution])
@@ -506,7 +508,7 @@ def min_all_season(maps):
 # To generate GeoTiff files
 driver = gdal.GetDriverByName('GTiff')
 srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS(proj)
+srs.ImportFromEPSG(int(proj.split(':')[1]))
 
 # Monthly indices ('mini_nmonth', 'mean_nmonth' or 'median_nmonth' where n is a number or empty)
 start.append(time.time())
@@ -553,7 +555,7 @@ if 'mini_season' in index or 'min_all_season' in index:
 else:
     stop.append(time.time())
 
-# Needed to effectively save the .tiff files
+# Needed to effectively save the .tiff files
 driver = None
 
 print(f'[Overall] Overall processing took {round(stop[-1] - start[0], 0)} s')

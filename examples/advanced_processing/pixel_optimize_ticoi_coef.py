@@ -154,7 +154,7 @@ print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}
 start.append(time.time())
 
 # Filter the data cube (compute rolling_mean for regu=1accelnotnull)
-obs_filt = cube.filter_cube(**preData_kwargs)
+obs_filt, _ = cube.filter_cube(**preData_kwargs)
 
 stop.append(time.time())
 print(f'[Data loading] Filtering the cube took {round((stop[-1] - start[-1]), 4)} s')

@@ -782,16 +782,16 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
             else:
                 return [pd.DataFrame({'First_date': [], 'Second_date': [], 'vx': [], 'vy': [], 'xcount_x': [], 'xcount_y': []})]
  
-        result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
-                for i, j in xy_values_tqdm)
+        # result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+        # delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+        #         for i, j in xy_values_tqdm)
 
-        # result_block = [process(block, i, j, obs_filt=obs_filt,**inversion_kwargs)
-        #                 for i, j in xy_values_tqdm]
+        result_block = [process(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+                            for i, j in xy_values_tqdm]
         return result_block
     
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', verbose=False):
-        flags = preData_kwargs['flags'] if preData_kwargs is not None else None
+        flag = preData_kwargs['flag'] if preData_kwargs is not None else None
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True) # Split the cube in smaller blocks
         
         dataf_list = [None] * ( cube.nx * cube.ny )
@@ -799,8 +799,7 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         loop = asyncio.get_event_loop()
         for n in range(len(blocks)):
             print(f'[Block process] Processing block {n+1}/{len(blocks)}')
-
-            
+  
             # Load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]

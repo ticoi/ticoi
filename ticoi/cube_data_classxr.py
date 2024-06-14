@@ -904,7 +904,6 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    
     def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None, slope: xr.Dataset | None = None, aspect: xr.Dataset | None = None,):
         
         '''
@@ -962,17 +961,20 @@ class cube_data_class:
                     .where(mask.sel(x=self.ds.x, y=self.ds.y, method='nearest') == 1) \
                     .astype('float32')
 
-    def create_flag(self, flag_shp : str = None, field_name : str | None = None, default_value : str | int | None = None):
-        """
+    def create_flag(self, flag_shp : str | None = None, field_name : str | None = None, default_value : str | int | None = None):
+        
+        '''
         Create a flag dataset based on the provided shapefile and shapefile field.
         Which is usually used to divide the pixels into different types, especially for surging glaciers.
         If you just want to divide by polygon, set the shp_field to None
 
-        :param flag_shp (str, optional): The path to the shapefile. Defaults to None.
-        :param shp_field (str, optional): The name of the shapefile field. Defaults to 'surge_type' (used in RGI7).
-        :param default_value (str | int | None, optional): The default value for the shapefile field. Defaults to 0.
-        :Returns flag: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
-        """
+        :param flag_shp: [str | None] [default is None] --- The path to the shapefile. Defaults to None
+        :param shp_field: [str | None] [default is None] --- The name of the shapefile field. Defaults to 'surge_type' (used in RGI7)
+        :param default_value: [str | int | None] [default is None] --- The default value for the shapefile field. Defaults to 0
+        
+        :return flag: [xr dataset] --- The flag dataset with dimensions 'y' and 'x'
+        '''
+        
         flag_shp = geopandas.read_file(flag_shp).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
         
         # surge-type glacier: 2, other glacier: 1, stable area: 0
@@ -988,7 +990,7 @@ class cube_data_class:
             flag_id = flag_shp[field_name].apply(lambda x: 2 if x != default_value else 1).astype("int16")
             geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
         else:
-        # inside the polygon: 1, outside: 0
+            # inside the polygon: 1, outside: 0
             geom_value = ((geom, 1) for geom in flag_shp.geometry)
         
         flag = rasterio.features.rasterize(
@@ -1145,9 +1147,15 @@ class cube_data_class:
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
         
         if flag is not None:
-            
-            if isinstance(flag, str): # if flag is a shape file 
-                flag = self.create_flag(flag)
+            if isinstance(flag, str): 
+                if flag.split('.')[-1] == 'nc': # If flag is a netCDF file
+                    flag = xr.open_dataset(flag)
+                    if 'flags' in list(flag.variables):
+                        flag = flag.rename({'flags': 'flag'})
+                elif flag.split('.')[-1] == 'shp': # If flag is a shape file 
+                    flag = self.create_flag(flag)
+                else:
+                    raise ValueError("flag file must be .nc or .shp")
                 flag = flag.load()
             elif isinstance(flag, xr.Dataset):
                 flag = flag.load()
@@ -1222,7 +1230,7 @@ class cube_data_class:
     def align_cube(self, cube: "cube_data_class", unit: int = 365, reproj_vel: bool = True, reproj_coord: bool = True,
                    interp_method: str = 'nearest'):
 
-        """
+        '''
         Reproject cube to match the resolution, projection, and region of self.
         
         :param cube: Cube to align to self
@@ -1232,7 +1240,7 @@ class cube_data_class:
         :param interp_method: Interpolation method used to reproject cube (default is 'nearest')
         
         :return: Cube projected to self
-        """
+        '''
 
         if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
             grid = np.meshgrid(cube.ds['x'], cube.ds['y'])

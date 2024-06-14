@@ -60,21 +60,13 @@ save = True # If True, save TICOI results to a netCDF file
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
-             'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
+              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
 flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc' # Path to flags file
 mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
-
-# Divide the data in several areas where different methods should be used
-assign_flag = True
-if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
-else:
-    flags = None
 
 # Regularization method.s to be used (for each flag if flags is not None)
 regu = {0: 1, 1: '1accelnotnull'} # With flags (0: stable ground, 1: glaciers)
@@ -104,7 +96,7 @@ preData_kwargs = {'smooth_method': 'savgol', # Smoothing method to be used to sm
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                   'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
-                  'flags': flags, # Divide the data in several areas where different methods should be used
+                  'flag': flag_file, # Divide the data in several areas where different methods should be used
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                   'solver': solver, # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
@@ -115,7 +107,7 @@ preData_kwargs = {'smooth_method': 'savgol', # Smoothing method to be used to sm
 inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                     'coef': coef, # Regularization coefficient.s to be used (for each flag if flags is not None)
                     'solver': solver, # Solver for the inversion
-                    'flags': flags, # Divide the data in several areas where different methods should be used
+                    'flag': flag_file, # Divide the data in several areas where different methods should be used
                     'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
                     'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                     'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle') 
@@ -213,7 +205,8 @@ if TICOI_process == 'block_process':
 # Direct computation of the whole TICOI cube
 elif TICOI_process == 'direct_process':
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(**preData_kwargs)
+    obs_filt, flag = cube.filter_cube(**preData_kwargs)
+    inversion_kwargs.update({'flag': flag})
     
     # Progression bar
     xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
@@ -476,7 +469,7 @@ def AtoVar(A, raw, dataf_lp, local_var_method='uniform_7d'):
     
 driver = gdal.GetDriverByName('GTiff')
 srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS(proj)
+srs.ImportFromEPSG(int(proj.split(':')[1]))
 
 # Remove pixels with no data
 empty = list(filter(bool, [d if not (result[d].empty and result[d][result[d]['vx'] == 0].shape[0] == 0) else False for d in range(len(result))]))

@@ -59,10 +59,10 @@ compute_result_load = False
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/343646.9,5091326.0'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
-# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/343646.9,5091326.0',
+# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
 #              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
 #              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
 flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_flags.nc' # Path to flags file
@@ -261,8 +261,9 @@ if TICOI_process != 'load' and save:
                                              filename=f'{result_fn}_invert' if several else result_fn, 
                                              savepath=path_save if save else None, 
                                              result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
+        j += 1
     if 'interp' in returned:
-        cube_interp = cube.write_result_ticoi([result[i][j+1] for i in range(len(result))] if several else result, source_interp, sensor, 
+        cube_interp = cube.write_result_ticoi([result[i][j] for i in range(len(result))] if several else result, source_interp, sensor, 
                                               filename=f'{result_fn}_interp' if several else result_fn, 
                                               savepath=path_save if save else None, 
                                               result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])

@@ -43,10 +43,12 @@ proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
 assign_flag = True
-flags = None # Do not put it in load_kwargs and/or preData_kwargs but pass it to optimize_coef directly
+flag = None # Do not put it in load_kwargs and/or preData_kwargs but pass it to optimize_coef directly
 if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
+    flag = xr.open_dataset(flag_file)
+    flag.load()
+    if 'flags' in list(flag.variables):
+        flag = flag.rename({'flags': 'flag'})
 
 flag_name = {0: 'stable ground', 1: 'glacier'}
 
@@ -173,7 +175,7 @@ print(f'[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}
 #                         COEFFICIENT OPTIMIZATION                            #
 # =========================================================================%% #
 
-async def process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs, regu=None, flags=None,
+async def process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs, regu=None, flag=None,
                         cmin=10, cmax=1000, step=10, coefs=None, stats=False, nb_cpu=8):
     
     # Progression bar
@@ -181,17 +183,17 @@ async def process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, int
     xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
     
     # Filter cube
-    obs_filt = block.filter_cube(**preData_kwargs, flags=flags)
+    obs_filt, flag_block = block.filter_cube(**preData_kwargs, flag=flag)
     
     # Optimization of the coefficient for every pixels of the block
     #    (faster using parallelization here and sequential processing in optimize_coef)
     result_block = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(block, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
-                            inversion_kwargs, interpolation_kwargs, regu=regu, flags=flags, cmin=cmin, cmax=cmax, 
+                            inversion_kwargs, interpolation_kwargs, regu=regu, flag=flag_block, cmin=cmin, cmax=cmax, 
                             step=step, coefs=coefs, stats=stats, parallel=False, visual=False) for i, j in xy_values_tqdm)
     
     return result_block
 
-async def process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs, regu=None, flags=None,
+async def process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs, regu=None, flag=None,
                               cmin=10, cmax=1000, step=10, coefs=None, stats=False, nb_cpu=8, block_size=0.5, 
                               verbose=False):
     
@@ -209,7 +211,7 @@ async def process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs
             x_start, x_end, y_start, y_end = blocks[0]
             future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
-        block, flags_block, duration = await future
+        block, duration = await future
         print(f'[Block process] Block {n+1} loaded in {duration:.2f} s')
         if verbose: print(f'[Block process] Block {n+1} loaded in {duration:.2f} s')
 
@@ -219,7 +221,7 @@ async def process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs
             future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
         block_result = await process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs,
-                                           regu=regu, flags=flags, cmin=cmin, cmax=cmax, step=step, coefs=coefs, 
+                                           regu=regu, flag=flag, cmin=cmin, cmax=cmax, step=step, coefs=coefs, 
                                            stats=stats, nb_cpu=nb_cpu)
 
         for i in range(len(block_result)):
@@ -229,7 +231,7 @@ async def process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs
 
             dataf_list[idx] = block_result[i]
 
-        del block_result, block, flags_block
+        del block_result, block
 
     return dataf_list
 
@@ -242,18 +244,18 @@ start.append(time.time())
 
 if optimization_process == 'block_process':
     result = asyncio.run(process_blocks_main(cube, cube_gt, load_pixel_kwargs, inversion_kwargs, interpolation_kwargs,
-                                             regu=regu, flags=flags, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
+                                             regu=regu, flag=flag, cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
                                              stats=stats, nb_cpu=nb_cpu, block_size=block_size, verbose=False))
 
 elif optimization_process == 'direct_process':
-    obs_filt = cube.filter_cube(**preData_kwargs, flags=flags)
+    obs_filt = cube.filter_cube(**preData_kwargs, flag=flag)
     
     # Progression bar
     xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
     xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
 
     result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(cube, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
-                        inversion_kwargs, interpolation_kwargs, regu=regu, flags=flags,
+                        inversion_kwargs, interpolation_kwargs, regu=regu, flag=flag,
                         cmin=coef_min, cmax=coef_max, step=step, coefs=coefs, 
                         stats=stats, visual=False) for i, j in xy_values_tqdm)
 
@@ -275,7 +277,7 @@ else:
 
 driver = gdal.GetDriverByName('GTiff')
 srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS(proj)
+srs.ImportFromEPSG(int(proj.split(':')[1]))
 
 # Remove pixels with no data
 empty = list(filter(bool, [d if result[d] is not None else False for d in range(len(result))]))
@@ -349,7 +351,7 @@ nb_data = np.array([result[i].nb_data if result[i] is not None else 0 for i in r
 RMSEs_result = np.array([result[i].values if result[i] is not None else [np.nan for _ in range(len(coefs))] for i in range(nb_res)])
 
 # For each areas of the cube we compute the RMSE-coef curves
-if flags is None: regu = {0: regu}
+if flag is None: regu = {0: regu}
 for key in regu.keys():
     mask_regu = [result[i].regu == regu[key] for i in range(nb_res)]
     if any(mask_regu) is True:
@@ -376,9 +378,9 @@ for key in regu.keys():
         fig.suptitle(f'RMSE-coef average curve for the {flag_name[key] if type(flag_name) == dict else ""} area with regu={regu[key]}\n' + 
                      f'Best for coef = {best_coef} (RMSE = {best_RMSE})', fontsize=16)
     
-        if save and flags is None:
+        if save and flag is None:
             fig.savefig(f'{path_save}RMSE_coef_{regu[key]}.png')
-        elif flags is not None:
+        elif flag is not None:
             fig.savefig(f'{path_save}RMSE_coef_{flag_name[key]}_{regu[key]}.png')
         
         # Plot every RMSE-coef curves which 
@@ -418,9 +420,9 @@ for key in regu.keys():
             fig.suptitle(f'RMSE between TICOI results and GT data for the {flag_name[key] if type(flag_name) == dict else ""} area\n' +
                           'when changing the regularisation coefficient', y=0.95, fontsize=16)
             
-            if save and flags is None:
+            if save and flag is None:
                 fig.savefig(f'{path_save}RMSE_coef_{regu[key]}_allplots.png')
-            elif flags is not None:
+            elif flag is not None:
                 fig.savefig(f'{path_save}RMSE_coef_{flag_name[key]}_{regu[key]}_allplots.png')
                 
         plt.show()

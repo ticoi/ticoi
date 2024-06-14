@@ -33,6 +33,7 @@ from ticoi.cube_data_classxr import cube_data_class
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2"))}/c_x01470_y03430_all_filt-multi.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
@@ -162,7 +163,7 @@ print(f'[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cu
 start.append(time.time())
 
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
-obs_filt = cube.filter_cube(**preData_kwargs)
+obs_filt, _ = cube.filter_cube(**preData_kwargs)
 # Load pixel data
 data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 

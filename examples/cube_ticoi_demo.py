@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore")
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 
-TICOI_process = 'direct_process'
+TICOI_process = 'block_process'
 
 save = True # If True, save TICOI results to a netCDF file
 save_mean_velocity = True # Save a .tiff file with the mean resulting velocities, as an example
@@ -123,7 +123,8 @@ if not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # Update of dictionary with common parameteres
-for common_parameter in ['flags', 'proj', 'delete_outliers', 'regu', 'solver']: inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
+for common_parameter in ['flag', 'proj', 'delete_outliers', 'regu', 'solver']: 
+    inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
   
 # %%========================================================================= #

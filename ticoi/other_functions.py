@@ -195,7 +195,7 @@ def RMSE_TICOI_GT(data: list, mean: list | None, dates_range: np.ndarray | None,
 
 def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | int, j: float | int, obs_filt: xr.Dataset, 
                   load_pixel_kwargs: dict, inversion_kwargs: dict, interpolation_kwargs: dict, regu: dict | None = None,
-                  flags: xr.DataArray | None = None, cmin: int = 10, cmax: int = 1000, step: int = 10, coefs : list | None = None, 
+                  flag: xr.DataArray | None = None, cmin: int = 10, cmax: int = 1000, step: int = 10, coefs : list | None = None, 
                   stats: bool = False, parallel: bool = False, nb_cpu: int = 8, **visual_options):
     
     '''
@@ -223,10 +223,10 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
     '''
     
     # Load data at pixel
-    if flags is not None:
+    if flag is not None:
         if 'regu' in inversion_kwargs.keys(): 
             inversion_kwargs.pop('regu')
-        data, mean, dates_range, regu, _  = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs, flags=flags)
+        data, mean, dates_range, regu, _  = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs, flag=flag)
     else:
         data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
         regu = None
@@ -279,7 +279,7 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
         std_gt_all = data_gt[['vx', 'vy']].std(ddof=0)
         
         return xr.DataArray(data=RMSEs,
-                            attrs={'regu': inversion_kwargs['regu'] if flags is None else regu,
+                            attrs={'regu': inversion_kwargs['regu'] if flag is None else regu,
                                    'nb_data': (dataf.shape[0], data_gt.shape[0]),
                                    'mean_temporal_baseline': temporal_baseline,
                                    'mean_v_similar_data': (mean_raw['vx'], mean_raw['vy'], mean_gt['vx'], mean_gt['vy']),
@@ -287,5 +287,5 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
                                    'std_raw_data': (std_raw_all['vx'], std_raw_all['vy'], std_gt_all['vx'], std_gt_all['vy'])})
     
     return xr.DataArray(data=RMSEs, 
-                        attrs={'regu': inversion_kwargs['regu'] if flags is None else regu,
+                        attrs={'regu': inversion_kwargs['regu'] if flag is None else regu,
                                'nb_data': (dataf.shape[0], data_gt.shape[0])})
