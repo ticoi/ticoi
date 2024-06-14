@@ -54,15 +54,14 @@ warnings.filterwarnings("ignore")
 TICOI_process = 'load'
 
 save = True # If True, save TICOI results to a netCDF file
-save_mean_velocity = True # Save a .tiff file with the mean reulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
-cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
-             'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/Argentiere_example_interp.nc'}
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc' # Path to flags file
+cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+             'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc' # Path to flags file
 mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
@@ -146,6 +145,11 @@ block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
 # Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
 impose_frequency = True
+# Add several sinus at different freqs (1/365.25 and harmonics (2/365.25, 3/365.25...) if impose_frequency is True)
+#   (only available for impose_frequency = True for now)
+several_freq = 2
+# Compute also the best matching sinus to raw data, for comparison
+raw_seasonality = True
 # Filter to use in the first place
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
@@ -284,30 +288,8 @@ if TICOI_process != 'load':
     j = 1 if 'raw' in returned else 0
     cube_interp = cube.write_result_ticoi(result, source_interp, sensor, filename=f'{result_fn}_interp', savepath=path_save if save else None, 
                                           result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
-
-# Plot the mean velocity as an example
-if save_mean_velocity and cube_interp is not None:    
-    mean_vv = np.sqrt(cube_interp.ds['vx'].mean(dim='mid_date') ** 2 + cube_interp.ds['vy'].mean(dim='mid_date') ** 2).to_numpy().astype(np.float32)
-    mean_vv = np.flip(mean_vv.T, axis=0)
-    
-    driver = gdal.GetDriverByName('GTiff')
-    srs = osr.SpatialReference()
-    srs.SetWellKnownGeogCS('EPSG:32632')
-    
-    dst_ds_temp = driver.Create(f'{path_save}{result_fn}_mean_velocity.tiff', mean_vv.shape[1], mean_vv.shape[0], 1, gdal.GDT_Float32)
-    if TICOI_process != 'load' or (TICOI_process == 'load' and 'raw' in cube_name.keys()):
-        resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
-        dst_ds_temp.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.min(cube.ds['y'].values), 0, resolution])
-    else:
-        resolution = int(cube_interp.ds['x'].values[1] - cube_interp.ds['x'].values[0])
-        dst_ds_temp.SetGeoTransform([np.min(cube_interp.ds['x'].values), resolution, 0, np.min(cube_interp.ds['y'].values), 0, resolution])
-    dst_ds_temp.GetRasterBand(1).WriteArray(mean_vv)
-    dst_ds_temp.SetProjection(srs.ExportToWkt())
-    
-    dst_ds_temp = None
-    driver = None
         
-if save or (save_mean_velocity and cube_interp is not None):
+if save:
     print(f'[Writing results] Results saved at {path_save}')
 
 stop.append(time.time())
@@ -322,16 +304,26 @@ if TICOI_process != 'load':
 
 start.append(time.time())
 
-def match_sine(d, impose_frequency=True, filt=None):
+def match_sine(d: pd.DataFrame, filt: str | None = None, impose_frequency: bool = True, several_freq: int | None = None, 
+               raw_seasonality: bool = False, d_raw: pd.DataFrame | None = None):
     
     '''
        Match a sine curve to TICOI results to look for a periodicity among the velocities. The period can either 
     be set to 365.25 days, or estimated along with the other parameters (amplitude, phase, offset).
     
-       :param d: pandas dataframe of the data at the considered pixel
-       :param impose_frequency: bool, whether we should impose the frequency to 1/365.25 or not (default True)
+       :param d: [pd dataframe] --- pandas dataframe of the data at the considered pixel
        :param filt: which filter to use before processing the sinus ('highpass', 'lowpass' or None, default None)
+       :param impose_frequency: [bool] [default is True] --- Whether we should impose the frequency to 1/365.25 or not (default True)
+       :param several_freq: [int | None] [default is None] --- If > 1, a signal made of several frequencies (at n*f) is matched to the data
+       :param raw_seasonality: [bool] [default is False] --- If True, we also match a sinus to the raw data
+       :param d_raw: [pd dataframe | None] [default is None] --- If raw_seasonality is True, must be the dataframe of the raw velocity data (not displacements)
     '''
+    
+    # To find the day associated to the maximum of the sine curve
+    def right_phi(phi):
+        if phi >= 0 and phi < np.pi/2: return np.pi/2 - phi
+        elif phi >= np.pi/2 and phi < 3*np.pi/2: return 5*np.pi/2 - phi
+        return 5*np.pi/2 - phi
     
     d = d.dropna()
     dates = (d['First_date'] + (d['Second_date'] - d['First_date']) // 2 - d['First_date'].min()).dt.days.to_numpy()
@@ -352,18 +344,62 @@ def match_sine(d, impose_frequency=True, filt=None):
     
     # Frequency is set to 1/365.25 (one year)
     if impose_frequency:
-        def sine_fconst(t, A, phi, off):
-            f = 1/365.25 # One year
-            return A * np.sin(2*np.pi*f*t + phi) + off
+        def sine_fconst(t, *args, freqs=1, f=1/365.25):
+            sine = args[0] * np.sin(2*np.pi*f*t + args[1])
+            for freq in range(1, freqs):
+                sine += args[2*freq] * np.sin(2*np.pi*(freq+1)*f*t + args[2*freq+1])
+            return sine + args[-1]
         
-        guess = [np.max(vv_filt) - np.min(vv_filt), 0, 0]
         try:
-            popt, pcov = curve_fit(sine_fconst, dates, vv, p0=guess)
-            A, phi, off = popt
+            # Find the best matching sinus to TICOI results
+            if several_freq is None: several_freq = 1
+            guess = np.concatenate([np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]])
+            popt, pcov = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates, vv_filt, p0=guess)
+            
             f = 1/365.25
+            A = popt[0]
+            phi = popt[1]
+            if phi < 0: phi += 2*np.pi
+            
+            first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+            max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
+            
+            # A = [popt[2*freq] for freq in range(several_freq)]
+            # phi = [popt[2*freq+1] for freq in range(several_freq)]
+            # phi = [phi[i] if phi[i] > 0 else phi[i] + 2*np.pi for i in range(several_freq)]   
+            # first_max_day  = [pd.Timedelta(int((right_phi(phi[i]) + (np.pi if A[i] < 0 else 0)) / (2*np.pi*f)), 'D') + 
+            #                         d['First_date'].min() for i in range(several_freq)]
+            # max_day = [(first_max_day[i] - pd.Timestamp(year=first_max_day[i].year, month=1, day=1)) for i in range(several_freq)]
+            
+            if raw_seasonality:                
+                #  Find the best matching sinus to raw data
+                dates_raw = (d_raw.index - d['First_date'].min()).days.to_numpy()
+                raw_c = d_raw['vv'] - d_raw['vv'].mean()
+                guess_raw = np.concatenate([np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]])
+                popt_raw, pcov_raw = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw)
+            
+                # Parameters
+                A_raw = popt_raw[0]
+                phi_raw = popt_raw[1]
+                if phi_raw < 0: phi_raw += 2*np.pi
+                
+                first_max_day_raw  = pd.Timedelta(int((right_phi(phi_raw) + (np.pi if A_raw < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+                max_day_raw = (first_max_day_raw - pd.Timestamp(year=first_max_day_raw.year, month=1, day=1)).days
+            
         except RuntimeError:
             A, f, phi = np.nan, np.nan, np.nan
-    # Frequency is to be found too     
+            if raw_seasonality:
+                A_raw, phi_raw = np.nan, np.nan
+            
+        # guess = [np.max(vv_filt) - np.min(vv_filt), 0, 0]
+        # try:
+        #     popt, pcov = curve_fit(sine_fconst, dates, vv, p0=guess)
+        #     A, phi, off = popt
+        #     f = 1/365.25
+        # except RuntimeError:
+        #     A, f, phi = np.nan, np.nan, np.nan
+            
+    # Frequency is to be found too
     else:
         n = 64*N
         window = signal.windows.hann(N)
@@ -380,21 +416,20 @@ def match_sine(d, impose_frequency=True, filt=None):
     
         try:
             popt, pcov = curve_fit(sine, dates, vv, p0=guess)
-            A, f, phi, off = popt
+            A, f, phi, _ = popt
+            if phi < 0: phi += 2*np.pi
+            
+            first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+            max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
+            
         except RuntimeError:
             A, f, phi = np.nan, np.nan, np.nan
     
-    # To find the day associated to the maximum of the sine curve
-    def right_phi(phi):
-        if phi >= 0 and phi < np.pi/2: return np.pi/2 - phi
-        elif phi >= np.pi/2 and phi < 3*np.pi/2: return 5*np.pi/2 - phi
-        return 5*np.pi/2 - phi
-    
-    if phi < 0: phi += 2*np.pi
-    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
-    max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
-    
-    return 1/f, A, max_day # Period, amplitude and phase of the periodicity
+    # Return Period, amplitude and phase of the periodicity
+    if raw_seasonality:
+        return 1/f, A, max_day, A_raw, max_day_raw
+    else:
+        return 1/f, A, max_day
 
 def AtoVar(A, raw, dataf_lp, local_var_method='uniform_7d'):
     
@@ -409,12 +444,6 @@ def AtoVar(A, raw, dataf_lp, local_var_method='uniform_7d'):
     '''
     
     if A == np.nan: return np.nan
-    
-    # Format raw data to velocities
-    raw['vx'] = raw['vx'] * preData_kwargs['unit'] / raw['temporal_baseline']
-    raw['vy'] = raw['vy'] * preData_kwargs['unit'] / raw['temporal_baseline']
-    raw['vv'] = np.sqrt(raw['vx'] ** 2 + raw['vy'] ** 2)
-    raw.index = raw['date1'] + (raw['date2'] - raw['date1']) // 2
     
     # Compute local variations
     if local_var_method == 'rolling_7d':
@@ -460,6 +489,13 @@ resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
 long_data = (positions[:, 0] - np.min(cube.ds['x'].values)).astype(int) // resolution
 lat_data = (positions[:, 1] - np.min(cube.ds['y'].values)).astype(int) // resolution
 
+# Format raw data to velocities
+for raw in data_raw:
+    raw['vx'] = raw['vx'] * preData_kwargs['unit'] / raw['temporal_baseline']
+    raw['vy'] = raw['vy'] * preData_kwargs['unit'] / raw['temporal_baseline']
+    raw['vv'] = np.sqrt(raw['vx'] ** 2 + raw['vy'] ** 2)
+    raw.index = raw['date1'] + (raw['date2'] - raw['date1']) // 2
+
 ##  Best matching sinus map (amplitude and phase, and period if not fixed)
 print('[Fourier analysis] Computing periodicity map...')
 if not impose_frequency:
@@ -471,9 +507,15 @@ AtoVar_map = np.empty([cube.nx, cube.ny])
 AtoVar_map[:,:] = np.nan
 peak_map = np.empty([cube.nx, cube.ny])
 peak_map[:, :] = np.nan
+if raw_seasonality:
+    amplitude_raw_map = np.empty([cube.nx, cube.ny])
+    amplitude_raw_map[:,:] = np.nan
+    peak_raw_map = np.empty([cube.nx, cube.ny])
+    peak_raw_map[:,:] = np.nan
 
-result_tqdm = tqdm(usefull_result, total=len(usefull_result), mininterval=0.5)
-match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(match_sine)(d) for d in result_tqdm))
+result_tqdm = tqdm(zip(usefull_result, data_raw), total=len(usefull_result), mininterval=0.5)
+match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality,
+                                                                            d_raw=raw) for d, raw in result_tqdm))
 if not impose_frequency:
     period = np.abs(match_res[:, 0])
     period_map[long_data, lat_data] = np.sign(period - 365) * (1 - np.minimum(period, 365) / np.maximum(period, 365))
@@ -482,15 +524,21 @@ peak_map[long_data, lat_data] = match_res[:, 2]
 raw_tqdm = tqdm(zip(match_res[:, 1], usefull_data_raw, usefull_result), total=len(usefull_data_raw), mininterval=0.5)
 AtoVar_map[long_data, lat_data] = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(AtoVar)(A, raw, dataf_lp, local_var_method) 
                                                     for A, raw, dataf_lp in raw_tqdm)
+if raw_seasonality:
+    amplitude_raw_map[long_data, lat_data] = np.abs(match_res[:, 3])
+    peak_map[long_data, lat_data] = match_res[:, 4]
 
 # Save the maps to a .tiff file with two bands (one for period, and one for amplitude)
 if impose_frequency:
     tiff = driver.Create(f'{path_save}matching_sine_map_fconst_{filt}_{local_var_method}.tiff', 
-                         amplitude_map.shape[0], amplitude_map.shape[1], 3, gdal.GDT_Float32)
+                         amplitude_map.shape[0], amplitude_map.shape[1], 3 if not raw_seasonality else 5, gdal.GDT_Float32)
     tiff.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.max(cube.ds['y'].values), 0, -resolution])
     tiff.GetRasterBand(1).WriteArray(np.flip(amplitude_map.T, axis=0))
     tiff.GetRasterBand(2).WriteArray(np.flip(peak_map.T, axis=0))
     tiff.GetRasterBand(3).WriteArray(np.flip(AtoVar_map.T, axis=0))
+    if raw_seasonality:
+        tiff.GetRasterBand(4).WriteArray(np.flip(amplitude_raw_map.T, axis=0))
+        tiff.GetRasterBand(5).WriteArray(np.flip(peak_raw_map.T, axis=0))
 else:
     tiff = driver.Create(f'{path_save}matching_sine_map_{filt}_{local_var_method}.tiff', 
                          period_map.shape[0], period_map.shape[1], 4, gdal.GDT_Float32)

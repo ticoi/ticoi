@@ -59,15 +59,15 @@ compute_result_load = False
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/343646.9,5091326.0'
 # If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
-# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
-#              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_invert.nc',
-#              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_interp.nc'}
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc' # Path to flags file
+# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/343646.9,5091326.0',
+#              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
+#              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_flags.nc' # Path to flags file
 mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results", "cube"))}/' # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/' # Path where to store the results
 result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
@@ -241,7 +241,7 @@ print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "
 #                                INITIALISATION                               #
 # =========================================================================%% #
 
-if TICOI_process != 'load':
+if TICOI_process != 'load' and save:
     # Write down some informations about the data and the TICOI processing performed
     if save:
         if 'invert' in returned:
@@ -259,7 +259,7 @@ if TICOI_process != 'load':
 # =========================================================================%% #
 
 start.append(time.time())
-if TICOI_process != 'load':
+if TICOI_process != 'load' and save:
     # Save TICO.I results to a netCDF file, thus obtaining a new data cube
     several = (type(returned) == list and len(returned) >= 2)
     j = 1 if 'raw' in returned else 0

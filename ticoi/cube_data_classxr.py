@@ -125,7 +125,7 @@ class cube_data_class:
             print(f'[Data loading] The given pixel and its surrounding buffer are not part of cube {self.filename}')
 
     def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
-                                     time_dim: str = 'mid_date', verbose: bool = False) -> (int, int, int):
+                                     time_dim: str = 'mid_date', verbose: bool = False) -> (int, int, int): # type: ignore
 
         '''
         A function to determine the optimal chunk size for a given time series array based on its size.
@@ -779,7 +779,7 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float):
+    def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float): # type: ignore
 
         '''
         Convert the coordinate (i, j) which are in projection proj, to projection of the cube dataset.
@@ -807,7 +807,7 @@ class cube_data_class:
     def load_pixel(self, i: int | float, j: int | float, unit: int = 365, regu: int | str = 1, coef: int = 100,
                    flags: xr.Dataset | None = None, solver: str = 'LSMR', interp: str = 'nearest',
                    proj: str = 'EPSG:4326', rolling_mean: xr.Dataset | None = None,
-                   visual: bool = False, output_format='np')-> (Optional[list],Optional[list],Optional[np.array],Optional[np.array],Optional[np.array]):
+                   visual: bool = False, output_format='np') -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]): # type: ignore
 
         '''
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
@@ -822,7 +822,7 @@ class cube_data_class:
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
         :param visual: [bool] [default is False] --- Return additional informations (sensor and source) for future plots
-        :param output_format [str] [default is np] ---
+        :param output_format [str] [default is np] --- Format of the output data (np for numpy or df for pandas dataframe)
 
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
@@ -879,13 +879,13 @@ class cube_data_class:
 
         # data_values is composed of vx, vy, errorx, errory, temporal baseline
         if visual:
-            if output_format == 'nc':
+            if output_format == 'np':
                 data_str = data[['sensor', 'source']].to_array().values.T
                 data_values = data.drop_vars(['date1', 'date2', 'sensor', 'source']).to_array().values.T
                 data = [data_dates, data_values, data_str]
             elif output_format == 'df':
                 data = data.to_pandas()
-            else: raise ValueError ('Please enter nc if want to have as output a numpy array, and df if you want a pandas dataframe')
+            else: raise ValueError ('Please enter np if you want to have as output a numpy array, and df if you want a pandas dataframe')
         else:
             data_values = data.drop_vars(['date1', 'date2']).to_array().values.T
             data = [data_dates, data_values]
@@ -989,7 +989,7 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         '''
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray):
+        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray): # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1197,7 +1197,7 @@ class cube_data_class:
         '''
         Merge another cube to the present one. It must have been aligned first (using align_cube)
 
-        :param cube: (cube_data_class) The cube to be merged to self
+        :param cube: [cube_data_class] --- The cube to be merged to self
         '''
 
         # Merge the cubes (must be previously aligned before using align_cube)
@@ -1216,11 +1216,18 @@ class cube_data_class:
         self.author.append(cube.author)
         self.source.append(cube.source)
 
-    def average_cube(self,return_format = 'geotiff', return_variable=['vv'],save=True,path_save=None):
-        """
+    def average_cube(self, return_format: str = 'geotiff', return_variable: list = ['vv'], save: bool = True, path_save: str | None = None):
+        
+        '''
+        Compute the mean velocity at each pixel of he cube.
+        
+        :param return_format: [str] [default is 'geotiff'] --- Type of the file to be returned ('nc' or 'geotiff')
+        :param return_variable: [list] [default is ['vv']] --- Which variable's mean must be returned
+        :param save: [bool] [default is True] --- If True, save the file to path_save
+        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
-        """
+        '''
 
         vx_mean = self.ds['vx'].mean(dim='mid_date')
         vy_mean = self.ds['vy'].mean(dim='mid_date')
@@ -1240,9 +1247,8 @@ class cube_data_class:
         elif return_format == 'geotiff':
             ds_mean = []
             for variable in return_variable:
-                mean_v = dico_variable[variable].to_numpy().astype(
-                    np.float32)
-                mean_v = np.flip(mean_v, axis=0)
+                mean_v = dico_variable[variable].to_numpy().astype(np.float32)
+                mean_v = np.flip(mean_v.T, axis=0)
 
                 if save:
                     # Convert proj4 string to EPSG code
@@ -1258,7 +1264,7 @@ class cube_data_class:
                     # Set the GeoTransform
                     dst_ds_temp.SetGeoTransform([
                         np.min(self.ds['x'].values), self.resolution, 0,
-                        np.min(self.ds['y'].values), 0, self.resolution
+                        np.min(self.ds['y'].values) - self.resolution, 0, self.resolution
                     ])
                     # Write the array to the raster band
                     dst_ds_temp.GetRasterBand(1).WriteArray(mean_v)

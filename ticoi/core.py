@@ -771,11 +771,9 @@ def process_blocks_refine(cube: cube_data_class, nb_cpu: int = 8, block_size: fl
         # Return only raw data => no need to filter the cube
         if 'raw' in returned and (type(returned) == str or len(returned) == 1):  # Only load the raw data
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'],
-                                          interp=inversion_kwargs['interpolation_load_pixel'],
-                                          solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'],
-                                          rolling_mean=None,
-                                          visual=inversion_kwargs['visual'], verbose=inversion_kwargs['verbose'])
+                delayed(block.load_pixel)(i, j, proj=inversion_kwargs['proj'], interp=inversion_kwargs['interpolation_load_pixel'],
+                                          solver=inversion_kwargs['solver'], regu=inversion_kwargs['regu'], rolling_mean=None, 
+                                          visual=inversion_kwargs['visual'])
                 for i, j in xy_values_tqdm)
             return result_block
 

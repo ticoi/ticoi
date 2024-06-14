@@ -16,6 +16,7 @@ import xarray as xr
 import sklearn.metrics as sm
 
 from shapely.geometry import Polygon, Point
+from joblib import Parallel, delayed
 
 from ticoi.core import inversion_core, interpolation_to_data
 from ticoi.cube_data_classxr import cube_data_class
@@ -195,7 +196,7 @@ def RMSE_TICOI_GT(data: list, mean: list | None, dates_range: np.ndarray | None,
 def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | int, j: float | int, obs_filt: xr.Dataset, 
                   load_pixel_kwargs: dict, inversion_kwargs: dict, interpolation_kwargs: dict, regu: dict | None = None,
                   flags: xr.DataArray | None = None, cmin: int = 10, cmax: int = 1000, step: int = 10, coefs : list | None = None, 
-                  stats: bool = False, **visual_options):
+                  stats: bool = False, parallel: bool = False, nb_cpu: int = 8, **visual_options):
     
     '''
     Compute the RMSE between the velocities obtained with TICOI using velocity data and "ground truth" (GT) data for different coefficients.
@@ -214,6 +215,8 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
     :param step: [int] [default is 10] --- If coefs=None, step for the range of coefs to be tested
     :param coefs: [list | None] [default is None] --- To specify the coefficients to be tested, if None, range(cmin, cmax, step) coefs will be tested
     :param stats: [bool] [default is False] --- Compute some statistics on raw data and GT data
+    :param parallel: [bool] [default is False] --- Should the computation of the results for different coefficient be done using parallelization ?
+    :param nb_cpu: [int] [default is 8] --- If parallel is True, the number of CPUs to use for parallelization
     :param visual_options: Additionnal options for plotting purposes during the computation of the RMSE for each coef
     
     :return: [pd dataframe] --- Dataframe with the studied coefficients ('coefs'), the resulting RMSEs ('RMSEs'), the standard deviation of similar original and GT data ('std'), how many of those data were used to conduct the computation ('nb_data'), their mean temporal baseline ('temporal_baseline') and their mean velocity values for both x and y components ('mean_v')
@@ -256,7 +259,11 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
         coefs = np.array(coefs)
         
     # Compute RMSE for every coefficient
-    RMSEs = [RMSE_TICOI_GT(data, mean, dates_range, data_gt, i, j, coef, inversion_kwargs, interpolation_kwargs, regu=regu, **visual_options) for coef in coefs]
+    if parallel:
+        RMSEs = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(RMSE_TICOI_GT)(data, mean, dates_range, data_gt, i, j, coef, inversion_kwargs, 
+                                                   interpolation_kwargs, regu=regu, **visual_options) for coef in coefs)
+    else:
+        RMSEs = [RMSE_TICOI_GT(data, mean, dates_range, data_gt, i, j, coef, inversion_kwargs, interpolation_kwargs, regu=regu, **visual_options) for coef in coefs]
     
     if stats:
         # Average temporal baseline
@@ -279,7 +286,6 @@ def optimize_coef(cube: cube_data_class, cube_gt: cube_data_class, i: float | in
                                    'std_v_similar_data': (std_raw['vx'], std_raw['vy'], std_gt['vx'], std_gt['vy']),
                                    'std_raw_data': (std_raw_all['vx'], std_raw_all['vy'], std_gt_all['vx'], std_gt_all['vy'])})
     
-    # return pd.DataFrame({'coefs': coefs, 'RMSEs': RMSEs})
     return xr.DataArray(data=RMSEs, 
                         attrs={'regu': inversion_kwargs['regu'] if flags is None else regu,
                                'nb_data': (dataf.shape[0], data_gt.shape[0])})

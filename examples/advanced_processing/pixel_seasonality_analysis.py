@@ -32,23 +32,23 @@ from ticoi.cube_data_classxr import cube_data_class
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/' # Path where to store the results
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
 i, j = 342537.1,5092253.3 # Point (pixel) where to carry on the computation
 
 ## --------------------------- Main parameters ----------------------------- ##
-regu = '1accelnotnull' # Regularization method to be used
-coef = 100 # Regularization coefficient to be used
+regu = 1 # Regularization method to be used
+coef = 300 # Regularization coefficient to be used
 solver = 'LSMR_ini' # Solver for the inversion
 unit = 365 # 1 for m/d, 365 for m/y
 result_quality = 'X_contribution' # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = True # Print information throughout TICOI processing
-visual = True # Plot informations along the way
-save = True # Save the results or not
+visual = False # Plot informations along the way
+save = False # Save the results or not
 # Visualisation options
 option_visual = ['original_velocity_xy', 'original_magnitude',
                  'X_magnitude_zoom', 'X_magnitude', 'X_zoom', 'X',
@@ -88,8 +88,7 @@ load_pixel_kwargs = {'regu': regu, # Regularization method to be used
                      'solver': solver, # Solver for the inversion
                      'proj': proj, # EPSG system of the given coordinates
                      'interp': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
-                     'visual': visual, # Plot results along the way
-                     'verbose':verbose} # Print information throughout TICOI processing
+                     'visual': visual} # Plot results along the way
                      
 ## --------------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {'regu': regu, # Regularization method to be used
@@ -101,7 +100,7 @@ inversion_kwargs = {'regu': regu, # Regularization method to be used
                     'iteration': True, # Allow the inversion process to make several iterations
                     'nb_max_iteration': 10, # Maximum number of iteration during the inversion process
                     'threshold_it': 0.1, # Threshold to test the stability of the results between each iteration, used to stop the process
-                    'weight': True, # If True, use apriori weights
+                    'apriori_weight': True, # If True, use apriori weights
                     'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
                     'linear_operator': None, # Perform the inversion using this specific linear operator
                     'result_quality': result_quality, # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
@@ -123,6 +122,11 @@ interpolation_kwargs = {'interval_output': 30, # Temporal baseline of the time s
 ## ------------------- Parameters for seasonality analysis ----------------- ##
 # Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
 impose_frequency = True
+# Add several sinus at different freqs (1/365.25 and harmonics (2/365.25, 3/365.25...) if impose_frequency is True)
+#   (only available for impose_frequency = True for now)
+several_freq = 1
+# Compute also the best matching sinus to raw data, for comparison
+raw_seasonality = True
 # Filter to use in the first place
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
@@ -139,9 +143,7 @@ local_var_method = 'uniform_7d'
 # Create a subfolder if it doesnt exist
 if not os.path.exists(path_save):
     os.mkdir(path_save)
-
-unit = 365 if unit == 'm/y' else 1
-
+    
 
 # %% ======================================================================== #
 #                                DATA LOADING                                 #
@@ -214,51 +216,49 @@ if save:
 
 
 # %% ======================================================================== #
-#                             FOURIER ANALYSIS                                #
+#                           BEST MATCHING SINUS                               #
 # =========================================================================%% #
 # Compute the best periodicity of the signal (frequency with the highest TF)
 # If 1/best_freq is around 365 days, there might be an annual periodicity (the
 # significance is evaluated in the next section MATCH SINE CURVE)
 
-# Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
-impose_frequency = True
-# Filter to use in the first place
-# 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
-# and the Nyquist frequency to ensure Shanon theorem
-# 'lowpass' : or apply a lowpass filter only (to Nyquist frequency) : risk of tackling an interannual trend (long period)
-filt = 'highpass'
-# Method used to compute local variations
-# 'rolling_7d' : median of the std of the data centered in +- 3 days around each central date
-# 'uniform_7d' : median of the std of the data centered in +- 3 days around dates constantly distributed every redundnacy 
-# days -- BEST
-# 'uniform_all' : median of the std of each data covering the dates, which are constantly distributed every redundancy days
-# 'residu' : standard deviation of the data previously substracted by TICOI results (ground truth) = standard deviation of the "noise"
-local_var_method = 'uniform_7d'
-
 start.append(time.time())
 
 if not os.path.exists(f'{path_save}Fourier/'):
     os.mkdir(f'{path_save}Fourier/')
-    
+
+## ------------------------- Preparation of the data ----------------------- ##
 dataf_lp = dataf_lp.dropna()
 
-dates_c = dataf_lp['date1'] + (dataf_lp['Second_date'] - dataf_lp['date1']) // 2
-dates = (dates_c - dataf_lp['date1'].min()).dt.days.to_numpy()
-vv = np.sqrt(dataf_lp['vx']**2 + dataf_lp['vy']**2).to_numpy()
-vv_c = vv - np.mean(vv)
+# Get dates and velocities from TICOI results
+dates_c = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2 # Central dates
+dates = (dates_c - dataf_lp['First_date'].min()).dt.days.to_numpy() # Number of days to the reference day (first day of acquisition at the point)
+vv = np.sqrt(dataf_lp['vx']**2 + dataf_lp['vy']**2).to_numpy() # Velocity magnitude
+vv_c = vv - np.mean(vv) # Centered velocities
+
+# Format raw data in a pandas dataframe
+dataff = pd.DataFrame(data={'date1': data[0][:, 0], 'date2': data[0][:, 1],
+                            'vx': data[1][:, 0], 'vy': data[1][:, 1],
+                            'errorx': data[1][:, 2], 'errory': data[1][:, 3],
+                            'temporal_baseline': data[1][:, 4]})
+dataff['vx'] = dataff['vx'] * unit / dataff['temporal_baseline']
+dataff['vy'] = dataff['vy'] * unit / dataff['temporal_baseline']
+dataff['vv'] = np.sqrt(dataff['vx'] ** 2 + dataff['vy'] ** 2)
+dataff.index = dataff['date1'] + (dataff['date2'] - dataff['date1']) // 2
 
 N = len(dates)
 Ts = dates[1] - dates[0]
 print(f'[ticoi_pixel_demo] Sampling period after interpolation : {Ts} days')
 
-if filt == 'highpass':
+# Filter the results...
+if filt == 'highpass': # ...to remove low frequencies (general trend over several years)
     b, a = signal.butter(4, [1/(1.5*365), 1/(2.001*Ts)], 'bandpass', fs=1/Ts, output='ba')
     vv_filt = signal.filtfilt(b, a, vv_c)
-elif filt == 'lowpass':
+elif filt == 'lowpass': # ...to ensure Shanon critrion
     sos = signal.butter(4, 1/(2.001*Ts), 'lowpass', fs=1/Ts, output='sos')
     vv_filt = signal.sosfilt(sos, vv_c)
-else:
-    print('[ticoi_pixel_demo] filt must be "bandpass" or "lowpass"')
+else: # Don't filter
+    vv_filt = vv_c
 
 if impose_frequency:
     fig, axe = plt.subplots(figsize=(12, 6))
@@ -272,30 +272,70 @@ axe.set_ylabel('Central date', fontsize=16)
 axe.set_title('Effect of filtering', fontsize=16)
 axe.legend(loc='lower left')
 
+## --------------------------- Best matching sinus ------------------------- ##
+# To find the first maximum of the sinus
 def right_phi(phi):
     if phi >= 0 and phi < np.pi/2: return np.pi/2 - phi
     elif phi >= np.pi/2 and phi < 3*np.pi/2: return 5*np.pi/2 - phi
     return 5*np.pi/2 - phi
 
-if impose_frequency:
-    def sine_fconst(t, A, phi, off):
-        f = 1/365.25 # One year
-        return A * np.sin(2*np.pi*f*t + phi) + off
+# Frequency is imposed to 1/365.25 day-1 (1 year-1)
+if impose_frequency:    
+    def sine_fconst(t, *args, freqs=1, f=1/365.25):
+        sine = args[0] * np.sin(2*np.pi*f*t + args[1])
+        for freq in range(1, freqs):
+            sine += args[2*freq] * np.sin(2*np.pi*(freq+1)*f*t + args[2*freq+1])
+        return sine + args[-1]
     
-    guess = [np.max(vv_filt) - np.min(vv_filt), 0, 0]
-    popt, pcov = curve_fit(sine_fconst, dates, vv_filt, p0=guess)
-    A, phi, off = popt
     f = 1/365.25
-    sine = sine_fconst(dates, A, phi, off)
     
-    if phi < 0: phi += 2*np.pi
+    ##  Find the best matching sinus to TICOI results
+    if several_freq is None: several_freq = 1
+    guess = np.concatenate([np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]])
+    popt, pcov = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates, vv_filt, p0=guess)
 
-    print(f'[ticoi_pixel_demo] Amplitude of the best matching sinus: {round(abs(popt[0]), 1)} m/y')
-    first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  dataf_lp['date1'].min()
-    max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1))
-    print(f'[ticoi_pixel_demo] Maximum at day {max_day.days}')
-    print(f'[ticoi_pixel_demo] RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y')
+    # Parameters
+    A = [popt[2*freq] for freq in range(several_freq)]
+    phi = [popt[2*freq+1] for freq in range(several_freq)]
+    phi = [phi[i] if phi[i] > 0 else phi[i] + 2*np.pi for i in range(several_freq)]
+    off = popt[-1]
+    sine = sine_fconst(dates, *popt, freqs=several_freq)
     
+    # Informations about the periodicity of TICOI results
+    print('[ticoi_pixel_demo] Amplitude of the best matching sinus to TICOI results: '
+         f'{[round(abs(A[i]), 2) for i in range(several_freq)] if len(A) > 1 else round(abs(A[0]), 2)} m/y')
+    first_max_day  = [pd.Timedelta(int((right_phi(phi[i]) + (np.pi if A[i] < 0 else 0)) / (2*np.pi*f)), 'D') + 
+                          dataf_lp['First_date'].min() for i in range(several_freq)]
+    max_day = [(first_max_day[i] - pd.Timestamp(year=first_max_day[i].year, month=1, day=1)) for i in range(several_freq)]
+    print(f'                   Maximum at day {[max_day[i].days for i in range(several_freq)] if len(max_day) > 1 else max_day[0].days}')
+    print(f'                   Mean value of {round(np.mean(sine + np.mean(vv)), 1)} m/y')
+    print(f'                   RMSE : {round(root_mean_squared_error(sine, vv_filt), 2)} m/y')
+    
+    if raw_seasonality:
+        ##  Find the best matching sinus to raw data
+        dates_raw = (dataff.index - dataf_lp['First_date'].min()).days.to_numpy()
+        raw_c = dataff['vv'] - dataff['vv'].mean()
+        guess_raw = np.concatenate([np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]])
+        popt_raw, pcov_raw = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw)
+    
+        # Parameters
+        A_raw = [popt_raw[2*freq] for freq in range(several_freq)]
+        phi_raw = [popt_raw[2*freq+1] for freq in range(several_freq)]
+        phi_raw = [phi_raw[i] if phi_raw[i] > 0 else phi_raw[i] + 2*np.pi for i in range(several_freq)]
+        off_raw = popt_raw[-1]
+        sine_raw = sine_fconst(dates_raw, *popt_raw, freqs=several_freq)
+        
+        # Informations about the periodicity of raw data
+        print('[ticoi_pixel_demo] Amplitude of the best matching sinus to raw data: '
+             f'{[round(abs(A_raw[i]), 2) for i in range(several_freq)] if len(A_raw) > 1 else round(abs(A_raw[0]), 2)} m/y')
+        first_max_day_raw  = [pd.Timedelta(int((right_phi(phi_raw[i]) + (np.pi if A_raw[i] < 0 else 0)) / (2*np.pi*f)), 'D') + 
+                              dataf_lp['First_date'].min() for i in range(several_freq)]
+        max_day_raw = [(first_max_day_raw[i] - pd.Timestamp(year=first_max_day_raw[i].year, month=1, day=1)) for i in range(several_freq)]
+        print(f'                   Maximum at day {[max_day_raw[i].days for i in range(several_freq)] if len(max_day_raw) > 1 else max_day_raw[0].days}')
+        print(f'                   Mean value of {round(np.mean(sine_raw + dataff["vv"].mean()), 1)} m/y')
+        print(f'                   RMSE : {round(root_mean_squared_error(sine_raw, raw_c), 2)} m/y')
+
+# Frequency is to be found via a TF transform 
 else:
     # Apply a Hanning window
     window = signal.windows.hann(N)
@@ -315,6 +355,7 @@ else:
     vv_win_tf = fft.rfft(vv_filt * window, n=n)
     freq = fft.rfftfreq(n, d=Ts)
     
+    # Plot the TF
     plt.figure(figsize=(12,6))
     plt.plot(freq, 2/N*np.abs(vv_tf), 'blue', label='TF without windowing')
     plt.plot(freq, 2/N*np.abs(vv_win_tf), 'red', label='TF after Hanning windowing')
@@ -344,27 +385,22 @@ else:
     if phi < 0: phi += 2*np.pi
     
     print(f'[ticoi_pixel_demo] Period of the best matching sinus : {round(1/f, 0)} days')
-    print(f'[ticoi_pixel_demo] Amplitude : {round(abs(A), 1)} m/y')
+    print(f'                   Amplitude : {round(abs(A), 1)} m/y')
     first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  dataf_lp['date1'].min()
     max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1))
-    print(f'[ticoi_pixel_demo] Maximum at day {max_day.days}')
-    print(f'[ticoi_pixel_demo] RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y')
+    print(f'                   Maximum at day {max_day.days}')
+    print(f'                   RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y')
 
-dataff = pd.DataFrame(data={'date1': data[0][:, 0], 'date2': data[0][:, 1],
-                            'vx': data[1][:, 0], 'vy': data[1][:, 1],
-                            'errorx': data[1][:, 2], 'errory': data[1][:, 3],
-                            'temporal_baseline': data[1][:, 4]})
-dataff['vx'] = dataff['vx'] * unit / dataff['temporal_baseline']
-dataff['vy'] = dataff['vy'] * unit / dataff['temporal_baseline']
-dataff['vv'] = np.sqrt(dataff['vx'] ** 2 + dataff['vy'] ** 2)
-dataff.index = dataff['date1'] + (dataff['date2'] - dataff['date1']) // 2
-
+## ------------------------------ Plot the data  --------------------------- ##
+# Plot raw data, TICOI results and the best matching sinus
 plt.figure(figsize=(12, 6))
 plt.plot(dataff.index, dataff['vv'], linestyle='', marker='x', markersize=2, color='orange', label='Raw data')
 plt.plot(dates_c, vv, 'black', alpha=0.5, label='TICOI velocities')
 plt.plot(dates_c, vv_filt + np.mean(vv), 'red', alpha=0.7, label='Filtered TICOI velocities')
-plt.plot(dates_c, sine + np.mean(vv), 'cyan', linewidth=3, label='Best matching sinus')
-plt.vlines(pd.date_range(start=first_max_day, end=dataf_lp['Second_date'].max(), freq=f'{int(1/f)}D'), 
+if impose_frequency and raw_seasonality:
+    plt.plot(dataff.index, sine_raw + dataff['vv'].mean(), linewidth=3, label='Best matching sinus to raw data')
+plt.plot(dates_c, sine + np.mean(vv), 'cyan', linewidth=3, label='Best matching sinus to TICOI results')
+plt.vlines(pd.date_range(start=first_max_day[0], end=dataf_lp['Second_date'].max(), freq=f'{int(1/f)}D'), 
                          np.min(vv), np.max(vv), 'black', label='Maximum')
 plt.xlabel('Central dates', fontsize=16)
 plt.ylabel('Velocity', fontsize=16)
@@ -372,6 +408,7 @@ plt.legend(loc='best')
 plt.title('Best matching sinus around an annual seasonality')
 plt.savefig(f'{path_save}Fourier/matching_sine.png')
 
+## ------------------------------- AtoVar index ---------------------------- ##
 # Compute local variations
 if local_var_method == 'rolling_7d':
     var = dataff['vv'].rolling(window='7D', center=True).std(ddof=0).drop_duplicates().dropna().median().item()
@@ -406,13 +443,43 @@ elif local_var_method == 'residu':
     plt.hlines([np.mean(vv) + var, np.mean(vv) - var, np.mean(vv)], np.min(dataff.index), np.max(dataff.index), color='black')
     plt.savefig(f'{path_save}Fourier/residu.png')
 
-# Amplitude to median local variations factor
+# Amplitude to median local variations factor (AtoVar index)
 AtoVar = max(0, 1 - var / abs(popt[0]))
 
 print(f'[ticoi_pixel_demo] Local variations : {round(var, 2)} m/y')
 print(f'[ticoi_pixel_demo] Amplitude to local variations factor : {round(AtoVar, 2)}')
 
-plt.show()
-
 stop.append(time.time())
 print(f'[ticoi_pixel_demo] Fourier analysis took {round((stop[4] - start[4]), 4)} s')
+
+plt.show()
+
+
+# %% ======================================================================== #
+#                               ANNUAL CURVES                                 #
+# =========================================================================%% #
+# Superpose the curves for each year
+
+dates_c = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2 # Central dates
+vv = np.sqrt(dataf_lp['vx']**2 + dataf_lp['vy']**2).to_numpy() # Velocity magnitude
+
+years = np.unique(np.array([dates_c.iloc[i].year for i in range(dates_c.size)]))
+months_start = {'January': 1, 'February': 32, 'March': 60, 'April': 91, 'May': 121, 'June':  152, 
+          'July': 182, 'August': 213, 'September': 244, 'October': 274, 'November': 305, 'December': 335}
+
+fig, ax = plt.subplots(figsize=(12, 4))
+for y in years:
+    dates = dates_c[[dates_c.iloc[i].year == y for i in range(dates_c.size)]] - \
+                     pd.Timestamp(year=y, month=1, day=1)
+    dates = np.array([dates.iloc[i].days for i in range(dates.size)])
+    vv_y = vv[[dates_c.iloc[i].year == y for i in range(dates_c.size)]]
+    ax.plot(dates, vv_y, linestyle=':', linewidth=3, label=str(y))
+
+ax.set_xticks(list(months_start.values()), list(months_start.keys()))
+plt.setp(ax.get_xticklabels(), rotation=20, ha='right', rotation_mode='anchor')
+ax.set_xlabel('Day of the year', fontsize=14)
+ax.set_ylabel('Velocity magnitude [m/y]', fontsize=14)
+ax.legend(loc='best')
+ax.set_title('Superposed annual TICOI resulting velocities', fontsize=16)
+
+plt.show()

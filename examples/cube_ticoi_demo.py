@@ -24,12 +24,12 @@ from tqdm import tqdm
 from ticoi.core import process_blocks_refine, process, save_cube_parameters
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import prepare_interpolation_date
+
 warnings.filterwarnings("ignore")
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
 # =========================================================================%% #
-
 
 ## ------------------- Choose TICOI cube processing method ----------------- ##
 # Choose the TICOI cube processing method you want to use :
@@ -50,7 +50,7 @@ save_mean_velocity = True # Save a .tiff file with the mean resulting velocities
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'  # Path where the Sentinel-2 IGE cubes are stored
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results", "cube"))}/'  # Path where to stored the results
 result_fn = 'Argentiere_example'# Name of the netCDF file to be created
 
@@ -74,7 +74,7 @@ load_kwargs = {'chunks': {},
 ## ----------------------- Data preparation parameters --------------------- ##
 #For the folling parts we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 100  #Regularization coefficient.s to be used (for each flag if flags is not None)
+coef = 200  #Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outlier = 'vvc_angle'
 apriori_weight = True
 interpolation_bas = 90
@@ -122,8 +122,9 @@ block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
-#Update of dictionary with common parameteres
+# Update of dictionary with common parameteres
 for common_parameter in ['flags','proj','delete_outliers','regu','solver']: inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
+
 
 # %%========================================================================= #
 #                                 DATA LOADING                                #
@@ -139,8 +140,9 @@ first_date_interpol,last_date_interpol = prepare_interpolation_date(cube)
 inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
 
 stop = [time.time()]
-print(f'[ticoi_cube_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
+print(f'[cube_ticoi_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
+print(f'[cube_ticoi_demo] Data loading took {round(stop[0] - start[0], 3)} s')
+
 
 # %%========================================================================= #
 #                                      TICOI                                  #
@@ -171,7 +173,7 @@ else:
     raise NameError ('Please enter either direct_process or block_process')
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s')
+print(f'[cube_ticoi_demo] TICOI processing took {round(stop[1] - start[1], 0)} s')
 
 
 # %%========================================================================= #
@@ -182,16 +184,11 @@ start.append(time.time())
 # Write down some informations about the data and the TICOI processing performed
 if save:
     if 'invert' in returned:
-        source, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs,
-                                               returned=['invert'])
+        source, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs, returned='invert')
     if 'interp' in returned:
-        source_interp, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs,
-                                               returned=['interp'])
+        source_interp, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs, returned='interp')
     stop.append(time.time())
-    print(f'[Writing results] Initialisation took {round(stop[-1] - start[-1], 3)} s')
-
-stop.append(time.time())
-print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
+    print(f'[cube_ticoi_demo] Initialisation took {round(stop[-1] - start[-1], 3)} s')
 
 
 # %%========================================================================= #
@@ -200,30 +197,30 @@ print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 
 start.append(time.time())
 
+# Save TICOI results to a netCDF file, thus obtaining a new data cube
 several = (type(returned) == list and len(returned) >= 2)
 if 'invert' in returned:
-    cube_invert = cube.write_result_tico([result[i][0] for i in range(len(result))] if several else result, source,
-                                         sensor,
+    cube_invert = cube.write_result_tico([result[i][0] for i in range(len(result))] if several else result, 
+                                         source, sensor,
                                          filename=f'{result_fn}_invert' if several else result_fn,
                                          savepath=path_save if save else None,
                                          result_quality=inversion_kwargs['result_quality'],
                                          verbose=inversion_kwargs['verbose'])
 if 'interp' in returned:
-    cube_interp = cube.write_result_ticoi([result[i][1] for i in range(len(result))] if several else result,
+    cube_interp = cube.write_result_ticoi([result[i][1] for i in range(len(result))] if several else result, 
                                           source_interp, sensor,
                                           filename=f'{result_fn}_interp' if several else result_fn,
                                           savepath=path_save if save else None,
                                           result_quality=inversion_kwargs['result_quality'],
                                           verbose=inversion_kwargs['verbose'])
-# Save TICOI results to a netCDF file, thus obtaining a new data cube
 
 # Plot the mean velocity as an example
 if save_mean_velocity and cube_interp is not None:
     cube_interp.average_cube(return_format='geotiff', return_variable=['vv'], save=True, path_save=path_save)
 
 if save or save_mean_velocity:
-    print(f'[ticoi_cube_demo] Results saved at {path_save}')
+    print(f'[cube_ticoi_demo] Results saved at {path_save}')
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
-print(f'[ticoi_cube_demo] Overall processing took {round(stop[3] - start[0], 0)} s')
+print(f'[cube_ticoi_demo] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
+print(f'[cube_ticoi_demo] Overall processing took {round(stop[3] - start[0], 0)} s')

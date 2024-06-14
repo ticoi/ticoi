@@ -32,8 +32,10 @@ warnings.filterwarnings("ignore")
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc' # Path to flags file
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+# Path to the "ground truth" cube used to optimize the regularisation
+cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc' # Path to flags file
 mask_file = None # Path where the mask file is stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "optimize_coef"))}/' # Path where to store the results
 
@@ -67,11 +69,10 @@ result_quality = 'X_contribution' # Criterium used to evaluate the quality of th
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.optimization_process = 'direct_process'
 optimization_process = 'block_process'
-# Path to the "ground truth" cube used to optimize the regularisation
-cube_gt_name = 'nathan/Donnees/Cubes_de_donnees/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc' 
 # Specify the coefficients you want to test
-coefs = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 240, 280, 320, 360, 400, 450, 500, 550, 600, 700, 800, 900, 1000]
-coef_min = 10 # If coefs=None, start point of the range of coefs to be tested 
+coefs = [20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 240, 280, 320, 360, 400, 450, 500, 550, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 
+         2500, 3000, 3500, 4000, 4500, 5000, 6000, 7000, 8000, 9000, 10000]
+coef_min = 10 # If coefs=None, start point of the range of coefs to be tested
 coef_max = 1000 # If coefs=None, stop point of the range of coefs to be tested
 step = 10 # If coefs=None, step for the range of coefs to be tested
 stats = False # Compute some statistics on raw data and GT data
@@ -153,7 +154,6 @@ start = [time.time()]
 cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
-
 # Then we load the "ground truth"
 cube_gt = cube_data_class()
 cube_gt.load(cube_gt_name, **load_kwargs)
@@ -182,11 +182,12 @@ async def process_block(block, cube_gt, load_pixel_kwargs, inversion_kwargs, int
     
     # Filter cube
     obs_filt = block.filter_cube(**preData_kwargs, flags=flags)
-
+    
     # Optimization of the coefficient for every pixels of the block
+    #    (faster using parallelization here and sequential processing in optimize_coef)
     result_block = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(optimize_coef)(block, cube_gt, i, j, obs_filt, load_pixel_kwargs, 
-                           inversion_kwargs, interpolation_kwargs, regu=regu, flags=flags, cmin=cmin, cmax=cmax, 
-                           step=step, coefs=coefs, stats=stats, visual=False) for i, j in xy_values_tqdm)
+                            inversion_kwargs, interpolation_kwargs, regu=regu, flags=flags, cmin=cmin, cmax=cmax, 
+                            step=step, coefs=coefs, stats=stats, parallel=False, visual=False) for i, j in xy_values_tqdm)
     
     return result_block
 
@@ -266,6 +267,12 @@ print(f'[Coef optimization] Whole coefficient optimization took {round((stop[-1]
 
 start.append(time.time())
 
+# Converting coefs to an array
+if coefs is None:
+    coefs = np.arange(coef_min, coef_max, step)
+else:
+    coefs = np.array(coefs)
+
 driver = gdal.GetDriverByName('GTiff')
 srs = osr.SpatialReference()
 srs.SetWellKnownGeogCS(proj)
@@ -290,7 +297,7 @@ if 'best' in coef_maps:
     best_coef_map[long_data, lat_data] = [coefs[np.argmin(result[i].values)] for i in range(len(result))]
     best_RMSE_map[long_data, lat_data] = [np.min(result[i].values) for i in range(len(result))]
     
-    tiff = driver.Create(f'{path_save}best_map.png', best_coef_map.shape[0], best_coef_map.shape[1], 2, gdal.GDT_Float32)
+    tiff = driver.Create(f'{path_save}best_map.tiff', best_coef_map.shape[0], best_coef_map.shape[1], 2, gdal.GDT_Float32)
     tiff.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.max(cube.ds['y'].values), 0, -resolution])
     tiff.GetRasterBand(1).WriteArray(np.flip(best_coef_map.T, axis=0))
     tiff.GetRasterBand(2).WriteArray(np.flip(best_RMSE_map.T, axis=0))
@@ -311,13 +318,14 @@ if 'good' in coef_maps:
     
     good_RMSE_result = [1.05 * np.min(result[i].values) for i in range(len(result))]
     good_RMSE_map[long_data, lat_data] = good_RMSE_result
-    min_good_coef_map[long_data, lat_data] = [coefs[np.argmin(result[i].values[result[i].values < good_RMSE_result[i]])] for i in range(len(result))]
-    max_good_coef_map[long_data, lat_data] = [coefs[np.argmax(result[i].values[result[i].values < good_RMSE_result[i]])] for i in range(len(result))]
     
-    tiff = driver.Create(f'{path_save}good_map.png', good_RMSE_map.shape[0], good_RMSE_map.shape[1], 3, gdal.GDT_Float32)
+    min_good_coef_map[long_data, lat_data] = [np.min(coefs[result[i].values < good_RMSE_result[i]]) for i in range(len(result))]
+    max_good_coef_map[long_data, lat_data] = [np.max(coefs[result[i].values < good_RMSE_result[i]]) for i in range(len(result))]
+    
+    tiff = driver.Create(f'{path_save}good_map.tiff', good_RMSE_map.shape[0], good_RMSE_map.shape[1], 3, gdal.GDT_Float32)
     tiff.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.max(cube.ds['y'].values), 0, -resolution])
     tiff.GetRasterBand(1).WriteArray(np.flip(min_good_coef_map.T, axis=0))
-    tiff.GetRasterBand(1).WriteArray(np.flip(max_good_coef_map.T, axis=0))
+    tiff.GetRasterBand(2).WriteArray(np.flip(max_good_coef_map.T, axis=0))
     tiff.GetRasterBand(3).WriteArray(np.flip(good_RMSE_map.T, axis=0))
     tiff.SetProjection(srs.ExportToWkt())
     
@@ -335,14 +343,6 @@ print(f'[Coef maps] Generating the maps took {round(stop[-1] - start[-1], 1)} s'
 # =========================================================================%% #
 
 start.append(time.time())
-
-# Because tested coefficients are the same for each pixel (methods 'constant' and 'given_coef'), we compute the average RMSE 
-# for each coefficient and then select which one is the best (by plotting the curve showing the evolution of the RMSE with 
-# the regularisation coefficient)
-if coefs is None:
-    coefs = np.arange(coef_min, coef_max, step)
-else:
-    coefs = np.array(coefs)
 
 nb_res = len(result)
 nb_data = np.array([result[i].nb_data if result[i] is not None else 0 for i in range(nb_res)])
@@ -371,7 +371,7 @@ for key in regu.keys():
         ax.plot(coefs[RMSEs < good_RMSE], RMSEs[RMSEs < good_RMSE], marker='x', markersize=7, linestyle='', markeredgecolor='darkgreen')
         ax.plot([coefs[0], coefs[-1]], [good_RMSE, good_RMSE], linestyle='--', color='midnightblue')
         ax.set_xlabel('Regularisation coefficient value', fontsize=14)
-        ax.set_xlim([coef_min if type(coef_min) == int else coef_min[0], coef_max if type(coef_min) == int else coef_min[-1]])
+        ax.set_xlim([np.min(coefs), np.max(coefs)])
         ax.set_ylabel('Average RMSE between TICOI results and GT data [m/y]', fontsize=14)
         fig.suptitle(f'RMSE-coef average curve for the {flag_name[key] if type(flag_name) == dict else ""} area with regu={regu[key]}\n' + 
                      f'Best for coef = {best_coef} (RMSE = {best_RMSE})', fontsize=16)
@@ -386,8 +386,8 @@ for key in regu.keys():
             fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(12, 12))
             ax[0].set_xlabel('Regularisation coefficient value', fontsize=14)
             ax[1].set_xlabel('Regularisation coefficient value', fontsize=14)
-            ax[0].set_xlim([coef_min if type(coef_min) == int else coef_min[0], coef_max])
-            ax[1].set_xlim([coef_min if type(coef_min) == int else coef_min[0], coef_max])
+            ax[0].set_xlim([np.min(coefs), np.max(coefs)])
+            ax[1].set_xlim([np.min(coefs), np.max(coefs)])
             ax[0].set_ylabel('RMSE [m/y]', fontsize=14)
             ax[1].set_ylabel('mean-substracted RMSE [m/y]', fontsize=14)
             
