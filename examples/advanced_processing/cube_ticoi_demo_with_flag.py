@@ -72,14 +72,6 @@ result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if sav
 
 proj = 'EPSG:32632'  # EPSG system of the given coordinates
 
-# Divide the data in several areas where different methods should be used
-assign_flag = True
-if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
-else:
-    flags = None
-
 # Regularization method.s to be used (for each flag if flags is not None)
 regu = {0: 1, 1: '1accelnotnull'} # With flags (0: stable ground, 1: glaciers)
 # regu = '1accelnotnull' # Without flags
@@ -114,7 +106,7 @@ preData_kwargs = {'smooth_method': 'savgol', # Smoothing method to be used to sm
                   'order': 3, # Order of the smoothing function
                   'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                   'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-                  'flags': flags, # Divide the data in several areas where different methods should be used
+                  'flag': flag_file, # Divide the data in several areas where different methods should be used
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                   'solver': solver, # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
@@ -125,7 +117,7 @@ preData_kwargs = {'smooth_method': 'savgol', # Smoothing method to be used to sm
 inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each flag if flags is not None)
                     'coef': coef, # Regularization coefficient.s to be used (for each flag if flags is not None)
                     'solver': solver, # Solver for the inversion
-                    'flags': flags, # Divide the data in several areas where different methods should be used
+                    'flag': flag_file, # Divide the data in several areas where different methods should be used
                     'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
                     'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
                     'delete_outliers': 'vvc_angle', # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
@@ -149,7 +141,7 @@ inversion_kwargs = {'regu': regu, # Regularization method.s to be used (for each
                     'verbose': False} # Print information throughout TICOI processing
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 6 # Number of CPU to be used for parallelization
+nb_cpu = 16 # Number of CPU to be used for parallelization
 block_size = 0.1 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
@@ -204,8 +196,9 @@ if TICOI_process == 'block_process':
 # Direct computation of the whole TICOI cube
 elif TICOI_process == 'direct_process':
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(**preData_kwargs)
-
+    obs_filt, flag = cube.filter_cube(**preData_kwargs)
+    inversion_kwargs.update({'flag': flag})
+    
     # Progression bar
     xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
     xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
