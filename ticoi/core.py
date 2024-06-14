@@ -899,7 +899,7 @@ def process(
     solver: str = "LSMR",
     regu: int | str = 1,
     coef: int = 100,
-    flags: xr.Dataset | None = None,
+    flag: xr.Dataset | None = None,
     apriori_weight: bool = False,
     returned: list | str = "interp",
     obs_filt: xr.Dataset | None = None,
@@ -964,7 +964,7 @@ def process(
         returned_list.append(data)
 
     if "invert" in returned or "interp" in returned:
-        if flags is not None:
+        if flag is not None:
             regu, coef = data[3], data[4]
 
         # Inversion

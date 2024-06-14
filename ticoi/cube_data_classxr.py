@@ -1385,7 +1385,7 @@ class cube_data_class:
 
         start = time.time()
         if delete_outliers is not None:
-            self.delete_outliers(delete_outliers=delete_outliers, flags=flag)
+            self.delete_outliers(delete_outliers=delete_outliers, flag=flag)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 

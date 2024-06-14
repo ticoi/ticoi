@@ -92,7 +92,7 @@ preData_kwargs = {
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    "flags": None,  # Divide the data in several areas where different methods should be used
+    "flag": None,  # Divide the data in several areas where different methods should be used
     "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
@@ -128,7 +128,7 @@ if not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # Update of dictionary with common parameters
-for common_parameter in ["flags", "proj", "delete_outliers", "regu", "solver"]:
+for common_parameter in ["flag", "proj", "delete_outliers", "regu", "solver"]:
     inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
 # %%========================================================================= #
