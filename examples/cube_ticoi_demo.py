@@ -2,7 +2,7 @@
 """
 Implementation of the Temporal Inversion using COmbination of displacements with Interpolation (TICOI) method to compute entire data cubes.
 It can be divided in three parts:
-    - Data Download : Download one or several data cube.s, eventually considering a given subset or buffer to limit its size. Additionnal data
+    - Data Download : Download one or several data cube.s, eventually considering a given subset or buffer to limit its size. additional data
     cubes are aligned and merged to the main cube.
     - TICOI : Compute TICOI on the selection of data using the given method (split in blocks or direct processing, think of reading the comments
     about those methods) to get a list of the results.
@@ -15,16 +15,18 @@ Reference:
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
 
-import time
-import os
-import warnings
 import itertools
+import os
+import time
+import warnings
+
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from ticoi.core import process_blocks_refine, process, save_cube_parameters
+from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import prepare_interpolation_date
+
 warnings.filterwarnings("ignore")
 
 # %%========================================================================= #
@@ -37,96 +39,97 @@ warnings.filterwarnings("ignore")
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
 # than every other TICOI processing methods.
-#      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal, 
-# there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it 
+#      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal,
+# there should be no problem, but if you try to launch it from an IDE (PyCharm, VSCode, Spyder...), think of specifying to your IDE to launch it
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 
-TICOI_process = 'block_process'
+TICOI_process = "block_process"
 
-save = True # If True, save TICOI results to a netCDF file
-save_mean_velocity = True # Save a .tiff file with the mean resulting velocities, as an example
+save = True  # If True, save TICOI results to a netCDF file
+save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
-result_fn = 'test'# Name of the netCDF file to be created
+result_fn = "test"  # Name of the netCDF file to be created
 
-proj = 'EPSG:3413'  # EPSG system of the given coordinates
+proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion
 #   - 'interp' for the results of the interpolation
-returned = ['invert', 'interp']
+returned = ["invert", "interp"]
 ## ---------------------------- Loading parameters ------------------------- ##
-load_kwargs = {'chunks': {}, 
-               'conf': False, # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-               'subset': None, # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-               'buffer': None, # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-               'pick_date': ['2015-01-01', '2023-01-01'], # Select dates ([min, max] or None to select all)
-               'pick_sensor': None, # Select sensors (None to select all)
-               'pick_temp_bas': None, # Select temporal baselines ([min, max] in days or None to select all)
-               'proj': proj, # EPSG system of the given coordinates
-               'verbose': False # Print information throughout the loading process 
-               }
+load_kwargs = {
+    "chunks": {},
+    "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
+    "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+    "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_sensor": None,  # Select sensors (None to select all)
+    "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
+    "proj": proj,  # EPSG system of the given coordinates
+    "verbose": False,  # Print information throughout the loading process
+}
 
 ## ----------------------- Data preparation parameters --------------------- ##
-#For the folling parts we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
-regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 100  #Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier = 'vvc_angle'
+# For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
+regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 100  # Regularization coefficient.s to be used (for each flag if flags is not None)
+delete_outlier = "vvc_angle"
 apriori_weight = True
 interpolation_bas = 90
 
-preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
-                  's_win': 3, # Size of the spatial window
-                  't_win': 90, # Time window size for 'ewma' smoothing
-                  'sigma': 3, # Standard deviation for 'gaussian' filter
-                  'order': 3, # Order of the smoothing function
-                  'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                  'delete_outliers': delete_outlier, # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-                  'flags': None, # Divide the data in several areas where different methods should be used
-                  'regu': regu, # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-                  'solver': 'LSMR_ini', # Solver for the inversion
-                  'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-                  'verbose': True # Print information throughout the filtering process 
-                  }
+preData_kwargs = {
+    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+    "s_win": 3,  # Size of the spatial window
+    "t_win": 90,  # Time window size for 'ewma' smoothing
+    "sigma": 3,  # Standard deviation for 'gaussian' filter
+    "order": 3,  # Order of the smoothing function
+    "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
+    "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "flags": None,  # Divide the data in several areas where different methods should be used
+    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+    "solver": "LSMR_ini",  # Solver for the inversion
+    "proj": proj,  # EPSG system of the given coordinates
+    "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+    "verbose": True,  # Print information throughout the filtering process
+}
 
 ## ---------------- Inversion and interpolation parameters ----------------- ##
-inversion_kwargs = {'coef': coef, # Regularization coefficient.s to be used (for each flag if flags is not None)
-                    'conf': False, # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
-                    'unit': 365, # 365 if the unit is m/y, 1 if the unit is m/d
-                    'interpolation_load_pixel': 'nearest', # Interpolation method used to load the pixel when it is not in the dataset
-
-                    'iteration': True, # Allow the inversion process to make several iterations
-                    'nb_max_iteration': 10, # Maximum number of iteration during the inversion process
-                    'threshold_it': 0.1, # Threshold to test the stability of the results between each iteration, used to stop the process
-                    'apriori_weight': apriori_weight, # If True, use apriori weights
-                    'detect_temporal_decorrelation': True, # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
-                    'linear_operator': None, # Perform the inversion using this specific linear operator
-
-                    'interval_output': 30,
-                    'option_interpol': 'spline', # Type of interpolation ('spline', 'spline_smooth', 'nearest')
-                    'redundancy': 30, # Redundancy in the interpolated time series in number of days, no redundancy if None
-
-                    'result_quality': 'X_contribution', # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-                    'visual': False, # Plot results along the way
-                    'path_save': path_save, # Path where to store the results
-                    'verbose': False # Print information throughout TICOI processing
-                    }
+inversion_kwargs = {
+    "coef": coef,  # Regularization coefficient.s to be used (for each flag if flags is not None)
+    "conf": False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
+    "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
+    "interpolation_load_pixel": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
+    "iteration": True,  # Allow the inversion process to make several iterations
+    "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
+    "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
+    "apriori_weight": apriori_weight,  # If True, use apriori weights
+    "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
+    "linear_operator": None,  # Perform the inversion using this specific linear operator
+    "interval_output": 30,
+    "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+    "redundancy": 30,  # Redundancy in the interpolated time series in number of days, no redundancy if None
+    "result_quality": "X_contribution",  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+    "visual": False,  # Plot results along the way
+    "path_save": path_save,  # Path where to store the results
+    "verbose": False,  # Print information throughout TICOI processing
+}
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 12 # Number of CPU to be used for parallelization
-block_size = 0.5 # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
+nb_cpu = 12  # Number of CPU to be used for parallelization
+block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
-#Update of dictionary with common parameteres
-for common_parameter in ['flags','proj','delete_outliers','regu','solver']: inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
+# Update of dictionary with common parameters
+for common_parameter in ["flags", "proj", "delete_outliers", "regu", "solver"]:
+    inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
 # %%========================================================================= #
 #                                 DATA LOADING                                #
@@ -138,12 +141,12 @@ cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
 # Prepare interpolation dates
-first_date_interpol,last_date_interpol = prepare_interpolation_date(cube)
-inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
+first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+inversion_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
 stop = [time.time()]
-print(f'[ticoi_cube_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ')
-print(f'[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s')
+print(f"[ticoi_cube_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ")
+print(f"[ticoi_cube_demo] Data loading took {round(stop[0] - start[0], 3)} s")
 
 # %%========================================================================= #
 #                                      TICOI                                  #
@@ -153,28 +156,35 @@ start.append(time.time())
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
-if TICOI_process == 'block_process':
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs,returned=returned)
+if TICOI_process == "block_process":
+    result = process_blocks_refine(
+        cube,
+        nb_cpu=nb_cpu,
+        block_size=block_size,
+        preData_kwargs=preData_kwargs,
+        inversion_kwargs=inversion_kwargs,
+        returned=returned,
+    )
 
 # Direct computation of the whole TICOI cube
-elif TICOI_process == 'direct_process':
+elif TICOI_process == "direct_process":
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
     obs_filt = cube.filter_cube(**preData_kwargs)
-    
+
     # Progression bar
-    xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
-    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
-    
+    xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)
+    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds["x"].values) * len(cube.ds["y"].values), mininterval=0.5)
+
     # Main processing of the data with TICOI algorithm, individually for each pixel
     result = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(cube, i, j, obs_filt=obs_filt,returned=returned, **inversion_kwargs)
+        delayed(process)(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
         for i, j in xy_values_tqdm
     )
 else:
-    raise NameError ('Please enter either direct_process or block_process')
+    raise NameError("Please enter either direct_process or block_process")
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s')
+print(f"[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s")
 
 
 # %%========================================================================= #
@@ -182,19 +192,19 @@ print(f'[ticoi_cube_demo] TICOI processing took {round(stop[1] - start[1], 0)} s
 # =========================================================================%% #
 
 start.append(time.time())
-# Write down some informations about the data and the TICOI processing performed
+# Write down some information about the data and the TICOI processing performed
 if save:
-    if 'invert' in returned:
-        source, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs,
-                                               returned=['invert'])
-    if 'interp' in returned:
-        source_interp, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs,
-                                               returned=['interp'])
+    if "invert" in returned:
+        source, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs, returned=["invert"])
+    if "interp" in returned:
+        source_interp, sensor = save_cube_parameters(
+            cube, load_kwargs, preData_kwargs, inversion_kwargs, returned=["interp"]
+        )
     stop.append(time.time())
-    print(f'[Writing results] Initialisation took {round(stop[-1] - start[-1], 3)} s')
+    print(f"[Writing results] Initialisation took {round(stop[-1] - start[-1], 3)} s")
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
+print(f"[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s")
 
 
 # %%========================================================================= #
@@ -203,30 +213,36 @@ print(f'[ticoi_cube_demo] Initialisation took {round(stop[2] - start[2], 3)} s')
 
 start.append(time.time())
 
-several = (type(returned) == list and len(returned) >= 2)
-if 'invert' in returned:
-    cube_invert = cube.write_result_tico([result[i][0] for i in range(len(result))] if several else result, source,
-                                         sensor,
-                                         filename=f'{result_fn}_invert' if several else result_fn,
-                                         savepath=path_save if save else None,
-                                         result_quality=inversion_kwargs['result_quality'],
-                                         verbose=inversion_kwargs['verbose'])
-if 'interp' in returned:
-    cube_interp = cube.write_result_ticoi([result[i][1] for i in range(len(result))] if several else result,
-                                          source_interp, sensor,
-                                          filename=f'{result_fn}_interp' if several else result_fn,
-                                          savepath=path_save if save else None,
-                                          result_quality=inversion_kwargs['result_quality'],
-                                          verbose=inversion_kwargs['verbose'])
+several = type(returned) == list and len(returned) >= 2
+if "invert" in returned:
+    cube_invert = cube.write_result_tico(
+        [result[i][0] for i in range(len(result))] if several else result,
+        source,
+        sensor,
+        filename=f"{result_fn}_invert" if several else result_fn,
+        savepath=path_save if save else None,
+        result_quality=inversion_kwargs["result_quality"],
+        verbose=inversion_kwargs["verbose"],
+    )
+if "interp" in returned:
+    cube_interp = cube.write_result_ticoi(
+        [result[i][1] for i in range(len(result))] if several else result,
+        source_interp,
+        sensor,
+        filename=f"{result_fn}_interp" if several else result_fn,
+        savepath=path_save if save else None,
+        result_quality=inversion_kwargs["result_quality"],
+        verbose=inversion_kwargs["verbose"],
+    )
 # Save TICOI results to a netCDF file, thus obtaining a new data cube
 
 # Plot the mean velocity as an example
 if save_mean_velocity and cube_interp is not None:
-    cube_interp.average_cube(return_format='geotiff', return_variable=['vv'], save=True, path_save=path_save)
+    cube_interp.average_cube(return_format="geotiff", return_variable=["vv"], save=True, path_save=path_save)
 
 if save or save_mean_velocity:
-    print(f'[ticoi_cube_demo] Results saved at {path_save}')
+    print(f"[ticoi_cube_demo] Results saved at {path_save}")
 
 stop.append(time.time())
-print(f'[ticoi_cube_demo] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s')
-print(f'[ticoi_cube_demo] Overall processing took {round(stop[3] - start[0], 0)} s')
+print(f"[ticoi_cube_demo] Writing cube to netCDF file took {round(stop[3] - start[3], 3)} s")
+print(f"[ticoi_cube_demo] Overall processing took {round(stop[3] - start[0], 0)} s")

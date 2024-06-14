@@ -7,10 +7,11 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import numpy as np
 import math as m
+
 import geopandas as gpd
-from shapely.geometry import Polygon, Point
+import numpy as np
+from shapely.geometry import Point, Polygon
 
 
 def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_lines: bool = False) -> np.ndarray:
@@ -29,8 +30,9 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
         i = 0
         moy = []
 
-        while i < data.shape[0] and dates[i_date, 1] >= data[
-            i, 0]:  # if the velocity observation is between two dates in dates_range
+        while (
+            i < data.shape[0] and dates[i_date, 1] >= data[i, 0]
+        ):  # if the velocity observation is between two dates in dates_range
 
             if dates[i_date, 0] <= data[i, 1]:
                 moy.append(data[i, v_pos])
@@ -40,7 +42,7 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
         else:
             ini.append(np.nan)
 
-    interval_output = (dates[0, 1] - dates[0, 0]) / np.timedelta64(1, 'D')
+    interval_output = (dates[0, 1] - dates[0, 0]) / np.timedelta64(1, "D")
     # ini = np.array([(np.ma.mean(ini[i:i + 2])) for i in range(len(ini) - 1)])
     dates_ini = dates[:, 1] - m.ceil(interval_output / 2)
     if save_lines:
@@ -56,15 +58,15 @@ def find_granule_by_point(input_dict, input_point):  # [lon,lat]
     target_granule_urls = []
 
     point_geom = Point(input_point[0], input_point[1])
-    point_gdf = gpd.GeoDataFrame(crs='epsg:4326', geometry=[point_geom])
-    for granule in input_dict['features']:
+    point_gdf = gpd.GeoDataFrame(crs="epsg:4326", geometry=[point_geom])
+    for granule in input_dict["features"]:
 
-        bbox_ls = granule['geometry']['coordinates'][0]
+        bbox_ls = granule["geometry"]["coordinates"][0]
         bbox_geom = Polygon(bbox_ls)
-        bbox_gdf = gpd.GeoDataFrame(index=[0], crs='epsg:4326', geometry=[bbox_geom])
+        bbox_gdf = gpd.GeoDataFrame(index=[0], crs="epsg:4326", geometry=[bbox_geom])
 
         if bbox_gdf.contains(point_gdf).all():
-            target_granule_urls.append(granule['properties']['zarr_url'])
+            target_granule_urls.append(granule["properties"]["zarr_url"])
         else:
             pass
     return target_granule_urls

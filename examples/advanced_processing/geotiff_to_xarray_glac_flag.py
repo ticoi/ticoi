@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-import xarray as xr
-import rioxarray
 import glob
 import time
-from datetime import datetime, date
+from datetime import date, datetime
+
+import geopandas as gpd
+import rioxarray
+import xarray as xr
 from pyproj import CRS
 from rasterio import features
-import geopandas as gpd
 
 start = time.time()
 
@@ -71,7 +72,7 @@ ds_combined.y.attrs = {
     "axis": "Y",
 }
 ds_combined.mid_date.attrs = {
-    "description": "Mid date of the imapge paier",
+    "description": "Mid date of the imape paier",
     "axis": "Time",
 }
 ds_combined.date1.attrs = {
@@ -117,10 +118,10 @@ print("time ", (time.time() - start), "seconds")
 
 if assign_flag:
     flag_shp = gpd.read_file(flag_shp).to_crs(proj4).clip(ds_combined.rio.bounds())
-    
-    flag_id = flag_shp['Surge_class'].apply(lambda x: 2 if x is not None else 1).astype("int16")
+
+    flag_id = flag_shp["Surge_class"].apply(lambda x: 2 if x is not None else 1).astype("int16")
     geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
-    
+
     flags = features.rasterize(
         geom_value,
         out_shape=ds_combined.rio.shape,
@@ -129,13 +130,15 @@ if assign_flag:
         fill=0,  # background value
         dtype="int16",
     )
-    
+
     flags = xr.Dataset(
-                data_vars=dict(
-                    flags=(["y", "x"], flags),
-                ),
-                coords=dict(
-                    x=(["x"], ds_combined.x.data),
-                    y=(["y"], ds_combined.y.data),))
-    
+        data_vars=dict(
+            flags=(["y", "x"], flags),
+        ),
+        coords=dict(
+            x=(["x"], ds_combined.x.data),
+            y=(["y"], ds_combined.y.data),
+        ),
+    )
+
     flags.to_netcdf(dst_flag_nc)
