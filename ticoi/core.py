@@ -928,7 +928,7 @@ def process(
     :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
     :param regu: [int | str] [default is 1] --- Type of regularization
     :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
-    :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+    :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
     :param apriori_weight: [bool] [default is False] --- If True use of aprori weight
     :param returned: [list | str] [default is 'interp'] --- What results must be returned ('raw', 'invert' and/or 'interp')
     :param obs_filt: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
@@ -957,17 +957,8 @@ def process(
     returned_list = []
 
     # Loading data at pixel location
-    data = cube.load_pixel(
-        i,
-        j,
-        proj=proj,
-        interp=interpolation_load_pixel,
-        solver=solver,
-        coef=coef,
-        regu=regu,
-        rolling_mean=obs_filt,
-        flags=flags,
-    )
+    data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver, coef=coef, regu=regu,
+                           rolling_mean=obs_filt, flag=flag)
 
     if "raw" in returned:
         returned_list.append(data)
@@ -1105,10 +1096,8 @@ def load_block(
 
     :param cube: [cube_data_class] --- Cube splited in blocks
     :params x_start, x_end, y_start, y_end: [int] --- Boundaries of the block
-    :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
 
     :return block: [cube_data_class] --- Sub-cube of cube according to the boundaries (block)
-    :return flags_block: [xr dataset | None] --- If not None, part of flags dataset corresponding to the block
     :return duration: [float] --- Duration of the block loading
     """
 
@@ -1116,15 +1105,10 @@ def load_block(
     block = cube_data_class()
     block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
     block.ds = block.ds.persist()
-    block.update_dimension(time_dim="mid_date" if not block.is_TICO else "date2")
-
-    if flags is not None:
-        flags_block = flags.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
-    else:
-        flags_block = None
+    block.update_dimension()
     duration = time.time() - start
 
-    return block, flags_block, duration
+    return block, duration
 
 
 def process_blocks_refine(
@@ -1178,7 +1162,8 @@ def process_blocks_refine(
             return result_block
 
         # Filter the cube
-        obs_filt = block.filter_cube(**preData_kwargs)
+        obs_filt, flag_block = block.filter_cube(**preData_kwargs)
+        inversion_kwargs.update({'flag': flag_block})
 
         # There is no data on the whole block (masked data)
         if obs_filt is None and "interp" in returned:
@@ -1200,63 +1185,50 @@ def process_blocks_refine(
         #                 for i, j in xy_values_tqdm]
         return result_block
 
-    async def process_blocks_main(
-        cube, nb_cpu=8, block_size=0.5, returned="interp", preData_kwargs=None, inversion_kwargs=None, verbose=False
-    ):
-        flags = preData_kwargs["flags"] if preData_kwargs is not None else None
-        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
 
-        dataf_list = [None] * (cube.nx * cube.ny)
+        flag = preData_kwargs['flag'] if preData_kwargs is not None else None
+        blocks = chunk_to_block(cube, block_size=block_size, verbose=True) # Split the cube in smaller blocks
+
+        dataf_list = [None] * ( cube.nx * cube.ny )
 
         loop = asyncio.get_event_loop()
         for n in range(len(blocks)):
-            print(f"[Block process] Processing block {n+1}/{len(blocks)}")
+            print(f'[Block process] Processing block {n+1}/{len(blocks)}')
 
             # Load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
-            block, flags_block, duration = await future
-            if preData_kwargs is not None:
-                preData_kwargs["flags"] = flags_block
-                inversion_kwargs["flags"] = flags_block
-            print(f"[Block process] Block {n+1} loaded in {duration:.2f} s")
+            block, duration = await future
+            print(f'Block {n+1} loaded in {duration:.2f} s')
 
             if n < len(blocks) - 1:
                 # Load the next block while processing the current block
-                x_start, x_end, y_start, y_end = blocks[n + 1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+                x_start, x_end, y_start, y_end = blocks[n+1]
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
-            block_result = await process_block(
-                block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
-            )  # Process TICOI
+            # need to change the flag back...
+            inversion_kwargs.update({'flag': flag})
+            block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose) # Process TICOI
 
             # Transform to list
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
-                col = np.floor(i / block.ny) + blocks[n][0]
-                idx = int(col * cube.ny + row)
+                col = np.floor( i / block.ny ) + blocks[n][0]
+                idx = int( col * cube.ny + row )
 
                 dataf_list[idx] = block_result[i]
 
-            del block_result, block, flags_block
+            del block_result, block
 
         return dataf_list
 
     # /!\ The use of asyncio can cause problems when the code is launched from an IDE if it has its own event loop
     # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
-    return asyncio.run(
-        process_blocks_main(
-            cube,
-            nb_cpu=nb_cpu,
-            block_size=block_size,
-            returned=returned,
-            preData_kwargs=preData_kwargs,
-            inversion_kwargs=inversion_kwargs,
-            verbose=verbose,
-        )
-    )
+    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs,
+                                           inversion_kwargs=inversion_kwargs, verbose=verbose))
 
 
 # %% ======================================================================== #

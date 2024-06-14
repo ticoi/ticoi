@@ -9,6 +9,9 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
+import os
+import dask
+import rasterio.enums
 import itertools
 import os
 import time
@@ -18,21 +21,25 @@ from typing import List, Optional, Union
 
 import dask
 import geopandas
+import rasterio as rio
+import richdem as rd
 import pandas as pd
-import rasterio
-import rasterio.enums
-from dask.array.lib.stride_tricks import sliding_window_view
+from pyproj import Proj, Transformer, CRS
+from scipy.ndimage import median_filter
+from datetime import date
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
-from rasterio.transform import from_origin
-
+import rasterio.warp
 from ticoi.filtering_functions import *
+from typing import Union
+from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-
+from osgeo import gdal, osr
+from typing import List, Optional, Union
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -1081,30 +1088,32 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    def delete_outliers(self, delete_outliers: str | float, flags: xr.Dataset | None = None):
+    def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None,
+                        slope: xr.Dataset | None = None, aspect: xr.Dataset | None = None, ):
 
-        """
+        '''
         Delete outliers according to a certain criterium.
 
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
-        :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        """
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        '''
 
         if isinstance(delete_outliers, int):
             self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
         else:
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
-            axis = self.ds["vx"].dims.index("mid_date")
-            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, axis=axis)
+            axis = self.ds['vx'].dims.index('mid_date')
+            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope,
+                                            aspect=aspect, axis=axis)
 
-            if flags is not None:
-                if delete_outliers != "vvc_angle":
-                    flag = flags["flags"].values if flags["flags"].shape[0] == self.nx else flags["flags"].values.T
-                    flag_condition = flag == 0
+            if flag is not None:
+                if delete_outliers != 'vvc_angle':
+                    flag = flag['flag'].values if flag['flag'].shape[0] == self.nx else flag['flag'].values.T
+                    flag_condition = (flag == 0)
                     flag_condition = np.expand_dims(flag_condition, axis=axis)
                     inlier_mask = np.logical_or(inlier_mask, flag_condition)
 
-            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
+            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds['vx'].dims)
 
             for var in ["vx", "vy"]:
                 self.ds[var] = self.ds[var].where(inlier_flag)
@@ -1147,6 +1156,42 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
                 .astype("float32")
             )
+
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5):
+
+        with rio.open(dem_file) as src:
+            dem = src.read(1)
+
+        dem_warped = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
+
+        dem_warped, _ = rio.warp.reproject(
+            source=dem,
+            destination=dem_warped,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_crs=CRS.from_proj4(self.ds.proj4),
+            dst_transform=self.ds.rio.transform(),
+            dst_shape=self.ds.rio.shape,
+            resampling=rio.warp.Resampling.bilinear,
+        )
+
+        dem_warped = median_filter(dem_warped, size=blur_size)
+
+        dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
+        dem_rd.geotransform = self.ds.rio.transform().to_gdal()
+
+        slope = rd.TerrainAttribute(dem_rd, attrib='slope_degrees')
+        aspect = rd.TerrainAttribute(dem_rd, attrib='aspect')
+
+        slope[slope == slope.no_data] = np.nan
+        aspect[aspect == aspect.no_data] = np.nan
+
+        slope = xr.Dataset(data_vars=dict(slope=(["y", "x"], np.array(slope)), ),
+                           coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)))
+        aspect = xr.Dataset(data_vars=dict(aspect=(["y", "x"], np.array(aspect)), ),
+                            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)))
+
+        return slope, aspect
 
     def filter_cube(
         self,
@@ -1753,7 +1798,7 @@ class cube_data_class:
                 dims=["x", "y", "mid_date"],
                 coords={"x": self.ds["x"], "y": self.ds["y"], "mid_date": time_variable},
             )
-            cubenew.ds[var] = cubenew.ds[var].transpose("x", "y", "mid_date")
+            cubenew.ds[var] = cubenew.ds[var].transpose('x', 'y', 'mid_date')
             cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": "m/y", "long_name": long_name[i]}
 
         if result_quality is not None and "Norm_residual" in result_quality:
