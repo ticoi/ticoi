@@ -491,13 +491,13 @@ lat_data = (positions[:, 1] - np.min(cube.ds['y'].values)).astype(int) // resolu
 
 # Format raw data to velocities
 for raw in data_raw:
-    raw['vx'] = raw['vx'] * preData_kwargs['unit'] / raw['temporal_baseline']
-    raw['vy'] = raw['vy'] * preData_kwargs['unit'] / raw['temporal_baseline']
+    # raw['vx'] = raw['vx'] * preData_kwargs['unit'] / raw['temporal_baseline']
+    # raw['vy'] = raw['vy'] * preData_kwargs['unit'] / raw['temporal_baseline']
     raw['vv'] = np.sqrt(raw['vx'] ** 2 + raw['vy'] ** 2)
     raw.index = raw['date1'] + (raw['date2'] - raw['date1']) // 2
 
 ##  Best matching sinus map (amplitude and phase, and period if not fixed)
-print('[Fourier analysis] Computing periodicity map...')
+print('[Fourier analysis] Computing periodicity maps...')
 if not impose_frequency:
     period_map = np.empty([cube.nx, cube.ny])
     period_map[:,:] = np.nan
@@ -513,7 +513,7 @@ if raw_seasonality:
     peak_raw_map = np.empty([cube.nx, cube.ny])
     peak_raw_map[:,:] = np.nan
 
-result_tqdm = tqdm(zip(usefull_result, data_raw), total=len(usefull_result), mininterval=0.5)
+result_tqdm = tqdm(zip(usefull_result, usefull_data_raw), total=len(usefull_result), mininterval=0.5)
 match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality,
                                                                             d_raw=raw) for d, raw in result_tqdm))
 if not impose_frequency:
@@ -526,7 +526,7 @@ AtoVar_map[long_data, lat_data] = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(Ato
                                                     for A, raw, dataf_lp in raw_tqdm)
 if raw_seasonality:
     amplitude_raw_map[long_data, lat_data] = np.abs(match_res[:, 3])
-    peak_map[long_data, lat_data] = match_res[:, 4]
+    peak_raw_map[long_data, lat_data] = match_res[:, 4]
 
 # Save the maps to a .tiff file with two bands (one for period, and one for amplitude)
 if impose_frequency:

@@ -267,7 +267,7 @@ print(f'[Coef optimization] Whole coefficient optimization took {round((stop[-1]
 
 start.append(time.time())
 
-# Converting coefs to an array
+# Converting coefs to an array
 if coefs is None:
     coefs = np.arange(coef_min, coef_max, step)
 else:
