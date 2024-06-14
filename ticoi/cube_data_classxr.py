@@ -24,21 +24,19 @@ import geopandas
 import rasterio as rio
 import richdem as rd
 import pandas as pd
-from pyproj import Proj, Transformer, CRS
-from scipy.ndimage import median_filter
 from datetime import date
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 import rasterio.warp
 from ticoi.filtering_functions import *
-from typing import Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-from osgeo import gdal, osr
+from rasterio.transform import from_origin
+
 from typing import List, Optional, Union
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -972,30 +970,19 @@ class cube_data_class:
                     print(f"[Data loading] Converted to projection {self.ds.proj4}: {i, j}")
         return i, j
 
-    def load_pixel(
-        self,
-        i: int | float,
-        j: int | float,
-        unit: int = 365,
-        regu: int | str = 1,
-        coef: int = 100,
-        flags: xr.Dataset | None = None,
-        solver: str = "LSMR",
-        interp: str = "nearest",
-        proj: str = "EPSG:4326",
-        rolling_mean: xr.Dataset | None = None,
-        visual: bool = False,
-        output_format="np",
-    ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]):
+    def load_pixel(self, i: int | float, j: int | float, unit: int = 365, regu: int | str = 1, coef: int = 100,
+                   flag: xr.Dataset | None = None, solver: str = 'LSMR', interp: str = 'nearest',
+                   proj: str = 'EPSG:4326', rolling_mean: xr.Dataset | None = None,
+                   visual: bool = False, output_format='np')-> (Optional[list],Optional[list],Optional[np.array],Optional[np.array],Optional[np.array]):
 
-        """
+        '''
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
 
         :params i, j: [int | float] --- Coordinates to be converted
         :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
         :param regu: [int | str] [default is 1] --- Type of regularization
         :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
-        :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
@@ -1008,7 +995,7 @@ class cube_data_class:
         :return dates_range: [list | None] --- Dates between which the displacements will be inverted
         :return regu: [np array | Nothing] --- If flags is not None, regularisation method to be used for each pixel
         :return coef: [np array | Nothing] --- If flags is not None, regularisation coefficient to be used for each pixel
-        """
+        '''
 
         # Variables to keep
         var_to_keep = (
@@ -1031,9 +1018,9 @@ class cube_data_class:
                     dim="mid_date"
                 )  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
 
-        if flags is not None:
+        if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flags["flags"].sel(x=i, y=j, method="nearest").values)
+                flag = np.round(flag['flag'].sel(x=i, y=j, method='nearest').values)
                 regu = regu[flag]
                 coef = coef[flag]
             else:
@@ -1079,7 +1066,7 @@ class cube_data_class:
             data_values = data.drop_vars(["date1", "date2"]).to_array().values.T
             data = [data_dates, data_values]
 
-        if flags is not None:
+        if flag is not None:
             return data, mean, dates_range, regu, coef
         else:
             return data, mean, dates_range
@@ -1252,7 +1239,7 @@ class cube_data_class:
         order: int = 3,
         unit: int = 365,
         delete_outliers: str | float | None = None,
-        flags: xr.Dataset | None = None,
+        flag: xr.Dataset | None = None,
         regu: int | str = 1,
         solver: str = "LSMR_ini",
         proj: str = "EPSG:4326",
@@ -1275,7 +1262,7 @@ class cube_data_class:
         :param order: [int] [default is 3] --- Order of the smoothing function
         :param unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
         :param delete_outliers: [str | float | None] [default is None] --- If float delete all velocities which a quality indicator higher than delete_outliers
-        :param flags: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         :param regu: [int | str] [default is 1] --- Regularisation of the solver
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
@@ -1286,7 +1273,7 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray):
+        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 900) -> (np.ndarray, np.ndarray):
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1306,15 +1293,11 @@ class cube_data_class:
                 start = time.time()
 
             if select_baseline is not None:
-                baseline = self.ds["temporal_baseline"].compute()
-                idx = np.where(
-                    baseline < select_baseline
-                )  # Take only the temporal baseline lower than the threshold selecr_baseline
-                while len(idx[0]) < 3 * len(
-                    date_out
-                ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
+                baseline = self.ds['temporal_baseline'].compute()
+                idx = np.where(baseline < select_baseline ) # Take only the temporal baseline lower than the treshold selecr_baseline
+                while len(idx[0]) < 3 * len(date_out): # Increase the treshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     t_thres += 30
-                    idx = np.where(baseline < t_thres)
+                    idx = np.where(baseline < t_thres )
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -1380,12 +1363,20 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
-        if flags is not None:
-            flags = flags.load()
+        if flag is not None:
+
+            if isinstance(flag, str): # if flag is a shape file
+                flag = self.create_flag(flag)
+                flag = flag.load()
+            elif isinstance(flag, xr.Dataset):
+                flag = flag.load()
+            else:
+                raise ValueError("flag must be a str or xr.Dataset!")
+
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
-                raise ValueError("regu must be a dict if assign_flag is True!")
+                raise ValueError("regu must be a dict if flag is Not None")
         else:
             if isinstance(regu, int):  # if regu is an integer
                 regu = [regu]
@@ -1394,7 +1385,7 @@ class cube_data_class:
 
         start = time.time()
         if delete_outliers is not None:
-            self.delete_outliers(delete_outliers=delete_outliers, flags=flags)
+            self.delete_outliers(delete_outliers=delete_outliers, flags=flag)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
