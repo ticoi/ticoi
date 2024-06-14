@@ -78,8 +78,8 @@ load_kwargs = {
 
 ## ----------------------- Data preparation parameters --------------------- ##
 # For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
-regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 100  # Regularization coefficient.s to be used (for each flag if flags is not None)
+regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
 delete_outlier = "vvc_angle"
 apriori_weight = True
 interpolation_bas = 90
@@ -93,7 +93,7 @@ preData_kwargs = {
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": None,  # Divide the data in several areas where different methods should be used
-    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
@@ -102,7 +102,7 @@ preData_kwargs = {
 
 ## ---------------- Inversion and interpolation parameters ----------------- ##
 inversion_kwargs = {
-    "coef": coef,  # Regularization coefficient.s to be used (for each flag if flags is not None)
+    "coef": coef,  # Regularization coefficient.s to be used (for each flag if flag is not None)
     "conf": False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "interpolation_load_pixel": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
@@ -128,7 +128,7 @@ if not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # Update of dictionary with common parameters
-for common_parameter in ["flag", "proj", "delete_outliers", "regu", "solver"]:
+for common_parameter in ["proj", "delete_outliers", "regu", "solver"]:
     inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
 # %%========================================================================= #
@@ -169,7 +169,7 @@ if TICOI_process == "block_process":
 # Direct computation of the whole TICOI cube
 elif TICOI_process == "direct_process":
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(**preData_kwargs)
+    obs_filt,flag = cube.filter_cube(**preData_kwargs)
 
     # Progression bar
     xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)

@@ -217,7 +217,7 @@ async def process_blocks_main(
     # else:
     #     raise ValueError('preData_kwars and inversion_kwars must be a dict')
 
-    flags = preData_kwargs["flags"]
+    flag = preData_kwargs["flag"]
     blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
 
     dataf_list = [None] * (cube.nx * cube.ny)
@@ -230,18 +230,18 @@ async def process_blocks_main(
         # Load the first block and start the loop
         if n == 0:
             x_start, x_end, y_start, y_end = blocks[0]
-            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
-        block, flags_block, duration = await future
-        preData_kwargs["flags"] = flags_block
-        inversion_kwargs["flags"] = flags_block
+        block, flag_block, duration = await future
+        preData_kwargs["flag"] = flag_block
+        inversion_kwargs["flag"] = flag_block
         print(f"Block {n+1} loaded in {duration:.2f} s")
         # if verbose: print(f'Block {n+1} loaded in {duration:.2f} s')
 
         if n < len(blocks) - 1:
             # load the next block while processing the current block
             x_start, x_end, y_start, y_end = blocks[n + 1]
-            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flags)
+            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
         block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose)
 
@@ -252,7 +252,7 @@ async def process_blocks_main(
 
             dataf_list[idx] = block_result[i]
 
-        del block_result, block, flags_block
+        del block_result, block, flag_block
 
     return dataf_list
 

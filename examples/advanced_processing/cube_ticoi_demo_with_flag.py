@@ -67,7 +67,7 @@ cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..",".."
 # cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
 #              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_invert.nc',
 #              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_interp.nc'}
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flag file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
@@ -77,17 +77,17 @@ proj = "EPSG:32632"  # EPSG system of the given coordinates
 # Divide the data in several areas where different methods should be used
 assign_flag = True
 if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
+    flag = xr.open_dataset(flag_file)
+    flag.load()
 else:
-    flags = None
+    flag = None
 
-# Regularization method.s to be used (for each flag if flags is not None)
-regu = {0: 1, 1: "1accelnotnull"}  # With flags (0: stable ground, 1: glaciers)
-# regu = '1accelnotnull' # Without flags
-# Regularization coefficient.s to be used (for each flag if flags is not None)
-coef = {0: 500, 1: 200}  # With flags (0: stable ground, 1: glaciers)
-# coef = 200 # Without flags
+# Regularization method.s to be used (for each flag if flag is not None)
+regu = {0: 1, 1: "1accelnotnull"}  # With flag (0: stable ground, 1: glaciers)
+# regu = '1accelnotnull' # Without flag
+# Regularization coefficient.s to be used (for each flag if flag is not None)
+coef = {0: 500, 1: 200}  # With flag (0: stable ground, 1: glaciers)
+# coef = 200 # Without flag
 solver = "LSMR_ini"  # Solver for the inversion
 
 # What results must be returned from TICOI processing (not used for TICOI_process='load')
@@ -119,8 +119,8 @@ preData_kwargs = {
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    "flags": flags,  # Divide the data in several areas where different methods should be used
-    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None)
+    "flag": flag,  # Divide the data in several areas where different methods should be used
+    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
@@ -129,10 +129,9 @@ preData_kwargs = {
 
 ## ---------------- Inversion and interpolation parameters ----------------- ##
 inversion_kwargs = {
-    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None)
-    "coef": coef,  # Regularization coefficient.s to be used (for each flag if flags is not None)
+    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
+    "coef": coef,  # Regularization coefficient.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
-    "flags": flags,  # Divide the data in several areas where different methods should be used
     "conf": False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
@@ -231,7 +230,8 @@ if TICOI_process == "block_process":
 # Direct computation of the whole TICOI cube
 elif TICOI_process == "direct_process":
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt = cube.filter_cube(**preData_kwargs)
+    obs_filt,flag = cube.filter_cube(**preData_kwargs)
+    inversion_kwargs.update({'flag': flag})
 
     # Progression bar
     xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)

@@ -45,7 +45,7 @@ cube_name = {
     "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_invert.nc',
     "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_interp.nc',
 }
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flag.nc'  # Path to flag file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
@@ -56,10 +56,10 @@ proj = "EPSG:32632"  # EPSG system of the given coordinates
 # Divide the data in several areas where different methods should be used
 assign_flag = True
 if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
+    flag = xr.open_dataset(flag_file)
+    flag.load()
 else:
-    flags = None
+    flag = None
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {

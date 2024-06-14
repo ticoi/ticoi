@@ -122,7 +122,7 @@ if assign_flag:
     flag_id = flag_shp["Surge_class"].apply(lambda x: 2 if x is not None else 1).astype("int16")
     geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
 
-    flags = features.rasterize(
+    flag = features.rasterize(
         geom_value,
         out_shape=ds_combined.rio.shape,
         transform=ds_combined.rio.transform(),
@@ -131,9 +131,9 @@ if assign_flag:
         dtype="int16",
     )
 
-    flags = xr.Dataset(
+    flag = xr.Dataset(
         data_vars=dict(
-            flags=(["y", "x"], flags),
+            flag=(["y", "x"], flag),
         ),
         coords=dict(
             x=(["x"], ds_combined.x.data),
@@ -141,4 +141,4 @@ if assign_flag:
         ),
     )
 
-    flags.to_netcdf(dst_flag_nc)
+    flag.to_netcdf(dst_flag_nc)

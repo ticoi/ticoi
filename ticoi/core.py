@@ -1088,7 +1088,7 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
 
 
 def load_block(
-    cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_end: int, flags: xr.Dataset | None = None
+    cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_end: int, flag: xr.Dataset | None = None
 ):
 
     """
@@ -1155,7 +1155,6 @@ def process_blocks_refine(
                     regu=inversion_kwargs["regu"],
                     rolling_mean=None,
                     visual=inversion_kwargs["visual"],
-                    verbose=inversion_kwargs["verbose"],
                 )
                 for i, j in xy_values_tqdm
             )

@@ -993,8 +993,8 @@ class cube_data_class:
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
         :return dates_range: [list | None] --- Dates between which the displacements will be inverted
-        :return regu: [np array | Nothing] --- If flags is not None, regularisation method to be used for each pixel
-        :return coef: [np array | Nothing] --- If flags is not None, regularisation coefficient to be used for each pixel
+        :return regu: [np array | Nothing] --- If flag is not None, regularisation method to be used for each pixel
+        :return coef: [np array | Nothing] --- If flag is not None, regularisation coefficient to be used for each pixel
         '''
 
         # Variables to keep
@@ -1020,7 +1020,7 @@ class cube_data_class:
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flag['flag'].sel(x=i, y=j, method='nearest').values)
+                flag = np.round(flag['flags'].sel(x=i, y=j, method='nearest').values)
                 regu = regu[flag]
                 coef = coef[flag]
             else:
@@ -1228,27 +1228,14 @@ class cube_data_class:
 
         return flag
 
-    def filter_cube(
-        self,
-        i: int | float | None = None,
-        j: int | float | None = None,
-        smooth_method: str = "gaussian",
-        s_win: int = 3,
-        t_win: int = 90,
-        sigma: int = 3,
-        order: int = 3,
-        unit: int = 365,
-        delete_outliers: str | float | None = None,
-        flag: xr.Dataset | None = None,
-        regu: int | str = 1,
-        solver: str = "LSMR_ini",
-        proj: str = "EPSG:4326",
-        velo_or_disp: str = "velo",
-        select_baseline: int | None = None,
-        verbose: bool = False,
-    ) -> xr.Dataset:
+    def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
+                    s_win: int = 3, t_win: int = 90, sigma: int = 3, order: int = 3, unit: int = 365,
+                    delete_outliers: str | float | None = None, flag: xr.Dataset | str | None = None,
+                    dem_file: str | None = None,
+                    regu: int | str = 1, solver: str = 'LSMR_ini', proj: str = "EPSG:4326", velo_or_disp: str = "velo",
+                    select_baseline: int | None = None, verbose: bool = False) -> xr.Dataset:
 
-        """
+        '''
            Filter the original data before the inversion:
         -delete outliers according to the provided criterium
         -compute a spatio-temporal kernel of the data, which can be used as apriori for the inversion (for "1accelnotnull" or "directionxy" )
@@ -1267,11 +1254,11 @@ class cube_data_class:
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
         :param velo_or_disp: [str] [default is 'velo'] --- 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity
-        :param select_baseline: [int | None] [default is None] --- threshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this threshold, it is increased by 30 days
+        :param select_baseline: [int | None] [default is None] --- Treshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this treshold, it is increased by 30 days
         :param verbose: [bool] [default is False] --- Print information throughout the process
 
         :return obs_filt: [xr dataset | None] --- Filtered dataset
-        """
+        '''
 
         def loop_rolling(da_arr: xr.Dataset, t_thres: int = 900) -> (np.ndarray, np.ndarray):
 
@@ -1287,73 +1274,57 @@ class cube_data_class:
 
             # Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
-            mid_dates = self.ds["mid_date"]
+            mid_dates = self.ds['mid_date']
 
-            if verbose:
-                start = time.time()
+            if verbose: start = time.time()
 
             if select_baseline is not None:
                 baseline = self.ds['temporal_baseline'].compute()
-                idx = np.where(baseline < select_baseline ) # Take only the temporal baseline lower than the treshold selecr_baseline
-                while len(idx[0]) < 3 * len(date_out): # Increase the treshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
+                idx = np.where(
+                    baseline < select_baseline)  # Take only the temporal baseline lower than the treshold selecr_baseline
+                while len(idx[0]) < 3 * len(
+                        date_out):  # Increase the treshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     t_thres += 30
-                    idx = np.where(baseline < t_thres )
+                    idx = np.where(baseline < t_thres)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
             # Find the time axis for dask processing
-            time_axis = self.ds["vx"].dims.index("mid_date")
+            time_axis = self.ds['vx'].dims.index('mid_date')
             # Apply the selected kernel in time
             if verbose:
                 with ProgressBar():  # Plot a progress bar
-                    filtered_in_time = dask_smooth_wrapper(
-                        da_arr.data,
-                        mid_dates,
-                        t_out=date_out,
-                        smooth_method=smooth_method,
-                        sigma=sigma,
-                        t_win=t_win,
-                        order=order,
-                        axis=time_axis,
-                    ).compute()
+                    filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out,
+                                                           smooth_method=smooth_method,
+                                                           sigma=sigma, t_win=t_win, order=order,
+                                                           axis=time_axis).compute()
             else:
-                filtered_in_time = dask_smooth_wrapper(
-                    da_arr.data,
-                    mid_dates,
-                    t_out=date_out,
-                    smooth_method=smooth_method,
-                    sigma=sigma,
-                    t_win=t_win,
-                    order=order,
-                    axis=time_axis,
-                ).compute()
+                filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out,
+                                                       smooth_method=smooth_method,
+                                                       sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
 
-            if verbose:
-                print(f"[Data filtering] Smoothing observations took {round((time.time() - start), 1)} s")
+            if verbose: print(f'[Data filtering] Smoothing observations took {round((time.time() - start), 1)} s')
 
             # Spatial average
-            if (
-                np.min([da_arr["x"].size, da_arr["y"].size]) > s_win
-            ):  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
+            if np.min([da_arr['x'].size, da_arr[
+                'y'].size]) > s_win:  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
                 spatial_axis = tuple(i for i in range(3) if i != time_axis)
                 pad_widths = tuple((s_win // 2, s_win // 2) if i != time_axis else (0, 0) for i in range(3))
-                spatial_mean = da.nanmean(
-                    sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis), axis=(-1, -2)
-                )
+                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis),
+                                          axis=(-1, -2))
                 spatial_mean = da.pad(spatial_mean, pad_widths, mode="edge")
             else:
                 spatial_mean = filtered_in_time
 
             return spatial_mean.compute(), np.unique(date_out)
 
-        if np.isnan(self.ds["date1"].values).all():
-            print("[Data filtering] Empty sub-cube (masked data ?)")
+        if np.isnan(self.ds['date1'].values).all():
+            print('[Data filtering] Empty sub-cube (masked data ?)')
             return None
 
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
-            if verbose:
-                print(f"[Data filtering] Clipping dataset to individual pixel: (x, y) = ({i},{j})")
+            if verbose: print(f"[Data filtering] Clipping dataset to individual pixel: (x, y) = ({i},{j})")
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
@@ -1365,7 +1336,7 @@ class cube_data_class:
 
         if flag is not None:
 
-            if isinstance(flag, str): # if flag is a shape file
+            if isinstance(flag, str):  # if flag is a shape file
                 flag = self.create_flag(flag)
                 flag = flag.load()
             elif isinstance(flag, xr.Dataset):
@@ -1385,64 +1356,59 @@ class cube_data_class:
 
         start = time.time()
         if delete_outliers is not None:
-            self.delete_outliers(delete_outliers=delete_outliers, flag=flag)
-            if verbose:
-                print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
+            slope, aspect = None, None
+            if delete_outliers == 'topo_angle':
+                if isinstance(dem_file, str):
+                    slope, aspect = self.compute_slo_asp(dem_file=dem_file)
+                else:
+                    raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
 
-        if "1accelnotnull" in regu or "directionxy" in regu:
-            date_range = np.sort(
-                np.unique(
-                    np.concatenate(
-                        (
-                            self.ds["date1"].values[~np.isnan(self.ds["date1"].values)],
-                            self.ds["date2"].values[~np.isnan(self.ds["date2"].values)],
-                        ),
-                        axis=0,
-                    )
-                )
-            )
-            if verbose:
-                start = time.time()
+            self.delete_outliers(delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect)
+            if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"])
-            vy_filtered, dates_uniq = loop_rolling(self.ds["vy"])
+        if ("1accelnotnull" in regu or "directionxy" in regu):
+            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)],
+                                                           self.ds['date2'].values[~np.isnan(self.ds['date2'].values)]),
+                                                          axis=0)))
+            if verbose: start = time.time()
+
+            vx_filtered, dates_uniq = loop_rolling(self.ds['vx'])
+            vy_filtered, dates_uniq = loop_rolling(self.ds['vy'])
 
             # The time dimension of the smoothed velocity observations is different from the original,
-            # which is because of the possible duplicate mid_date of different image pairs...
+            # which is because of the possible dublicate mid_date of different image pairs...
             obs_filt = xr.Dataset(
-                data_vars=dict(
-                    vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
-                ),
-                coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
-                attrs=dict(description="Smoothed velocity observations", units="m/y", projection=self.ds.proj4),
-            )
+                data_vars=dict(vx_filt=(["x", "y", "mid_date"], vx_filtered),
+                               vy_filt=(["x", "y", "mid_date"], vy_filtered)),
+                coords=dict(x=(["x"], self.ds.x.data),
+                            y=(["y"], self.ds.y.data),
+                            mid_date=dates_uniq),
+                attrs=dict(description="Smoothed velocity observations",
+                           units="m/y",
+                           projection=self.ds.proj4))
             obs_filt.load()
             del vx_filtered, vy_filtered
 
             if verbose:
                 print(
                     "[Data filtering] Calculating smoothing mean of the observations completed in {:.2f} seconds".format(
-                        time.time() - start
-                    )
-                )
+                        time.time() - start))
 
-        elif (
-            solver == "LSMR_ini"
-        ):  # The initialization is based on the averaged velocity over the period, for every pixel
-            obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
-            obs_filt.attrs["description"] = "Averaged velocity over the period"
-            obs_filt.attrs["units"] = "m/y"
+        elif solver == 'LSMR_ini':  # The initialization is based on the averaged velocity over the period, for every pixel
+            obs_filt = self.ds[['vx', 'vy']].mean(dim='mid_date')
+            obs_filt.attrs['description'] = 'Averaged velocity over the period'
+            obs_filt.attrs['units'] = 'm/y'
 
         # Unify the observations to displacement to provide displacement values during inversion
-        if velo_or_disp == "velo":
-            self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
-            self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
+        # if velo_or_disp == "velo":
+        self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
+        self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         obs_filt.load()
         self.ds = self.ds.persist()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
-        return obs_filt
+        return obs_filt, flag
 
     def align_cube(
         self,

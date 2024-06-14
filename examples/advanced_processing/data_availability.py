@@ -104,7 +104,7 @@ index = [
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flags file
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flag.nc'  # Path to flag file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = (
     f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/'  # Path where to store the results
@@ -115,17 +115,17 @@ proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
 assign_flag = True
-flags = None
+flag = None
 if assign_flag:
-    flags = xr.open_dataset(flag_file)
-    flags.load()
+    flag = xr.open_dataset(flag_file)
+    flag.load()
 
-# Regularization method.s to be used (for each flag if flags is not None)
-regu = {0: 1, 1: "1accelnotnull"}  # With flags (0: stable ground, 1: glaciers)
-# regu = '1accelnotnull' # Without flags
-# Regularization coefficient.s to be used (for each flag if flags is not None)
-coef = {0: 500, 1: 200}  # With flags (0: stable ground, 1: glaciers)
-# coef = 200 # Without flags
+# Regularization method.s to be used (for each flag if flag is not None)
+regu = {0: 1, 1: "1accelnotnull"}  # With flag (0: stable ground, 1: glaciers)
+# regu = '1accelnotnull' # Without flag
+# Regularization coefficient.s to be used (for each flag if flag is not None)
+coef = {0: 500, 1: 200}  # With flag (0: stable ground, 1: glaciers)
+# coef = 200 # Without flag
 solver = "LSMR_ini"  # Solver for the inversion
 
 ## ---------------------------- Loading parameters ------------------------- ##
@@ -144,7 +144,7 @@ load_kwargs = {
 
 ## ---------------- Parameters for the pixel loading part ------------------ ##
 load_pixel_kwargs = {
-    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None)
+    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interpolation_load_pixel": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset

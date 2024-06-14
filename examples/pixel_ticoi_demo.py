@@ -35,8 +35,8 @@ proj = "EPSG:4326"  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
-regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 150  # Regularization coefficient.s to be used (for each flag if flags is not None)
+regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 150  # Regularization coefficient.s to be used (for each flag if flag is not None)
 delete_outlier = "vvc_angle"  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
@@ -87,8 +87,8 @@ preData_kwargs = {
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    "flags": None,  # Divide the data in several areas where different methods should be used
-    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+    "flag": None,  # Divide the data in several areas where different methods should be used
+    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
@@ -169,7 +169,8 @@ print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cu
 start.append(time.time())
 
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
-obs_filt = cube.filter_cube(**preData_kwargs)
+obs_filt,flag = cube.filter_cube(**preData_kwargs)
+
 # Load pixel data
 data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
