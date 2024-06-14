@@ -9,9 +9,6 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import os
-import dask
-import rasterio.enums
 import itertools
 import os
 import time
@@ -21,23 +18,23 @@ from typing import List, Optional, Union
 
 import dask
 import geopandas
-import rasterio as rio
-import richdem as rd
 import pandas as pd
-from datetime import date
+import rasterio as rio
+import rasterio.enums
+import rasterio.warp
+import richdem as rd
+from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
-import rasterio.warp
+from rasterio.transform import from_origin
+
 from ticoi.filtering_functions import *
-from dask.array.lib.stride_tricks import sliding_window_view
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-from rasterio.transform import from_origin
 
-from typing import List, Optional, Union
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -970,12 +967,23 @@ class cube_data_class:
                     print(f"[Data loading] Converted to projection {self.ds.proj4}: {i, j}")
         return i, j
 
-    def load_pixel(self, i: int | float, j: int | float, unit: int = 365, regu: int | str = 1, coef: int = 100,
-                   flag: xr.Dataset | None = None, solver: str = 'LSMR', interp: str = 'nearest',
-                   proj: str = 'EPSG:4326', rolling_mean: xr.Dataset | None = None,
-                   visual: bool = False, output_format='np')-> (Optional[list],Optional[list],Optional[np.array],Optional[np.array],Optional[np.array]):
+    def load_pixel(
+        self,
+        i: int | float,
+        j: int | float,
+        unit: int = 365,
+        regu: int | str = 1,
+        coef: int = 100,
+        flag: xr.Dataset | None = None,
+        solver: str = "LSMR",
+        interp: str = "nearest",
+        proj: str = "EPSG:4326",
+        rolling_mean: xr.Dataset | None = None,
+        visual: bool = False,
+        output_format="np",
+    ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]):
 
-        '''
+        """
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
 
         :params i, j: [int | float] --- Coordinates to be converted
@@ -995,7 +1003,7 @@ class cube_data_class:
         :return dates_range: [list | None] --- Dates between which the displacements will be inverted
         :return regu: [np array | Nothing] --- If flag is not None, regularisation method to be used for each pixel
         :return coef: [np array | Nothing] --- If flag is not None, regularisation coefficient to be used for each pixel
-        '''
+        """
 
         # Variables to keep
         var_to_keep = (
@@ -1020,7 +1028,7 @@ class cube_data_class:
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flag['flags'].sel(x=i, y=j, method='nearest').values)
+                flag = np.round(flag["flags"].sel(x=i, y=j, method="nearest").values)
                 regu = regu[flag]
                 coef = coef[flag]
             else:
@@ -1075,32 +1083,38 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None,
-                        slope: xr.Dataset | None = None, aspect: xr.Dataset | None = None, ):
+    def delete_outliers(
+        self,
+        delete_outliers: str | float,
+        flag: xr.Dataset | None = None,
+        slope: xr.Dataset | None = None,
+        aspect: xr.Dataset | None = None,
+    ):
 
-        '''
+        """
         Delete outliers according to a certain criterium.
 
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        '''
+        """
 
         if isinstance(delete_outliers, int):
             self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
         else:
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
-            axis = self.ds['vx'].dims.index('mid_date')
-            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope,
-                                            aspect=aspect, axis=axis)
+            axis = self.ds["vx"].dims.index("mid_date")
+            inlier_mask = dask_filt_warpper(
+                self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope, aspect=aspect, axis=axis
+            )
 
             if flag is not None:
-                if delete_outliers != 'vvc_angle':
-                    flag = flag['flag'].values if flag['flag'].shape[0] == self.nx else flag['flag'].values.T
-                    flag_condition = (flag == 0)
+                if delete_outliers != "vvc_angle":
+                    flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
+                    flag_condition = flag == 0
                     flag_condition = np.expand_dims(flag_condition, axis=axis)
                     inlier_mask = np.logical_or(inlier_mask, flag_condition)
 
-            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds['vx'].dims)
+            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
 
             for var in ["vx", "vy"]:
                 self.ds[var] = self.ds[var].where(inlier_flag)
@@ -1167,16 +1181,24 @@ class cube_data_class:
         dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
         dem_rd.geotransform = self.ds.rio.transform().to_gdal()
 
-        slope = rd.TerrainAttribute(dem_rd, attrib='slope_degrees')
-        aspect = rd.TerrainAttribute(dem_rd, attrib='aspect')
+        slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
+        aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
 
         slope[slope == slope.no_data] = np.nan
         aspect[aspect == aspect.no_data] = np.nan
 
-        slope = xr.Dataset(data_vars=dict(slope=(["y", "x"], np.array(slope)), ),
-                           coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)))
-        aspect = xr.Dataset(data_vars=dict(aspect=(["y", "x"], np.array(aspect)), ),
-                            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)))
+        slope = xr.Dataset(
+            data_vars=dict(
+                slope=(["y", "x"], np.array(slope)),
+            ),
+            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
+        )
+        aspect = xr.Dataset(
+            data_vars=dict(
+                aspect=(["y", "x"], np.array(aspect)),
+            ),
+            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
+        )
 
         return slope, aspect
 
@@ -1195,12 +1217,14 @@ class cube_data_class:
 
         # surge-type glacier: 2, other glacier: 1, stable area: 0
         if field_name is None:
-            if 'surge_type' in flag_shp.columns:  # RGI inventory, surge-type glacier: 2, other glacier: 0
+            if "surge_type" in flag_shp.columns:  # RGI inventory, surge-type glacier: 2, other glacier: 0
                 default_value = 0
-                field_name = 'surge_type'
-            elif 'Surge_class' in flag_shp.columns:  # HMA surging glacier inventory, surge-type glacier: 2, other glacier: ''
+                field_name = "surge_type"
+            elif (
+                "Surge_class" in flag_shp.columns
+            ):  # HMA surging glacier inventory, surge-type glacier: 2, other glacier: ''
                 default_value = None
-                field_name = 'Surge_class'
+                field_name = "Surge_class"
 
         if field_name is not None:
             flag_id = flag_shp[field_name].apply(lambda x: 2 if x != default_value else 1).astype("int16")
@@ -1224,18 +1248,34 @@ class cube_data_class:
             ),
             coords=dict(
                 x=(["x"], self.ds.x.data),
-                y=(["y"], self.ds.y.data), ))
+                y=(["y"], self.ds.y.data),
+            ),
+        )
 
         return flag
 
-    def filter_cube(self, i: int | float | None = None, j: int | float | None = None, smooth_method: str = "gaussian",
-                    s_win: int = 3, t_win: int = 90, sigma: int = 3, order: int = 3, unit: int = 365,
-                    delete_outliers: str | float | None = None, flag: xr.Dataset | str | None = None,
-                    dem_file: str | None = None,
-                    regu: int | str = 1, solver: str = 'LSMR_ini', proj: str = "EPSG:4326", velo_or_disp: str = "velo",
-                    select_baseline: int | None = None, verbose: bool = False) -> xr.Dataset:
+    def filter_cube(
+        self,
+        i: int | float | None = None,
+        j: int | float | None = None,
+        smooth_method: str = "gaussian",
+        s_win: int = 3,
+        t_win: int = 90,
+        sigma: int = 3,
+        order: int = 3,
+        unit: int = 365,
+        delete_outliers: str | float | None = None,
+        flag: xr.Dataset | str | None = None,
+        dem_file: str | None = None,
+        regu: int | str = 1,
+        solver: str = "LSMR_ini",
+        proj: str = "EPSG:4326",
+        velo_or_disp: str = "velo",
+        select_baseline: int | None = None,
+        verbose: bool = False,
+    ) -> xr.Dataset:
 
-        '''
+        """
            Filter the original data before the inversion:
         -delete outliers according to the provided criterium
         -compute a spatio-temporal kernel of the data, which can be used as apriori for the inversion (for "1accelnotnull" or "directionxy" )
@@ -1254,11 +1294,11 @@ class cube_data_class:
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
         :param velo_or_disp: [str] [default is 'velo'] --- 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity
-        :param select_baseline: [int | None] [default is None] --- Treshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this treshold, it is increased by 30 days
+        :param select_baseline: [int | None] [default is None] --- threshold of the temporal baseline to select, if the number of observation is lower than 3 times the number of estimated displacement with this threshold, it is increased by 30 days
         :param verbose: [bool] [default is False] --- Print information throughout the process
 
         :return obs_filt: [xr dataset | None] --- Filtered dataset
-        '''
+        """
 
         def loop_rolling(da_arr: xr.Dataset, t_thres: int = 900) -> (np.ndarray, np.ndarray):
 
@@ -1274,57 +1314,77 @@ class cube_data_class:
 
             # Compute the dates of the estimated displacements time series
             date_out = date_range[:-1] + np.diff(date_range) // 2
-            mid_dates = self.ds['mid_date']
+            mid_dates = self.ds["mid_date"]
 
-            if verbose: start = time.time()
+            if verbose:
+                start = time.time()
 
             if select_baseline is not None:
-                baseline = self.ds['temporal_baseline'].compute()
+                baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(
-                    baseline < select_baseline)  # Take only the temporal baseline lower than the treshold selecr_baseline
+                    baseline < select_baseline
+                )  # Take only the temporal baseline lower than the threshold selecr_baseline
                 while len(idx[0]) < 3 * len(
-                        date_out):  # Increase the treshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
+                    date_out
+                ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     t_thres += 30
                     idx = np.where(baseline < t_thres)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
             # Find the time axis for dask processing
-            time_axis = self.ds['vx'].dims.index('mid_date')
+            time_axis = self.ds["vx"].dims.index("mid_date")
             # Apply the selected kernel in time
             if verbose:
                 with ProgressBar():  # Plot a progress bar
-                    filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out,
-                                                           smooth_method=smooth_method,
-                                                           sigma=sigma, t_win=t_win, order=order,
-                                                           axis=time_axis).compute()
+                    filtered_in_time = dask_smooth_wrapper(
+                        da_arr.data,
+                        mid_dates,
+                        t_out=date_out,
+                        smooth_method=smooth_method,
+                        sigma=sigma,
+                        t_win=t_win,
+                        order=order,
+                        axis=time_axis,
+                    ).compute()
             else:
-                filtered_in_time = dask_smooth_wrapper(da_arr.data, mid_dates, t_out=date_out,
-                                                       smooth_method=smooth_method,
-                                                       sigma=sigma, t_win=t_win, order=order, axis=time_axis).compute()
+                filtered_in_time = dask_smooth_wrapper(
+                    da_arr.data,
+                    mid_dates,
+                    t_out=date_out,
+                    smooth_method=smooth_method,
+                    sigma=sigma,
+                    t_win=t_win,
+                    order=order,
+                    axis=time_axis,
+                ).compute()
 
-            if verbose: print(f'[Data filtering] Smoothing observations took {round((time.time() - start), 1)} s')
+            if verbose:
+                print(f"[Data filtering] Smoothing observations took {round((time.time() - start), 1)} s")
 
             # Spatial average
-            if np.min([da_arr['x'].size, da_arr[
-                'y'].size]) > s_win:  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
+            if (
+                np.min([da_arr["x"].size, da_arr["y"].size]) > s_win
+            ):  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
                 spatial_axis = tuple(i for i in range(3) if i != time_axis)
                 pad_widths = tuple((s_win // 2, s_win // 2) if i != time_axis else (0, 0) for i in range(3))
-                spatial_mean = da.nanmean(sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis),
-                                          axis=(-1, -2))
+                spatial_mean = da.nanmean(
+                    sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis), axis=(-1, -2)
+                )
                 spatial_mean = da.pad(spatial_mean, pad_widths, mode="edge")
             else:
                 spatial_mean = filtered_in_time
 
             return spatial_mean.compute(), np.unique(date_out)
 
-        if np.isnan(self.ds['date1'].values).all():
-            print('[Data filtering] Empty sub-cube (masked data ?)')
+        if np.isnan(self.ds["date1"].values).all():
+            print("[Data filtering] Empty sub-cube (masked data ?)")
             return None
 
         if i is not None and j is not None:  # Crop the cube dataset around a given pixel
             i, j = self.convert_coordinates(i, j, proj=proj, verbose=verbose)
-            if verbose: print(f"[Data filtering] Clipping dataset to individual pixel: (x, y) = ({i},{j})")
+            if verbose:
+                print(f"[Data filtering] Clipping dataset to individual pixel: (x, y) = ({i},{j})")
             buffer = (s_win + 2) * (self.ds["x"][1] - self.ds["x"][0])
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
@@ -1357,47 +1417,59 @@ class cube_data_class:
         start = time.time()
         if delete_outliers is not None:
             slope, aspect = None, None
-            if delete_outliers == 'topo_angle':
+            if delete_outliers == "topo_angle":
                 if isinstance(dem_file, str):
                     slope, aspect = self.compute_slo_asp(dem_file=dem_file)
                 else:
                     raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
 
             self.delete_outliers(delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect)
-            if verbose: print(f'[Data filtering] Delete outlier took {round((time.time() - start), 1)} s')
+            if verbose:
+                print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
-        if ("1accelnotnull" in regu or "directionxy" in regu):
-            date_range = np.sort(np.unique(np.concatenate((self.ds['date1'].values[~np.isnan(self.ds['date1'].values)],
-                                                           self.ds['date2'].values[~np.isnan(self.ds['date2'].values)]),
-                                                          axis=0)))
-            if verbose: start = time.time()
+        if "1accelnotnull" in regu or "directionxy" in regu:
+            date_range = np.sort(
+                np.unique(
+                    np.concatenate(
+                        (
+                            self.ds["date1"].values[~np.isnan(self.ds["date1"].values)],
+                            self.ds["date2"].values[~np.isnan(self.ds["date2"].values)],
+                        ),
+                        axis=0,
+                    )
+                )
+            )
+            if verbose:
+                start = time.time()
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds['vx'])
-            vy_filtered, dates_uniq = loop_rolling(self.ds['vy'])
+            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"])
+            vy_filtered, dates_uniq = loop_rolling(self.ds["vy"])
 
             # The time dimension of the smoothed velocity observations is different from the original,
             # which is because of the possible dublicate mid_date of different image pairs...
             obs_filt = xr.Dataset(
-                data_vars=dict(vx_filt=(["x", "y", "mid_date"], vx_filtered),
-                               vy_filt=(["x", "y", "mid_date"], vy_filtered)),
-                coords=dict(x=(["x"], self.ds.x.data),
-                            y=(["y"], self.ds.y.data),
-                            mid_date=dates_uniq),
-                attrs=dict(description="Smoothed velocity observations",
-                           units="m/y",
-                           projection=self.ds.proj4))
+                data_vars=dict(
+                    vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
+                ),
+                coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
+                attrs=dict(description="Smoothed velocity observations", units="m/y", projection=self.ds.proj4),
+            )
             obs_filt.load()
             del vx_filtered, vy_filtered
 
             if verbose:
                 print(
                     "[Data filtering] Calculating smoothing mean of the observations completed in {:.2f} seconds".format(
-                        time.time() - start))
+                        time.time() - start
+                    )
+                )
 
-        elif solver == 'LSMR_ini':  # The initialization is based on the averaged velocity over the period, for every pixel
-            obs_filt = self.ds[['vx', 'vy']].mean(dim='mid_date')
-            obs_filt.attrs['description'] = 'Averaged velocity over the period'
-            obs_filt.attrs['units'] = 'm/y'
+        elif (
+            solver == "LSMR_ini"
+        ):  # The initialization is based on the averaged velocity over the period, for every pixel
+            obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
+            obs_filt.attrs["description"] = "Averaged velocity over the period"
+            obs_filt.attrs["units"] = "m/y"
 
         # Unify the observations to displacement to provide displacement values during inversion
         # if velo_or_disp == "velo":
@@ -1803,7 +1875,7 @@ class cube_data_class:
                 dims=["x", "y", "mid_date"],
                 coords={"x": self.ds["x"], "y": self.ds["y"], "mid_date": time_variable},
             )
-            cubenew.ds[var] = cubenew.ds[var].transpose('x', 'y', 'mid_date')
+            cubenew.ds[var] = cubenew.ds[var].transpose("x", "y", "mid_date")
             cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": "m/y", "long_name": long_name[i]}
 
         if result_quality is not None and "Norm_residual" in result_quality:

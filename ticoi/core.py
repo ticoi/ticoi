@@ -957,8 +957,17 @@ def process(
     returned_list = []
 
     # Loading data at pixel location
-    data = cube.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver, coef=coef, regu=regu,
-                           rolling_mean=obs_filt, flag=flag)
+    data = cube.load_pixel(
+        i,
+        j,
+        proj=proj,
+        interp=interpolation_load_pixel,
+        solver=solver,
+        coef=coef,
+        regu=regu,
+        rolling_mean=obs_filt,
+        flag=flag,
+    )
 
     if "raw" in returned:
         returned_list.append(data)
@@ -1162,7 +1171,7 @@ def process_blocks_refine(
 
         # Filter the cube
         obs_filt, flag_block = block.filter_cube(**preData_kwargs)
-        inversion_kwargs.update({'flag': flag_block})
+        inversion_kwargs.update({"flag": flag_block})
 
         # There is no data on the whole block (masked data)
         if obs_filt is None and "interp" in returned:
@@ -1184,16 +1193,18 @@ def process_blocks_refine(
         #                 for i, j in xy_values_tqdm]
         return result_block
 
-    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned='interp', preData_kwargs=None, inversion_kwargs=None, verbose=False):
+    async def process_blocks_main(
+        cube, nb_cpu=8, block_size=0.5, returned="interp", preData_kwargs=None, inversion_kwargs=None, verbose=False
+    ):
 
-        flag = preData_kwargs['flag'] if preData_kwargs is not None else None
-        blocks = chunk_to_block(cube, block_size=block_size, verbose=True) # Split the cube in smaller blocks
+        flag = preData_kwargs["flag"] if preData_kwargs is not None else None
+        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
 
-        dataf_list = [None] * ( cube.nx * cube.ny )
+        dataf_list = [None] * (cube.nx * cube.ny)
 
         loop = asyncio.get_event_loop()
         for n in range(len(blocks)):
-            print(f'[Block process] Processing block {n+1}/{len(blocks)}')
+            print(f"[Block process] Processing block {n+1}/{len(blocks)}")
 
             # Load the first block and start the loop
             if n == 0:
@@ -1201,22 +1212,24 @@ def process_blocks_refine(
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
             block, duration = await future
-            print(f'Block {n+1} loaded in {duration:.2f} s')
+            print(f"Block {n+1} loaded in {duration:.2f} s")
 
             if n < len(blocks) - 1:
                 # Load the next block while processing the current block
-                x_start, x_end, y_start, y_end = blocks[n+1]
+                x_start, x_end, y_start, y_end = blocks[n + 1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
             # need to change the flag back...
-            inversion_kwargs.update({'flag': flag})
-            block_result = await process_block(block, returned=returned, nb_cpu=nb_cpu, verbose=verbose) # Process TICOI
+            inversion_kwargs.update({"flag": flag})
+            block_result = await process_block(
+                block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
+            )  # Process TICOI
 
             # Transform to list
             for i in range(len(block_result)):
                 row = i % block.ny + blocks[n][2]
-                col = np.floor( i / block.ny ) + blocks[n][0]
-                idx = int( col * cube.ny + row )
+                col = np.floor(i / block.ny) + blocks[n][0]
+                idx = int(col * cube.ny + row)
 
                 dataf_list[idx] = block_result[i]
 
@@ -1226,8 +1239,17 @@ def process_blocks_refine(
 
     # /!\ The use of asyncio can cause problems when the code is launched from an IDE if it has its own event loop
     # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
-    return asyncio.run(process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, preData_kwargs=preData_kwargs,
-                                           inversion_kwargs=inversion_kwargs, verbose=verbose))
+    return asyncio.run(
+        process_blocks_main(
+            cube,
+            nb_cpu=nb_cpu,
+            block_size=block_size,
+            returned=returned,
+            preData_kwargs=preData_kwargs,
+            inversion_kwargs=inversion_kwargs,
+            verbose=verbose,
+        )
+    )
 
 
 # %% ======================================================================== #

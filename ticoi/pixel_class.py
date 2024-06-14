@@ -23,7 +23,12 @@ class dataframe_data:
         """
         delta = self.dataf["date2"] - self.dataf["date1"]  # temporal baseline of the observations
         self.dataf["date_cori"] = np.asarray(self.dataf["date1"] + delta // 2).astype("datetime64[D]")  # central date
-        self.dataf["temporal_baseline"] = np.asarray((delta).dt.days).astype("int")  # temporal baseline as an integer
+        try:
+            self.dataf["temporal_baseline"] = np.asarray((delta).dt.days).astype(
+                "int"
+            )  # temporal baseline as an integer
+        except:
+            self.dataf["temporal_baseline"] = np.array([delta[i].days for i in range(delta.shape[0])])
         self.dataf["offset_bar"] = delta // 2  # to plot the temporal baseline of the plots
 
     def set_vx_vy_invert(self, conversion: int = 365):

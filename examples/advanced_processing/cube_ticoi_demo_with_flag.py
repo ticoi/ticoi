@@ -230,8 +230,8 @@ if TICOI_process == "block_process":
 # Direct computation of the whole TICOI cube
 elif TICOI_process == "direct_process":
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt,flag = cube.filter_cube(**preData_kwargs)
-    inversion_kwargs.update({'flag': flag})
+    obs_filt, flag = cube.filter_cube(**preData_kwargs)
+    inversion_kwargs.update({"flag": flag})
 
     # Progression bar
     xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)
