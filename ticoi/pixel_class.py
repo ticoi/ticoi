@@ -221,9 +221,9 @@ class pixel_class:
         :return directionm: [np.array] directions of the data
         :return directionm_mean: [np.array] averaged direction of the data
         """
-        directionm = np.arctan2(data.dataf["vy"].astype("float32"), data.dataf["vy"].astype("float32"))
+        directionm = np.arctan2(data.dataf["vy"].astype("float32"), data.dataf["vx"].astype("float32"))
         directionm[directionm < 0] += 2 * np.pi
-        directionm_mean = np.arctan2(np.mean(data.dataf["vy"]), np.mean(data.dataf["vy"]))
+        directionm_mean = np.arctan2(np.mean(data.dataf["vy"]), np.mean(data.dataf["vx"]))
         if directionm_mean < 0:
             directionm_mean += 2 * np.pi
 
