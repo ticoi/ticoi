@@ -802,9 +802,9 @@ class cube_data_class:
                 proj=proj,
             )
 
+            time_dim = "mid_date" if not self.is_TICO else "second_date"
             # Rechunk again if the size of the cube is changed:
             if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-                time_dim = "mid_date" if not self.is_TICO else "second_date"
                 tc, yc, xc = self.determine_optimal_chunk_size(
                     variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
                 )
