@@ -17,7 +17,6 @@ from scipy.signal import savgol_filter
 #                             TEMPORAL SMOOTHING                              #
 # =========================================================================%% #
 
-
 def numpy_ewma_vectorized(series: np.ndarray, halflife: int = 30) -> np.ndarray:
     """
     Calculate the exponentially weighted moving average of a series using vectorized operations.
@@ -344,6 +343,44 @@ def NVVC_angle_filt(
     return inlier_flag
 
 
+def topo_angle_filt(
+    obs_cpx: xr.DataArray,
+    slope: xr.DataArray,
+    aspect: xr.DataArray,
+    angle_thres: int = 45,
+    z_thres: int = 3,
+    axis: int = 2,
+) -> da.array:
+    """
+    Remove the observations if it is angle_thres away from the topographic gradient
+    :param obs_cpx: cube data to filter
+    :param slope: slope data
+    :param aspect: aspect data
+    :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
+
+    vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
+    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
+
+    angle_rad = np.arctan2(vx, vy)
+
+    flow_direction = (np.rad2deg(angle_rad) + 360) % 360
+
+    aspect_diff = np.abs((flow_direction - aspect + 180) % 360 - 180)
+
+    aspect_filter = aspect_diff < angle_thres
+    # aspect_filter = np.where(aspect_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+
+    slope_cond = slope > 3
+    slope_filter = np.where(slope_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+
+    inlier_flag = np.logical_and(slope_filter, aspect_filter.data)
+
+    return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
+
+
 def median_angle_filt(obs_cpx: np.array, angle_thres: int = 45, axis: int = 2):
     """
     Remove the observation if it is angle_thres away from the median vector
@@ -375,10 +412,12 @@ def dask_filt_warpper(
     da_vy: xr.DataArray,
     filt_method: str = "median_angle",
     vvc_thres: float = 0.3,
-    angle_thres: int = 45,
+    angle_thres: int = 30,
     z_thres: int = 3,
     magnitude_thres: int = 1000,
     error_thres: int = 100,
+    slope: xr.Dataset = None,
+    aspect: xr.Dataset = None,
     axis: int = 2,
 ):
     """
@@ -395,7 +434,7 @@ def dask_filt_warpper(
     :return:
     """
 
-    if filt_method == "median_angle":  # delete according to a threshold in angle between observations and median vector
+    if filt_method == "median_angle":  # delete according to a treshold in angle between observations and median vector
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
 
@@ -410,18 +449,30 @@ def dask_filt_warpper(
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
-    elif filt_method == "magnitude":  # delete according to a threshold in magnitude
+    elif filt_method == "magnitude":  # delete according to a threshold  in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)
         inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
 
-    elif filt_method == "error":  # delete according to a threshold in error
+    elif filt_method == "error":  # delete according to a threshold  in error
         inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(lambda x: x < error_thres, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
+    elif filt_method == "topo_angle":
+        obs_arr = da_vx + 1j * da_vy
+        _, slope_expanded, aspect_expanded = xr.broadcast(obs_arr, slope["slope"], aspect["aspect"])
+        slope_expanded, aspect_expanded = slope_expanded.chunk(obs_arr.chunks), aspect_expanded.chunk(obs_arr.chunks)
+        # template = obs_arr['aspect'].transpose('x', 'y').chunk(obs_arr.chunks[0:2])
+        inlier_mask = xr.map_blocks(
+            topo_angle_filt,
+            obs_arr,
+            args=(slope_expanded, aspect_expanded),
+            template=obs_arr,
+            kwargs={"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis},
+        )
     else:
         raise ValueError(
-            f"Filtering method should be either 'median_angle', 'vvc_angle', 'z_score', 'magnitude' or 'error'."
+            f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude' or 'error'."
         )
 
     return inlier_mask.compute()
