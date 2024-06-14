@@ -107,15 +107,8 @@ def gaussian_smooth(
         return np.zeros(len(t_out))
 
 
-def median_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
+def median_smooth(series: np.ndarray, t_obs: np.ndarray, t_interp: np.ndarray, t_out: np.ndarray, t_win: int = 90,
+                  sigma: int = 3, order: int | None = 3) -> np.ndarray:
     """
     Calculate a smoothed series using median filtering.
 
@@ -133,22 +126,15 @@ def median_smooth(
     try:
         series_interp = np.interp(t_interp, t_obs, series)
         # noinspection PyTypeChecker
-        series_smooth = median_filter(series_interp, size=t_win, mode="reflect", axes=0)
+        series_smooth = median_filter(series_interp, size=t_win, mode='reflect', axes=0)
     except:
         return np.zeros(len(t_out))
 
     return series_smooth[t_out]
 
 
-def savgol_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
+def savgol_smooth(series: np.ndarray, t_obs: np.ndarray, t_interp: np.ndarray, t_out: np.ndarray, t_win: int = 90,
+                  sigma: int = 3, order: int | None = 3) -> np.ndarray:
     """
     Perform Savitzky-Golay smoothing on a time series.
 
@@ -172,17 +158,9 @@ def savgol_smooth(
     return series_smooth[t_out]
 
 
-def dask_smooth(
-    dask_array: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    filt_func: str = gaussian_smooth,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int = 3,
-    axis: int = 2,
-) -> da.array:
+def dask_smooth(dask_array: np.ndarray, t_obs: np.ndarray, t_interp: np.ndarray, t_out: np.ndarray,
+                filt_func: str = gaussian_smooth, t_win: int = 90, sigma: int = 3, order: int = 3,
+                axis: int = 2) -> da.array:
     """
     Apply smoothing to the input Dask array along the specified axis using the specified method.
 
@@ -202,31 +180,12 @@ def dask_smooth(
     # TODO : using scipy.interpolate instead of np.interp to do it for one chunk?
     # But it could be slow and memory intensive
 
-    return da.from_array(
-        np.apply_along_axis(
-            filt_func,
-            axis,
-            dask_array,
-            t_obs=t_obs,
-            t_interp=t_interp,
-            t_out=t_out,
-            t_win=t_win,
-            sigma=sigma,
-            order=order,
-        )
-    )
+    return da.from_array(np.apply_along_axis(filt_func, axis, dask_array, t_obs=t_obs,
+                                             t_interp=t_interp, t_out=t_out, t_win=t_win, sigma=sigma, order=order))
 
 
-def dask_smooth_wrapper(
-    dask_array: da.array,
-    dates: xr.DataArray,
-    t_out: np.ndarray,
-    smooth_method: str = "gaussian",
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int = 3,
-    axis: int = 2,
-):
+def dask_smooth_wrapper(dask_array: da.array, dates: xr.DataArray, t_out: np.ndarray, smooth_method: str = "gaussian",
+                        t_win: int = 90, sigma: int = 3, order: int = 3, axis: int = 2):
     """
     A function that wraps a Dask array to apply a smoothing function.
 
