@@ -1115,9 +1115,12 @@ def load_block(
     block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
     block.ds = block.ds.persist()
     block.update_dimension()
+    if flag is not None:
+        block_flag = flag.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
+        block_flag = block_flag.persist()
     duration = time.time() - start
 
-    return block, duration
+    return block, block_flag, duration
 
 
 def process_blocks_refine(
@@ -1148,12 +1151,10 @@ def process_blocks_refine(
     async def process_block(
         block: cube_data_class, returned: list | str = "interp", nb_cpu: int = 8, verbose: bool = False
     ):
-
         xy_values = itertools.product(block.ds["x"].values, block.ds["y"].values)
-        xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
-
         # Return only raw data => no need to filter the cube
         if "raw" in returned and (type(returned) == str or len(returned) == 1):  # Only load the raw data
+            xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
                 delayed(block.load_pixel)(
                     i,
@@ -1188,6 +1189,7 @@ def process_blocks_refine(
                     )
                 ]
 
+        xy_values_tqdm = tqdm(xy_values, total=(obs_filt["x"].shape[0] * obs_filt["y"].shape[0]))
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
             delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
             for i, j in xy_values_tqdm
@@ -1196,7 +1198,10 @@ def process_blocks_refine(
         return result_block
 
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned="interp", verbose=False):
-        flag = preData_kwargs["flag"] if preData_kwargs is not None else None
+        flag = preData_kwargs["flag"]
+        if flag is not None and not isinstance(flag, xr.Dataset):
+            flag = cube.create_flag(flag)
+
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
 
         dataf_list = [None] * (cube.nx * cube.ny)
@@ -1208,18 +1213,19 @@ def process_blocks_refine(
             # Load the first block and start the loop
             if n == 0:
                 x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
-            block, duration = await future
+            block, block_flag, duration = await future
             print(f"Block {n+1} loaded in {duration:.2f} s")
 
             if n < len(blocks) - 1:
                 # Load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n + 1]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
             # need to change the flag back...
-            inversion_kwargs.update({"flag": flag})
+            inversion_kwargs.update({"flag": block_flag})
+            preData_kwargs.update({"flag": block_flag})
             block_result = await process_block(
                 block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
             )  # Process TICOI

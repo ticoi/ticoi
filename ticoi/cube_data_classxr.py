@@ -1407,7 +1407,7 @@ class cube_data_class:
                     flag = xr.open_dataset(flag)
                     if "flags" in list(flag.variables):
                         flag = flag.rename({"flags": "flag"})
-                elif flag.split(".")[-1] == "shp":  # If flag is a shape file
+                elif flag.split(".")[-1] in ["shp", "gpkg"]:  # If flag is a shape file
                     flag = self.create_flag(flag)
                 else:
                     raise ValueError("flag file must be .nc or .shp")
@@ -1468,7 +1468,6 @@ class cube_data_class:
                 coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
                 attrs=dict(description="Smoothed velocity observations", units="m/y", projection=self.ds.proj4),
             )
-            obs_filt.load()
             del vx_filtered, vy_filtered
 
             if verbose:
@@ -1491,7 +1490,7 @@ class cube_data_class:
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         obs_filt.load()
-        self.ds = self.ds.persist()  # Crash memory without loading
+        self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
         return obs_filt, flag
