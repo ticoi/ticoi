@@ -19,8 +19,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ticoi.core import interpolation_core, inversion_core, visualisation
+from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import cube_data_class
+from ticoi.interpolation_functions import (
+    prepare_interpolation_date,
+    visualisation_interpolation,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -28,7 +32,7 @@ warnings.filterwarnings("ignore")
 #                                    PARAMETERS                               #
 # =========================================================================%% #
 
-cube_name = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc"
+cube_name = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc"
 
 
 proj = "EPSG:32647"
@@ -39,7 +43,7 @@ proj = "EPSG:32647"
 # i, j = 395800, 4259037 # centeral part of upper surging glacier
 i, j = 396343, 4259420  # middle lower part of upper surging glacier
 # To select a specific period for the measurements, if you want to select all the dates put None, else give an interval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
-path_save = f"/media/tristan/Data3/Hala_lake/Landsat8/{i}-{j}/"  # Path where to store the results
+path_save = f"/media/tristan/Data3/Hala_lake/Landsat7_refine/{i}-{j}/"  # Path where to store the results
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used
@@ -56,20 +60,16 @@ visual = True  # Plot information along the way
 save = True  # Save the results or not
 # Visualisation options
 option_visual = [
-    "original_velocity_xy",
-    "original_magnitude",
-    "X_magnitude_zoom",
-    "X_magnitude",
-    "X_zoom",
-    "X",
-    "vv_quality",
-    "vxvy_quality",
-    "Residu_magnitude",
-    "Residu",
-    "X_z",
-    "Y_contribution",
-    "direction",
-]
+    "obs_xy",
+    "obs_magnitude",
+    "obs_vxvy_quality",
+    "invertxy_overlaid",
+    "invertvv_overlaid",
+    "residuals",
+    "xcount_xy",
+    "xcount_vv",
+    "invert_weight",
+]  # see README_visualization_pixel_output.md
 vmax = [False, False]  # Vertical limits for the plots
 
 parameter = "coef"
@@ -113,8 +113,7 @@ load_pixel_kwargs = {
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "visual": visual,  # Plot results along the way
-    "verbose": verbose,
-}  # Print information throughout TICOI processing
+}
 
 ## --------------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {
@@ -126,7 +125,7 @@ inversion_kwargs = {
     "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
     "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
-    "weight": True,  # If True, use apriori weights
+    "apriori_weight": True,  # If True, use apriori weights
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
@@ -195,7 +194,7 @@ start = [time.time()]
 options = ""
 if inversion_kwargs["iteration"]:
     options += "_it"
-if inversion_kwargs["weight"]:
+if inversion_kwargs["apriori_weight"]:
     options += "_weighted"
 if inversion_kwargs["solver"][-1] == "u":
     options += "_regu"
@@ -234,7 +233,7 @@ last_date_interpol = np.max(cube.date2_())
 
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
 start.append(time.time())
-obs_filt = cube.filter_cube(**preData_kwargs)
+obs_filt, _ = cube.filter_cube(**preData_kwargs)
 stop.append(time.time())
 print(f"[Data filtering] Loading the pixel took {round((stop[1] - start[1]), 4)} s")
 
@@ -263,24 +262,36 @@ for param_value in list_parameter:
     start.append(time.time())
     data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
-    cube2_date1 = cube.date1_().tolist()
-    cube2_date1.remove(np.min(cube2_date1))
-    start_date_interpol = np.min(cube2_date1)
-    last_date_interpol = np.max(cube.date2_())
+    # Prepare interpolation dates
+    first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+    interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
     stop.append(time.time())
     print(f"[Data loading] Loading the pixel took {round((stop[2] - start[2]), 4)} s")
 
     # inversion
     start.append(time.time())
     A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, **inversion_kwargs)
-
+    stop.append(time.time())
+    print(f"[Inversion] Inversion took {round((stop[3] - start[3]), 4)} s")
+    
     if interpolation or save:
         save_path = f"{path_save}/{parameter}_{param_value}/"
     if not os.path.exists(save_path):  # cree un sous dossier
         os.mkdir(save_path)
-
     if visual:
-        visualisation(dataf, result, option_visual, save_path, A=A, dataf=dataf, unit=unit, show=True, figsize=(12, 6))
+        visualization_core(
+            [dataf, result],
+            option_visual=option_visual,
+            save=True,
+            show=True,
+            path_save=save_path,
+            A=A,
+            log_scale=False,
+            cmap="rainbow",
+            colors=["orange", "blue"],
+        )
+        
+        
     # Save the results
     if save:
         result.to_csv(f"{save_path}/ILF_result.csv")
@@ -292,21 +303,23 @@ for param_value in list_parameter:
 
     if interpolation_kwargs["interval_output"] == False:
         interpolation_kwargs["interval_output"] = 1
-    start_date_interpol = np.min(np.min(cube.date2_()))
-    last_date_interpol = np.max(np.max(cube.date2_()))
 
-    # Proceed to interpolation
-    dataf_lp = interpolation_core(
-        result,
-        path_save=save_path,
-        data=dataf,
-        first_date_interpol=start_date_interpol,
-        last_date_interpol=last_date_interpol,
-        **interpolation_kwargs,
-    )
+    if interpolation:
+        # Proceed to interpolation
+        dataf_lp = interpolation_core(
+            result,
+            path_save=save_path,
+            data=dataf,
+            first_date_interpol=start_date_interpol,
+            last_date_interpol=last_date_interpol,
+            **interpolation_kwargs,
+        )
 
     if save:
         dataf_lp.to_csv(f"{path_save}/RLF_result.csv")
+    
+    if visual:
+        visualisation_interpolation([dataf, dataf_lp], save=True, show=True, path_save=path_save, colors=["orange", "blue"])
 
     stop.append(time.time())
     print(f"[Interpolation] Interpolation took {round((stop[4] - start[3]), 4)} s")

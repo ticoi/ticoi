@@ -1028,7 +1028,7 @@ class cube_data_class:
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flag["flags"].sel(x=i, y=j, method="nearest").values)
+                flag = np.round(flag["flag"].sel(x=i, y=j, method="nearest").values)
                 regu = regu[flag]
                 coef = coef[flag]
             else:
@@ -1233,14 +1233,17 @@ class cube_data_class:
             # inside the polygon: 1, outside: 0
             geom_value = ((geom, 1) for geom in flag_shp.geometry)
 
-        flag = rasterio.features.rasterize(
-            geom_value,
-            out_shape=(self.ny, self.nx),
-            transform=self.ds.rio.transform(),
-            all_touched=True,
-            fill=0,  # background value
-            dtype="int16",
-        )
+        try:
+            flag = rasterio.features.rasterize(
+                geom_value,
+                out_shape=(self.ny, self.nx),
+                transform=self.ds.rio.transform(),
+                all_touched=True,
+                fill=0,  # background value
+                dtype="int16",
+            )
+        except:
+            flag = np.zeros(shape=(self.ny, self.nx), dtype="int16")
 
         flag = xr.Dataset(
             data_vars=dict(
@@ -1875,7 +1878,7 @@ class cube_data_class:
                 dims=["x", "y", "mid_date"],
                 coords={"x": self.ds["x"], "y": self.ds["y"], "mid_date": time_variable},
             )
-            cubenew.ds[var] = cubenew.ds[var].transpose("x", "y", "mid_date")
+            cubenew.ds[var] = cubenew.ds[var].transpose("mid_date", "y", "x")
             cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": "m/y", "long_name": long_name[i]}
 
         if result_quality is not None and "Norm_residual" in result_quality:
