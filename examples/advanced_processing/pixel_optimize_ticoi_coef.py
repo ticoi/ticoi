@@ -1,20 +1,23 @@
-'''
-Coefficient optimization of the TICOI post-processing method, according to a "ground truth" given data cube (GPS, 
+#!/usr/bin/env python3
+
+"""
+Coefficient optimization of the TICOI post-processing method, according to a "ground truth" given data cube (GPS,
 more precise satellitarian data...). A range of coefficients is tested for a given regularisation method, by computing
 the RMSE between TICOI results for the tested coefficient, interpolated to the ground truth dates, and compared
-to those ground truth datas computing the Root Mean Square Error (RMSE). A RMSE-coefficient curve is then plotted.
-'''
+to those ground truth data computing the Root Mean Square Error (RMSE). A RMSE-coefficient curve is then plotted.
+"""
 
 import os
 import time
 import warnings
-import numpy as np
-import sklearn.metrics as sm
+
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import sklearn.metrics as sm
 import xarray as xr
 
-from ticoi.core import inversion_core, interpolation_to_data
+from ticoi.core import interpolation_to_data, inversion_core
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.other_functions import optimize_coef
 
@@ -131,7 +134,6 @@ nb_cpu = 8 # If parallel is True, the number of CPUs to use for parallelization
 if not os.path.exists(path_save):
     os.mkdir(path_save)
 
-
 # %% ======================================================================== #
 #                                DATA LOADING                                 #
 # =========================================================================%% #
@@ -208,12 +210,26 @@ if result is not None:
 
     # Plot result
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(coefs[~(RMSEs < good_RMSE)], RMSEs[~(RMSEs < good_RMSE)], marker='x', markersize=7, linestyle='', markeredgecolor='darkred')
-    ax.plot(coefs[RMSEs < good_RMSE], RMSEs[RMSEs < good_RMSE], marker='x', markersize=7, linestyle='', markeredgecolor='darkgreen')
-    ax.plot([coefs[0], coefs[-1]], [good_RMSE, good_RMSE], linestyle='--', color='midnightblue')
-    ax.set_xlabel('Regularisation coefficient value')
+    ax.plot(
+        coefs[~(RMSEs < good_RMSE)],
+        RMSEs[~(RMSEs < good_RMSE)],
+        marker="x",
+        markersize=7,
+        linestyle="",
+        markeredgecolor="darkred",
+    )
+    ax.plot(
+        coefs[RMSEs < good_RMSE],
+        RMSEs[RMSEs < good_RMSE],
+        marker="x",
+        markersize=7,
+        linestyle="",
+        markeredgecolor="darkgreen",
+    )
+    ax.plot([coefs[0], coefs[-1]], [good_RMSE, good_RMSE], linestyle="--", color="midnightblue")
+    ax.set_xlabel("Regularisation coefficient value")
     if coefs is None:
-        ax.set_xlim(coef_min - int(step/2), coef_max + int(step/2))
+        ax.set_xlim(coef_min - int(step / 2), coef_max + int(step / 2))
     else:
         ax.set_xlim(min(coefs), max(coefs))
     ax.set_ylabel('RMSE between TICOI results and GT data [m/y]')

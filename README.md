@@ -14,9 +14,9 @@ To clone the git repository and set up the conda environment:
 
 ```
 git clone git@github.com:ticoi/ticoi.git
-cd ticoi/   
-conda env create -f ticoi_env.yml 
-conda activate ticoi      
+cd ticoi/
+conda env create -f ticoi_env.yml
+conda activate ticoi
 pip install -e .
 ```
 
@@ -43,7 +43,7 @@ Then replace all conda commands by mamba.
 * **filtering_functions.py**: Functions to process some filtering.
 * **other_functions.py**: Two other functions for accessing ITS_LIVE data.
 * **mjd2date.py**: Functions to convert the dates from Modified Julian Date to Gregorian Date
-* 
+
 #### Examples:
 
 ##### Basic examples:
@@ -58,8 +58,8 @@ Then replace all conda commands by mamba.
 ##### More advanced examples:
 
 * **examples/advances_processing/ticoi_cube_demo_with_flag.py**: Demonstration of how to process one cube, by using different parameters for different areas (stable, surge)
-* **examples/data_availability.py**: A few tools to evaluate the data availability on a set of data, its repartition throughout the period of measurement and its quality 
-in some cases, in order to see whether it is relevent or not to study glacier velocities at a point (seaonality, surge...). It uses 
+* **examples/data_availability.py**: A few tools to evaluate the data availability on a set of data, its repartition throughout the period of measurement and its quality
+in some cases, in order to see whether it is relevant or not to study glacier velocities at a point (seaonality, surge...). It uses
 TICOI's optimized loading to load the data.
 
 ### OUTPUTS
