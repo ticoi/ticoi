@@ -1182,21 +1182,20 @@ def process_blocks_refine(
                     )
                 ]
             else:
-                return [pd.DataFrame({"date1": [], "date2": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": []})]
+                return [
+                    pd.DataFrame(
+                        {"First_date": [], "Second_date": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": []}
+                    )
+                ]
 
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
             delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
             for i, j in xy_values_tqdm
         )
 
-        # result_block = [process(block, i, j, obs_filt=obs_filt,**inversion_kwargs)
-        #                 for i, j in xy_values_tqdm]
         return result_block
 
-    async def process_blocks_main(
-        cube, nb_cpu=8, block_size=0.5, returned="interp", preData_kwargs=None, inversion_kwargs=None, verbose=False
-    ):
-
+    async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned="interp", verbose=False):
         flag = preData_kwargs["flag"] if preData_kwargs is not None else None
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
 
@@ -1240,15 +1239,7 @@ def process_blocks_refine(
     # /!\ The use of asyncio can cause problems when the code is launched from an IDE if it has its own event loop
     # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
     return asyncio.run(
-        process_blocks_main(
-            cube,
-            nb_cpu=nb_cpu,
-            block_size=block_size,
-            returned=returned,
-            preData_kwargs=preData_kwargs,
-            inversion_kwargs=inversion_kwargs,
-            verbose=verbose,
-        )
+        process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, verbose=verbose)
     )
 
 
@@ -1269,8 +1260,10 @@ def visualization_core(
     colors: List[str] = ["blueviolet", "orange"],
     figsize: tuple[int, int] = (10, 6),
 ):
-    """
+
+    r"""
     Visualization function for the output of pixel_ticoi
+    /!\ Many figures can be plotted
 
     :param list_dataf: [pd.DataFrame] --- cube dataset
     :param option_visual: [list] --- list of options for visualization
@@ -1282,27 +1275,27 @@ def visualization_core(
     :param cmap: [str] [default is 'rainbow''] --- color map used in the plots
     :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :param figsize: tuple[int, int] [default is (10,6)] --- Size of the figures
-    :return:
     """
+
     pixel_object = pixel_class()
     pixel_object.load(
         list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=["obs", "invert"]
     )
 
     dico_visual = {
-        "obs_xy": pixel_object.plot_vx_vy(color=colors[0], type_data="obs"),
-        "obs_magnitude": pixel_object.plot_vv(color=colors[0], type_data="obs"),
-        "obs_vxvy_quality": pixel_object.plot_vx_vy_quality(cmap=cmap, type_data="obs"),
-        "invertxy_overlaid": pixel_object.plot_vx_vy_overlaid(colors=colors),
-        "invertvv_overlaid": pixel_object.plot_vv_overlaid(colors=colors),
-        "residuals": pixel_object.plot_residuals(log_scale=log_scale),
-        "xcount_xy": pixel_object.plot_xcount_vx_vy(cmap=cmap),
-        "xcount_vv": pixel_object.plot_xcount_vv(cmap=cmap),
-        "invert_weight": pixel_object.plot_weights_inversion(),
+        "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
+        "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs")),
+        "obs_vxvy_quality": (lambda pix: pix.plot_vx_vy_quality(cmap=cmap, type_data="obs")),
+        "invertxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors)),
+        "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors)),
+        "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
+        "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
+        "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
+        "invert_weight": (lambda pix: pix.plot_weights_inversion()),
     }
 
     for option in option_visual:
-        dico_visual[option]
+        dico_visual[option](pixel_object)
 
 
 def save_cube_parameters(

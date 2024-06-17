@@ -41,7 +41,7 @@ warnings.filterwarnings("ignore")
 # Choose the TICOI cube processing method you want to use :
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes processed one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
-# than every other TICOI processing methods.
+# than the 'direct_process' method.
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal,
 # there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
@@ -61,15 +61,15 @@ compute_result_load = False
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
-# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
-#              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_invert.nc',
-#              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_interp.nc'}
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flags.nc'  # Path to flag file
+# cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+#              'invert': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
+#              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/'  # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 
 proj = "EPSG:32632"  # EPSG system of the given coordinates
@@ -106,7 +106,7 @@ load_kwargs = {
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "mask_file": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
+    "mask": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
     "verbose": False,
 }  # Print information throughout the loading process
 
@@ -284,7 +284,7 @@ print(
 #                                INITIALISATION                               #
 # =========================================================================%% #
 
-if TICOI_process != "load":
+if TICOI_process != "load" and save:
     # Write down some information about the data and the TICOI processing performed
     if save:
         if "invert" in returned:

@@ -43,7 +43,7 @@ Then replace all conda commands by mamba.
 * **filtering_functions.py**: Functions to process some filtering.
 * **other_functions.py**: Two other functions for accessing ITS_LIVE data.
 * **mjd2date.py**: Functions to convert the dates from Modified Julian Date to Gregorian Date
-*
+
 #### Examples:
 
 ##### Basic examples:

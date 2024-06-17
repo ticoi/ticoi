@@ -37,20 +37,20 @@ save_mean_velocity = True  # Save a .tiff file with the mean reulting velocities
 compute_result_load = False
 
 ## ------------------------------ Data selection --------------------------- ##
-# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 # If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
 cube_name = {
-    "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc',
-    "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_invert.nc',
-    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/Argentiere_example_interp.nc',
+    "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+    "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
+    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
 }
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flag.nc'  # Path to flag file
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flag file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "results"))}/'  # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 
 i, j = 1, 2  # pixel number
+i, j = 343556.2, 5091402.3
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
@@ -71,9 +71,9 @@ load_kwargs = {
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "mask_file": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
-    "verbose": False,
-}  # Print information throughout the loading process
+    "mask": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
+    "verbose": False,  # Print information throughout the loading process
+}
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -90,6 +90,7 @@ if type(cube_name) == dict and "raw" in cube_name.keys():
     # Load the cube.s
     cube = cube_data_class()
     cube.load(cube_name["raw"], **load_kwargs)
+
     stop.append(time.time())
     print(f"[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ")
     print(f"[Data loading] Data loading took {round(stop[-1] - start[-1], 3)} s")
@@ -120,13 +121,12 @@ if save_mean_velocity and cube_interp is not None:
 if save or save_mean_velocity:
     print(f"[Writing results] Results saved at {path_save}")
 
-t = cube_interp.load_pixel(1, 2, output_format="df", visual=True)[0]
-t2 = cube.load_pixel(1, 2, output_format="df", visual=True)[0]
+t = cube_interp.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
+t2 = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
 pixel_object = pixel_class()
 pixel_object.load([t, t2], save=False, show=True, A=False, path_save=path_save, type_data=["interp", "obs"])
 pixel_object.plot_vx_vy_overlaid(type_data="interp", colors=["orange", "blue"], zoom_on_results=False)
 pixel_object.plot_vv_overlaid(type_data="interp", colors=["orange", "blue"], zoom_on_results=False)
-
 
 stop.append(time.time())
 print(f"[Overall] Overall processing took {round(stop[-1] - start[0], 0)} s")

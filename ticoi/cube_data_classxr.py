@@ -138,7 +138,7 @@ class cube_data_class:
         y_dim: str = "y",
         time_dim: str = "mid_date",
         verbose: bool = False,
-    ) -> (int, int, int):
+    ) -> (int, int, int):  # type: ignore
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
@@ -670,14 +670,14 @@ class cube_data_class:
         pick_sensor: str | None = None,
         pick_temp_bas: str | None = None,
         proj: str = "EPSG:4326",
-        mask_file: str | xr.DataArray = None,
+        mask: str | xr.DataArray = None,
         verbose: bool = False,
     ):
 
         """
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
 
-        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
+        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
         :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays.
                                   chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays,
                                   chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
@@ -688,7 +688,7 @@ class cube_data_class:
         :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
         :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param mask_file: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
+        :param mask: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
 
@@ -707,9 +707,11 @@ class cube_data_class:
                 pick_sensor=pick_sensor,
                 pick_temp_bas=pick_temp_bas,
                 proj=proj,
-                mask_file=mask_file,
+                mask=mask,
                 verbose=verbose,
             )
+
+            cube2 = None
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
@@ -728,7 +730,7 @@ class cube_data_class:
                     pick_sensor=pick_sensor,
                     pick_temp_bas=pick_temp_bas,
                     proj=proj,
-                    mask_file=mask_file,
+                    mask=mask,
                     verbose=verbose,
                 )
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
@@ -816,8 +818,8 @@ class cube_data_class:
             self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
             self.standardize_cube_for_processing(time_dim)
 
-            if mask_file is not None:
-                self.mask_cube(mask_file)
+            if mask is not None:
+                self.mask_cube(mask)
 
             # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
             #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
@@ -941,7 +943,7 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float):
+    def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float):  # type: ignore
 
         """
         Convert the coordinate (i, j) which are in projection proj, to projection of the cube dataset.
@@ -996,7 +998,7 @@ class cube_data_class:
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
         :param visual: [bool] [default is False] --- Return additional information (sensor and source) for future plots
-        :param output_format [str] [default is np] --- output format of the results, if np return a numpy array, elif pd return a panda dataframe
+        :param output_format [str] [default is np] --- Format of the output data (np for numpy or df for pandas dataframe)
 
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
@@ -1068,7 +1070,7 @@ class cube_data_class:
                 data = data.to_pandas()
             else:
                 raise ValueError(
-                    "Please enter nc if want to have as output a numpy array, and df if you want a pandas dataframe"
+                    "Please enter np if you want to have as output a numpy array, and df if you want a pandas dataframe"
                 )
         else:
             data_values = data.drop_vars(["date1", "date2"]).to_array().values.T
@@ -1203,6 +1205,7 @@ class cube_data_class:
         return slope, aspect
 
     def create_flag(self, flag_shp: str = None, field_name: str | None = None, default_value: str | int | None = None):
+
         """
         Create a flag dataset based on the provided shapefile and shapefile field.
         Which is usually used to divide the pixels into different types, especially for surging glaciers.
@@ -1213,6 +1216,7 @@ class cube_data_class:
         :param default_value (str | int | None, optional): The default value for the shapefile field. Defaults to 0.
         :Returns flag: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
         """
+
         flag_shp = geopandas.read_file(flag_shp).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
 
         # surge-type glacier: 2, other glacier: 1, stable area: 0
@@ -1303,7 +1307,7 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 900) -> (np.ndarray, np.ndarray):
+        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1398,9 +1402,15 @@ class cube_data_class:
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
         if flag is not None:
-
-            if isinstance(flag, str):  # if flag is a shape file
-                flag = self.create_flag(flag)
+            if isinstance(flag, str):
+                if flag.split(".")[-1] == "nc":  # If flag is a netCDF file
+                    flag = xr.open_dataset(flag)
+                    if "flags" in list(flag.variables):
+                        flag = flag.rename({"flags": "flag"})
+                elif flag.split(".")[-1] == "shp":  # If flag is a shape file
+                    flag = self.create_flag(flag)
+                else:
+                    raise ValueError("flag file must be .nc or .shp")
                 flag = flag.load()
             elif isinstance(flag, xr.Dataset):
                 flag = flag.load()
@@ -1418,6 +1428,7 @@ class cube_data_class:
                 regu = list(regu.split())
 
         start = time.time()
+
         if delete_outliers is not None:
             slope, aspect = None, None
             if delete_outliers == "topo_angle":
@@ -1449,7 +1460,7 @@ class cube_data_class:
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"])
 
             # The time dimension of the smoothed velocity observations is different from the original,
-            # which is because of the possible dublicate mid_date of different image pairs...
+            # which is because of the possible duplicate mid_date of different image pairs...
             obs_filt = xr.Dataset(
                 data_vars=dict(
                     vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
@@ -1583,7 +1594,7 @@ class cube_data_class:
         """
         Merge another cube to the present one. It must have been aligned first (using align_cube)
 
-        :param cube: (cube_data_class) The cube to be merged to self
+        :param cube: [cube_data_class] --- The cube to be merged to self
         """
 
         # Merge the cubes (must be previously aligned before using align_cube)
@@ -1607,8 +1618,21 @@ class cube_data_class:
         self.author.append(cube.author)
         self.source.append(cube.source)
 
-    def average_cube(self, return_format="geotiff", return_variable=["vv"], save=True, path_save=None):
+    def average_cube(
+        self,
+        return_format: str = "geotiff",
+        return_variable: list = ["vv"],
+        save: bool = True,
+        path_save: str | None = None,
+    ):
+
         """
+        Compute the mean velocity at each pixel of he cube.
+
+        :param return_format: [str] [default is 'geotiff'] --- Type of the file to be returned ('nc' or 'geotiff')
+        :param return_variable: [list] [default is ['vv']] --- Which variable's mean must be returned
+        :param save: [bool] [default is True] --- If True, save the file to path_save
+        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
         """
@@ -1645,19 +1669,34 @@ class cube_data_class:
                     )
 
                     # Create the GeoTIFF file
-                    with rasterio.open(
+                    driver = gdal.GetDriverByName("GTiff")
+                    srs = osr.SpatialReference()
+                    srs.ImportFromEPSG(epsg_code)
+
+                    dst_ds_temp = driver.Create(
                         f"{path_save}/mean_velocity_{variable}.tiff",
-                        "w",
-                        driver="GTiff",
-                        height=mean_v.shape[0],
-                        width=mean_v.shape[1],
-                        count=1,
-                        dtype=np.float32,
-                        crs=f"EPSG:{epsg_code}",
-                        transform=transform,
-                    ) as dst_ds_temp:
-                        # Write the array to the raster band
-                        dst_ds_temp.write(mean_v, 1)
+                        mean_v.shape[1],
+                        mean_v.shape[0],
+                        1,
+                        gdal.GDT_Float32,
+                    )
+                    # Set the GeoTransform
+                    dst_ds_temp.SetGeoTransform(
+                        [
+                            np.min(self.ds["x"].values),
+                            self.resolution,
+                            0,
+                            np.min(self.ds["y"].values) - self.resolution,
+                            0,
+                            self.resolution,
+                        ]
+                    )
+                    # Write the array to the raster band
+                    dst_ds_temp.GetRasterBand(1).WriteArray(mean_v)
+                    # Set the projection
+                    dst_ds_temp.SetProjection(srs.ExportToWkt())
+                    # Properly close the dataset
+                    dst_ds_temp.FlushCache()
 
                 ds_mean.append(mean_v)
 

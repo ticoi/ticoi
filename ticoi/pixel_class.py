@@ -63,6 +63,7 @@ class dataframe_data:
 
 
 class pixel_class:
+
     """
     Object class to store the data on a given pixel
     """
@@ -77,6 +78,7 @@ class pixel_class:
         A: Optional[np.array] = None,
         dataobs: Optional[pd.DataFrame] = None,
     ):
+
         self.dataobs = dataobs  # observation data
         self.datainvert = None  # results from the inversion, tico data
         self.datainterp = None  # results from the inversion, tico data
@@ -90,6 +92,7 @@ class pixel_class:
     def set_data_from_pandas_df(
         self, dataf_ilf: pd.DataFrame, type_data: str = "invert", conversion: int = 365, variables: List[str] = ["vv"]
     ):
+
         """
 
         :param dataf_ilf: [pd.DataFrame] --- results from the inversion
@@ -130,6 +133,7 @@ class pixel_class:
         variables: List[str] = ["vv", "vx", "vy"],
         A: Optional[np.array] = None,
     ):
+
         """
 
         :param dataf: [pd.DataFrame] --- observations orresults from the inversion
@@ -144,6 +148,7 @@ class pixel_class:
         :param A: [np.array] --- design matrix
         :return:
         """
+
         self.__init__(save=save, show=show, figsize=figsize, unit=unit, path_save=path_save, A=A)
 
         if isinstance(dataf, list):
@@ -158,8 +163,10 @@ class pixel_class:
         dataformat: str = "df",
         variables: List[str] = ["vv", "vx", "vy"],
     ):
+
         """
-        Load two dataset, observations or inversion
+        Load one dataset, observations or inversion
+
         :param dataf: [pd.DataFrame] --- observations orresults from the inversion
         :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
@@ -177,8 +184,10 @@ class pixel_class:
         dataformat: str = "df",
         variables: List[str] = ["vv", "vx", "vy"],
     ):
+
         """
-        Load two dataset, observations and inversion
+        Load several datasets (two), observations and inversion
+
         :param dataf: [pd.DataFrame] --- observations or results from the inversion
         :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
         :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
@@ -189,12 +198,16 @@ class pixel_class:
             )
 
     def get_dataf_invert_or_obs_or_interp(self, type_data: str = "obs") -> (pd.DataFrame, str):
+
         """
         Get dataframe either obs or invert
+
         :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+
         :return [pd.DataFrame] --- dataframe from obs, invert or interp
         :return [str] --- label used in the legend of the figures
         """
+
         if self.dataobs is None and self.datainterp is None:
             return self.datainvert, "Results from the inversion"
         elif self.datainvert is None and self.datainterp is None:
@@ -212,20 +225,25 @@ class pixel_class:
                 return self.datainterp, "Results from TICOI"
 
     def get_conversion(self):
+
         """
         Get conversion factor
+
         :return: [int] --- conversion factor
         """
+
         conversion = 365 if self.unit == "m/y" else 1
         return conversion
 
     def get_direction(self, data: "ticoi.pixel_class.dataframe_data") -> (np.array, np.array):
+
         """
         Get the direction of the provided data
         :param data: [ticoi.pixel_class.dataframe_data] --- dataframe from obs, invert or interp
         :return directionm: [np.array] directions of the data
         :return directionm_mean: [np.array] averaged direction of the data
         """
+
         directionm = np.arctan2(data.dataf["vy"].astype("float32"), data.dataf["vx"].astype("float32"))
         directionm[directionm < 0] += 2 * np.pi
         directionm_mean = np.arctan2(np.mean(data.dataf["vy"]), np.mean(data.dataf["vx"]))
@@ -237,21 +255,27 @@ class pixel_class:
         directionm_mean *= 360 / (2 * np.pi)
         return directionm, directionm_mean
 
+    # %%========================================================================= #
+    #                                     PLOTS                                   #
+    # =========================================================================%% #
+
     def plot_vx_vy(self, color: str = "blueviolet", type_data: str = "invert"):
+
         """
         Plot vx and vy in the same figure
+
         :param color: [str] --- color used by plt.plot
         :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+
         :return: axis, and figure
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
+        # Display the vx components
         fig1, ax1 = plt.subplots(2, 1, figsize=self.figsize)
         ax1[0].set_ylim(data.vxymin, data.vxymax)
-        ax1[0].plot(
-            data.dataf["date_cori"], data.dataf["vx"], linestyle="", marker="o", markersize=3, color=color
-        )  # Display the vx components
+        ax1[0].plot(data.dataf["date_cori"], data.dataf["vx"], linestyle="", marker="o", markersize=3, color=color)
         ax1[0].errorbar(
             data.dataf["date_cori"],
             data.dataf["vx"],
@@ -262,10 +286,12 @@ class pixel_class:
             zorder=1,
         )
         ax1[0].set_ylabel(f"Vx [{self.unit}]", fontsize=16)
+
+        # Display the vy components
         ax1[1].set_ylim(data.vyymin, data.vyymax)
         ax1[1].plot(
             data.dataf["date_cori"], data.dataf["vy"], linestyle="", marker="o", markersize=3, color=color, label=label
-        )  # Display the vx components
+        )
         ax1[1].errorbar(
             data.dataf["date_cori"],
             data.dataf["vy"],
@@ -278,17 +304,21 @@ class pixel_class:
         ax1[1].set_ylabel(f"Vy [{self.unit}]", fontsize=16)
         plt.subplots_adjust(bottom=0.2)
         ax1[1].legend(loc="lower left", bbox_to_anchor=(0.12, 0), bbox_transform=fig1.transFigure, fontsize=12)
+
         if self.show:
             plt.show()
         if self.save:
             fig1.savefig(f"{self.path_save}/vx_vy_{type_data}.png")
+
         return ax1, fig1
 
     def plot_vx_vy_overlaid(
         self, colors: List[str] = ["blueviolet", "orange"], type_data: str = "invert", zoom_on_results=False
     ):
+
         """
         Plot vx and vy in the same figure, inverted results are overlaid on observations
+
         :param colors: List[str] --- list color used by plt.plot
         :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param zoom_on_results: [bool] [default is False] --- set the limites of the axis according to the results min and max

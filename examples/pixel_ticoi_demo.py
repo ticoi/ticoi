@@ -27,7 +27,7 @@ from ticoi.interpolation_functions import (
 #                                    PARAMETERS                               #
 # =========================================================================%% #
 
-####  Selection of data
+###  Selection of data
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
 i, j = -138.18069, 60.29076
@@ -35,8 +35,8 @@ proj = "EPSG:4326"  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
-regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 150  # Regularization coefficient.s to be used (for each flag if flag is not None)
+regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 150  # Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outlier = "vvc_angle"  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
@@ -88,7 +88,8 @@ preData_kwargs = {
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": None,  # Divide the data in several areas where different methods should be used
-    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+    "dem_file": None,  # Path to the DEM file for calculating the slope and aspect
+    "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
@@ -98,12 +99,12 @@ preData_kwargs = {
 ## ---------------- Parameters for the pixel loading part ------------------ ##
 load_pixel_kwargs = {
     "regu": regu,  # Regularization method to be used
-    "coef": coef,
+    "coef": coef,  # Regularization coefficient to be used
     "solver": "LMSR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
-    "visual": visual,
-}  # Plot results along the way
+    "visual": visual,  # Plot results along the way
+}
 
 
 ## --------------------------- Inversion parameters ------------------------ ##
@@ -115,34 +116,27 @@ inversion_kwargs = {
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
     "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
-    "threshold_it": 0.1,
-    # Threshold to test the stability of the results between each iteration, used to stop the process
+    "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
     "apriori_weight": True,  # If True, use apriori weights
     "apriori_weight_in_second_iteration": True,  # it True use the error to weight each of the iterations, if not use it only in the first iteration
-    "detect_temporal_decorrelation": True,
-    # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
+    "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
-    "result_quality": result_quality,
-    # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+    "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": visual,  # Plot results along the way
-    "verbose": verbose,
-}  # Print information throughout TICOI processing
+    "verbose": verbose,  # Print information throughout TICOI processing
+}
 
 ## ----------------------- Interpolation parameters ------------------------ ##
 interpolation_kwargs = {
-    "interval_output": interval_output,
-    # Temporal baseline of the time series resulting from TICOI (after interpolation)
-    "redundancy": 5,
-    # Redundancy in the interpolated time series in number of days, no redundancy if None
-    "option_interpol": "spline",
-    # Type of interpolation ('spline', 'spline_smooth', 'nearest')
-    "result_quality": result_quality,
-    # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+    "interval_output": interval_output,  # Temporal baseline of the time series resulting from TICOI (after interpolation)
+    "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
+    "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+    "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
     "visual": visual,  # Plot results along the way
     "vmax": vmax,  # vmin and vmax of the legend
-    "verbose": verbose,
-}  # Print information throughout TICOI processing
+    "verbose": verbose,  # Print information throughout TICOI processing
+}
 
 # Update of dictionary with common parameters
 for common_parameter in ["regu", "solver", "unit"]:

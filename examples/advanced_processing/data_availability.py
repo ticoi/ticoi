@@ -77,7 +77,7 @@ warnings.filterwarnings("ignore")
 # Choose the TICOI cube processing method you want to use ('block_process' or 'direct_process')
 #    - 'block_process' (recommended) : This implementation divides the data in smaller data cubes loaded one after the other in a synchronous manner,
 # in order to avoid memory overconsumption and kernel crashing. Computations within the blocks are parallelized so this method goes way faster
-# than every other loading methods.
+# than the 'direct_process' method.
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal,
 # there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it
 # in a raw terminal instead of the default console (which leads to a RuntimeError)
@@ -103,12 +103,10 @@ index = [
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_example.nc'
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_displacement_S2_flag.nc'  # Path to flag file
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
-path_save = (
-    f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))}/'  # Path where to store the results
-)
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "data_availability"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 
 proj = "EPSG:32632"  # EPSG system of the given coordinates
@@ -138,7 +136,7 @@ load_kwargs = {
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "mask_file": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
+    "mask": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
     "verbose": False,
 }  # Print information throughout the loading process
 
@@ -169,6 +167,9 @@ for ind in index:
         if "monthly" not in index:
             index.append("monthly")
         break
+
+if load_pixel_process == "direct_process":
+    load_pixel_kwargs["interp"] = load_pixel_kwargs.pop("interpolation_load_pixel")
 
 # %%========================================================================= #
 #                                 DATA LOADING                                #
@@ -344,7 +345,7 @@ def max_leap_frog(data, period=None):
 # To generate GeoTiff files
 driver = gdal.GetDriverByName("GTiff")
 srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS(proj)
+srs.ImportFromEPSG(int(proj.split(":")[1]))
 
 start.append(time.time())
 
@@ -368,6 +369,7 @@ for ind in index:
                 dtype="float32",
                 parallel=False,
             )
+
         if "median_baseline" in ind:
             print("[Raw indices] Computing median_baseline index...")
             generate_tiff_index_map(
@@ -381,6 +383,7 @@ for ind in index:
                 dtype="int16",
                 parallel=False,
             )
+
         if "max_leap_frog" in ind:
             print("[Raw indices] Computing max_leap_frog index...")
             generate_tiff_index_map(
@@ -540,7 +543,7 @@ if "availability_maps" in index:
     # Generate GeoTiff files (each band = a season)
     driver = gdal.GetDriverByName("GTiff")
     srs = osr.SpatialReference()
-    srs.SetWellKnownGeogCS(proj)
+    srs.ImportFromEPSG(int(proj.split(":")[1]))
 
     tiff = driver.Create(
         f"{path_save}seasonal_data_availability.tiff", winter.shape[0], winter.shape[1], 4, gdal.GDT_Float32
@@ -654,7 +657,7 @@ def min_all_season(maps):
 # To generate GeoTiff files
 driver = gdal.GetDriverByName("GTiff")
 srs = osr.SpatialReference()
-srs.SetWellKnownGeogCS(proj)
+srs.ImportFromEPSG(int(proj.split(":")[1]))
 
 # Monthly indices ('mini_nmonth', 'mean_nmonth' or 'median_nmonth' where n is a number or empty)
 start.append(time.time())
