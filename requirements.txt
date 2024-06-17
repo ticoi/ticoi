@@ -11,6 +11,7 @@ pip
 pyproj>=3.4,<4
 rasterio>=1.3,<2
 requests #to access data on the cloud
+richdem
 rioxarray
 scikit-learn
 scipy==1.*
@@ -19,4 +20,3 @@ shapely
 tqdm
 xarray
 zarr
-richdem
