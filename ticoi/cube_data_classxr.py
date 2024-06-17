@@ -1446,7 +1446,7 @@ class cube_data_class:
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"])
 
             # The time dimension of the smoothed velocity observations is different from the original,
-            # which is because of the possible dublicate mid_date of different image pairs...
+            # which is because of the possible duplicate mid_date of different image pairs...
             obs_filt = xr.Dataset(
                 data_vars=dict(
                     vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
