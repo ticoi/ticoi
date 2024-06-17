@@ -39,16 +39,18 @@ compute_result_load = False
 ## ------------------------------ Data selection --------------------------- ##
 # If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
-cube_name = {"raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
-             "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
-             "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
+cube_name = {
+    "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+    "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
+    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
+}
 flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flag file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 
 i, j = 1, 2  # pixel number
-i, j = 343556.2,5091402.3
+i, j = 343556.2, 5091402.3
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
@@ -70,8 +72,8 @@ load_kwargs = {
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
     "mask": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
-    "verbose": False, # Print information throughout the loading process
-}  
+    "verbose": False,  # Print information throughout the loading process
+}
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -88,7 +90,7 @@ if type(cube_name) == dict and "raw" in cube_name.keys():
     # Load the cube.s
     cube = cube_data_class()
     cube.load(cube_name["raw"], **load_kwargs)
-    
+
     stop.append(time.time())
     print(f"[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ")
     print(f"[Data loading] Data loading took {round(stop[-1] - start[-1], 3)} s")

@@ -55,18 +55,20 @@ warnings.filterwarnings("ignore")
 
 TICOI_process = "load"
 
-save = True # If True, save TICOI results to a netCDF file
+save = True  # If True, save TICOI results to a netCDF file
 
 ## ------------------------------ Data selection --------------------------- ##
-# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str, 
+# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
-cube_name = {'raw': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
-              'interp': f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc' # Path to flags file
-mask_file = None # Path to mask file (.shp file) to mask some of the data on cube
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/' # Path where to store the results
-result_fn = 'Argentiere_example' # Name of the netCDF file to be created (if save is True)
+cube_name = {
+    "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
+}
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
+mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/'  # Path where to store the results
+result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
@@ -180,20 +182,32 @@ start.append(time.time())
 
 # Load the cube.s
 cube = cube_data_class()
-cube.load(cube_name if TICOI_process != 'load' else cube_name['raw'], **load_kwargs)
+cube.load(cube_name if TICOI_process != "load" else cube_name["raw"], **load_kwargs)
 
 # Load raw data at pixels if required
-if TICOI_process == 'load':
-    print('[Data loading] Loading raw data...')
-    data_raw = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw'], inversion_kwargs=inversion_kwargs)
-    data_raw = [pd.DataFrame(data={'date1': raw[0][0][:, 0], 'date2': raw[0][0][:, 1],
-                                    'vx': raw[0][1][:, 0], 'vy': raw[0][1][:, 1],
-                                    'errorx': raw[0][1][:, 2], 'errory': raw[0][1][:, 3],
-                                    'temporal_baseline': raw[0][1][:, 4]}) for raw in data_raw]
+if TICOI_process == "load":
+    print("[Data loading] Loading raw data...")
+    data_raw = process_blocks_refine(
+        cube, nb_cpu=nb_cpu, block_size=block_size, returned=["raw"], inversion_kwargs=inversion_kwargs
+    )
+    data_raw = [
+        pd.DataFrame(
+            data={
+                "date1": raw[0][0][:, 0],
+                "date2": raw[0][0][:, 1],
+                "vx": raw[0][1][:, 0],
+                "vy": raw[0][1][:, 1],
+                "errorx": raw[0][1][:, 2],
+                "errory": raw[0][1][:, 3],
+                "temporal_baseline": raw[0][1][:, 4],
+            }
+        )
+        for raw in data_raw
+    ]
 
 # Prepare interpolation dates
 first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
-inversion_kwargs.update({'first_date_interpol': first_date_interpol, 'last_date_interpol': last_date_interpol})
+inversion_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
 stop.append(time.time())
 print(f"[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ")
@@ -210,53 +224,85 @@ cube_interp, cube_invert = None, None
 
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
-if TICOI_process == 'block_process':
-    result = process_blocks_refine(cube, nb_cpu=nb_cpu, block_size=block_size, returned=['raw', 'interp'], 
-                                   preData_kwargs=preData_kwargs, inversion_kwargs=inversion_kwargs)
+if TICOI_process == "block_process":
+    result = process_blocks_refine(
+        cube,
+        nb_cpu=nb_cpu,
+        block_size=block_size,
+        returned=["raw", "interp"],
+        preData_kwargs=preData_kwargs,
+        inversion_kwargs=inversion_kwargs,
+    )
 
 # Direct computation of the whole TICOI cube
 elif TICOI_process == "direct_process":
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
     obs_filt, flag = cube.filter_cube(**preData_kwargs)
-    inversion_kwargs.update({'flag': flag})
-    
+    inversion_kwargs.update({"flag": flag})
+
     # Progression bar
-    xy_values = itertools.product(cube.ds['x'].values, cube.ds['y'].values)
-    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds['x'].values)*len(cube.ds['y'].values), mininterval=0.5)
-    
+    xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)
+    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds["x"].values) * len(cube.ds["y"].values), mininterval=0.5)
+
     # Main processing of the data with TICOI algorithm, individually for each pixel
-    result = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(process)(cube, i, j, returned=['raw', 'interp'], obs_filt=obs_filt,
-                                                                 **inversion_kwargs) for i, j in xy_values_tqdm)
+    result = Parallel(n_jobs=nb_cpu, verbose=0)(
+        delayed(process)(cube, i, j, returned=["raw", "interp"], obs_filt=obs_filt, **inversion_kwargs)
+        for i, j in xy_values_tqdm
+    )
 
-elif TICOI_process == 'load':    
+elif TICOI_process == "load":
     cube_interp = cube_data_class()
-    cube_interp.load(cube_name['interp'], **load_kwargs)
-    
-    print('[TICOI processing] Loading TICOI data...')
-    result = process_blocks_refine(cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned='raw', inversion_kwargs=inversion_kwargs)
-    result = [pd.DataFrame(data={'First_date': r[0][0][:, 0], 'Second_date': r[0][0][:, 1],
-                                    'vx': r[0][1][:, 0], 'vy': r[0][1][:, 1],
-                                    'errorx': r[0][1][:, 2], 'errory': r[0][1][:, 3],
-                                    'temporal_baseline': r[0][1][:, 4]}) for r in result]
+    cube_interp.load(cube_name["interp"], **load_kwargs)
 
-if TICOI_process == 'block_process' or TICOI_process == 'direct_process':
+    print("[TICOI processing] Loading TICOI data...")
+    result = process_blocks_refine(
+        cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned="raw", inversion_kwargs=inversion_kwargs
+    )
+    result = [
+        pd.DataFrame(
+            data={
+                "First_date": r[0][0][:, 0],
+                "Second_date": r[0][0][:, 1],
+                "vx": r[0][1][:, 0],
+                "vy": r[0][1][:, 1],
+                "errorx": r[0][1][:, 2],
+                "errory": r[0][1][:, 3],
+                "temporal_baseline": r[0][1][:, 4],
+            }
+        )
+        for r in result
+    ]
+
+if TICOI_process == "block_process" or TICOI_process == "direct_process":
     # Raw data
-    data_raw = [pd.DataFrame(data={'date1': r[0][0][0][:, 0], 'date2': r[0][0][0][:, 1],
-                                   'vx': r[0][0][1][:, 0], 'vy': r[0][0][1][:, 1],
-                                   'errorx': r[0][0][1][:, 2], 'errory': r[0][0][1][:, 3],
-                                   'temporal_baseline': r[0][0][1][:, 4]}) for r in result]
-    result = [r[1] for r in result] # Result of the interpolation
+    data_raw = [
+        pd.DataFrame(
+            data={
+                "date1": r[0][0][0][:, 0],
+                "date2": r[0][0][0][:, 1],
+                "vx": r[0][0][1][:, 0],
+                "vy": r[0][0][1][:, 1],
+                "errorx": r[0][0][1][:, 2],
+                "errory": r[0][0][1][:, 3],
+                "temporal_baseline": r[0][0][1][:, 4],
+            }
+        )
+        for r in result
+    ]
+    result = [r[1] for r in result]  # Result of the interpolation
 
 stop.append(time.time())
-print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s')
+print(
+    f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s'
+)
 
 
 # %%========================================================================= #
 #                                INITIALISATION                               #
 # =========================================================================%% #
 
-if TICOI_process != 'load':
-    # Write down some informations about the data and the TICOI processing performed
+if TICOI_process != "load":
+    # Write down some information about the data and the TICOI processing performed
     if save:
         start.append(time.time())
         sensor_array = np.unique(cube.ds["sensor"])
@@ -278,7 +324,7 @@ if TICOI_process != 'load':
         if inversion_kwargs["apriori_weight"]:
             source += " and apriori weight"
         source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
-        
+
         source_interp = source + f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
         source_interp += f'The interpolation baseline is {inversion_kwargs["interval_output"]} days.'
         source_interp += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
@@ -292,13 +338,20 @@ if TICOI_process != 'load':
 # =========================================================================%% #
 
 start.append(time.time())
-if TICOI_process != 'load' and save:
-    # Save TICOI results to a netCDF file, thus obtaining a new data cube    
-    cube_interp = cube.write_result_ticoi(result, source_interp, sensor, filename=f'{result_fn}_interp', savepath=path_save if save else None, 
-                                          result_quality=inversion_kwargs['result_quality'], verbose=inversion_kwargs['verbose'])
+if TICOI_process != "load" and save:
+    # Save TICOI results to a netCDF file, thus obtaining a new data cube
+    cube_interp = cube.write_result_ticoi(
+        result,
+        source_interp,
+        sensor,
+        filename=f"{result_fn}_interp",
+        savepath=path_save if save else None,
+        result_quality=inversion_kwargs["result_quality"],
+        verbose=inversion_kwargs["verbose"],
+    )
 
     stop.append(time.time())
-    print(f'[Writing results] Results saved at {path_save}')
+    print(f"[Writing results] Results saved at {path_save}")
     print(f"[Writing results] Writing cube to netCDF file took {round(stop[-1] - start[-1], 3)} s")
 
 
@@ -309,27 +362,36 @@ if TICOI_process != 'load' and save:
 
 start.append(time.time())
 
-def match_sine(d: pd.DataFrame, filt: str | None = None, impose_frequency: bool = True, several_freq: int | None = None, 
-               raw_seasonality: bool = False, d_raw: pd.DataFrame | None = None):
-    
-    '''
-       Match a sine curve to TICOI results to look for a periodicity among the velocities. The period can either 
+
+def match_sine(
+    d: pd.DataFrame,
+    filt: str | None = None,
+    impose_frequency: bool = True,
+    several_freq: int | None = None,
+    raw_seasonality: bool = False,
+    d_raw: pd.DataFrame | None = None,
+):
+
+    """
+       Match a sine curve to TICOI results to look for a periodicity among the velocities. The period can either
     be set to 365.25 days, or estimated along with the other parameters (amplitude, phase, offset).
-    
+
        :param d: [pd dataframe] --- pandas dataframe of the data at the considered pixel
        :param filt: which filter to use before processing the sinus ('highpass', 'lowpass' or None, default None)
        :param impose_frequency: [bool] [default is True] --- Whether we should impose the frequency to 1/365.25 or not (default True)
        :param several_freq: [int | None] [default is None] --- If > 1, a signal made of several frequencies (at n*f) is matched to the data
        :param raw_seasonality: [bool] [default is False] --- If True, we also match a sinus to the raw data
        :param d_raw: [pd dataframe | None] [default is None] --- If raw_seasonality is True, must be the dataframe of the raw velocity data (not displacements)
-    '''
-    
+    """
+
     # To find the day associated to the maximum of the sine curve
     def right_phi(phi):
-        if phi >= 0 and phi < np.pi/2: return np.pi/2 - phi
-        elif phi >= np.pi/2 and phi < 3*np.pi/2: return 5*np.pi/2 - phi
-        return 5*np.pi/2 - phi
-    
+        if phi >= 0 and phi < np.pi / 2:
+            return np.pi / 2 - phi
+        elif phi >= np.pi / 2 and phi < 3 * np.pi / 2:
+            return 5 * np.pi / 2 - phi
+        return 5 * np.pi / 2 - phi
+
     d = d.dropna()
     dates = (d["date1"] + (d["date2"] - d["date1"]) // 2 - d["date1"].min()).dt.days.to_numpy()
     N = len(dates)
@@ -350,53 +412,69 @@ def match_sine(d: pd.DataFrame, filt: str | None = None, impose_frequency: bool 
 
     # Frequency is set to 1/365.25 (one year)
     if impose_frequency:
-        def sine_fconst(t, *args, freqs=1, f=1/365.25):
-            sine = args[0] * np.sin(2*np.pi*f*t + args[1])
+
+        def sine_fconst(t, *args, freqs=1, f=1 / 365.25):
+            sine = args[0] * np.sin(2 * np.pi * f * t + args[1])
             for freq in range(1, freqs):
-                sine += args[2*freq] * np.sin(2*np.pi*(freq+1)*f*t + args[2*freq+1])
+                sine += args[2 * freq] * np.sin(2 * np.pi * (freq + 1) * f * t + args[2 * freq + 1])
             return sine + args[-1]
-        
+
         try:
             # Find the best matching sinus to TICOI results
-            if several_freq is None: several_freq = 1
-            guess = np.concatenate([np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]])
+            if several_freq is None:
+                several_freq = 1
+            guess = np.concatenate(
+                [np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]]
+            )
             popt, pcov = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates, vv_filt, p0=guess)
-            
-            f = 1/365.25
+
+            f = 1 / 365.25
             A = popt[0]
             phi = popt[1]
-            if phi < 0: phi += 2*np.pi
-            
-            first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+            if phi < 0:
+                phi += 2 * np.pi
+
+            first_max_day = (
+                pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2 * np.pi * f)), "D")
+                + d["First_date"].min()
+            )
             max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
-            
+
             # A = [popt[2*freq] for freq in range(several_freq)]
             # phi = [popt[2*freq+1] for freq in range(several_freq)]
-            # phi = [phi[i] if phi[i] > 0 else phi[i] + 2*np.pi for i in range(several_freq)]   
-            # first_max_day  = [pd.Timedelta(int((right_phi(phi[i]) + (np.pi if A[i] < 0 else 0)) / (2*np.pi*f)), 'D') + 
+            # phi = [phi[i] if phi[i] > 0 else phi[i] + 2*np.pi for i in range(several_freq)]
+            # first_max_day  = [pd.Timedelta(int((right_phi(phi[i]) + (np.pi if A[i] < 0 else 0)) / (2*np.pi*f)), 'D') +
             #                         d['First_date'].min() for i in range(several_freq)]
             # max_day = [(first_max_day[i] - pd.Timestamp(year=first_max_day[i].year, month=1, day=1)) for i in range(several_freq)]
-            
-            if raw_seasonality:                
+
+            if raw_seasonality:
                 #  Find the best matching sinus to raw data
-                dates_raw = (d_raw.index - d['First_date'].min()).days.to_numpy()
-                raw_c = d_raw['vv'] - d_raw['vv'].mean()
-                guess_raw = np.concatenate([np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]])
-                popt_raw, pcov_raw = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw)
-            
+                dates_raw = (d_raw.index - d["First_date"].min()).days.to_numpy()
+                raw_c = d_raw["vv"] - d_raw["vv"].mean()
+                guess_raw = np.concatenate(
+                    [np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]]
+                )
+                popt_raw, pcov_raw = curve_fit(
+                    lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw
+                )
+
                 # Parameters
                 A_raw = popt_raw[0]
                 phi_raw = popt_raw[1]
-                if phi_raw < 0: phi_raw += 2*np.pi
-                
-                first_max_day_raw  = pd.Timedelta(int((right_phi(phi_raw) + (np.pi if A_raw < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+                if phi_raw < 0:
+                    phi_raw += 2 * np.pi
+
+                first_max_day_raw = (
+                    pd.Timedelta(int((right_phi(phi_raw) + (np.pi if A_raw < 0 else 0)) / (2 * np.pi * f)), "D")
+                    + d["First_date"].min()
+                )
                 max_day_raw = (first_max_day_raw - pd.Timestamp(year=first_max_day_raw.year, month=1, day=1)).days
-            
+
         except RuntimeError:
             A, f, phi = np.nan, np.nan, np.nan
             if raw_seasonality:
                 A_raw, phi_raw = np.nan, np.nan
-            
+
         # guess = [np.max(vv_filt) - np.min(vv_filt), 0, 0]
         # try:
         #     popt, pcov = curve_fit(sine_fconst, dates, vv, p0=guess)
@@ -404,7 +482,7 @@ def match_sine(d: pd.DataFrame, filt: str | None = None, impose_frequency: bool 
         #     f = 1/365.25
         # except RuntimeError:
         #     A, f, phi = np.nan, np.nan, np.nan
-            
+
     # Frequency is to be found too
     else:
         n = 64 * N
@@ -430,19 +508,23 @@ def match_sine(d: pd.DataFrame, filt: str | None = None, impose_frequency: bool 
         try:
             popt, pcov = curve_fit(sine, dates, vv, p0=guess)
             A, f, phi, _ = popt
-            if phi < 0: phi += 2*np.pi
-            
-            first_max_day  = pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2*np.pi*f)), 'D') +  d['First_date'].min()
+            if phi < 0:
+                phi += 2 * np.pi
+
+            first_max_day = (
+                pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2 * np.pi * f)), "D")
+                + d["First_date"].min()
+            )
             max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
-            
+
         except RuntimeError:
             A, f, phi = np.nan, np.nan, np.nan
-    
+
     # Return Period, amplitude and phase of the periodicity
     if raw_seasonality:
-        return 1/f, A, max_day, A_raw, max_day_raw
+        return 1 / f, A, max_day, A_raw, max_day_raw
     else:
-        return 1/f, A, max_day
+        return 1 / f, A, max_day
 
 
 def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
@@ -456,9 +538,10 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
        :param dataf_lp: list of pandas dataframes, TICOI results
        :param local_var_method: str, method to be used to process the local variations
     """
-    
-    if A == np.nan: return np.nan
-    
+
+    if A == np.nan:
+        return np.nan
+
     # Compute local variations
     if local_var_method == "rolling_7d":
         var = raw["vv"].rolling(window="7D", center=True).std(ddof=0).drop_duplicates().dropna().median().item()
@@ -478,16 +561,16 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
                 ].std(ddof=0)
         elif local_var_method == "uniform_all":
             for date in var_dates:
-                local_var[date] = raw.loc[(raw['date1'] < date) & (raw['date2'] > date), 'vv'].std(ddof=0)
-                
-        var = local_var[local_var > 0].dropna().median()  
-        
-    elif local_var_method == 'residu':
-        dataf_lp.index = dataf_lp['First_date'] + (dataf_lp['Second_date'] - dataf_lp['First_date']) // 2
-        dataf_lp['vv'] = np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
+                local_var[date] = raw.loc[(raw["date1"] < date) & (raw["date2"] > date), "vv"].std(ddof=0)
+
+        var = local_var[local_var > 0].dropna().median()
+
+    elif local_var_method == "residu":
+        dataf_lp.index = dataf_lp["First_date"] + (dataf_lp["Second_date"] - dataf_lp["First_date"]) // 2
+        dataf_lp["vv"] = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2)
         dataf_lp = dataf_lp.reindex(index=np.unique(raw.index)).interpolate().dropna()
         dataf = raw[raw.index >= dataf_lp.index[0]]
-        dataff_vv_c = dataf['vv'] - dataf_lp['vv']
+        dataff_vv_c = dataf["vv"] - dataf_lp["vv"]
         var = dataff_vv_c.std(ddof=0)
 
     return max(0, 1 - var / abs(A))
@@ -495,7 +578,7 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
 
 driver = gdal.GetDriverByName("GTiff")
 srs = osr.SpatialReference()
-srs.ImportFromEPSG(int(proj.split(':')[1]))
+srs.ImportFromEPSG(int(proj.split(":")[1]))
 
 # Remove pixels with no data
 empty = list(
@@ -511,20 +594,20 @@ positions = np.array(list(itertools.product(cube.ds["x"].values, cube.ds["y"].va
 useful_result = [result[i] for i in empty]
 useful_data_raw = [data_raw[i] for i in empty]
 
-# Coordinates informations
-resolution = int(cube.ds['x'].values[1] - cube.ds['x'].values[0])
-long_data = (positions[:, 0] - np.min(cube.ds['x'].values)).astype(int) // resolution
-lat_data = (positions[:, 1] - np.min(cube.ds['y'].values)).astype(int) // resolution
+# Coordinates information
+resolution = int(cube.ds["x"].values[1] - cube.ds["x"].values[0])
+long_data = (positions[:, 0] - np.min(cube.ds["x"].values)).astype(int) // resolution
+lat_data = (positions[:, 1] - np.min(cube.ds["y"].values)).astype(int) // resolution
 
 # Format raw data to velocities
 for raw in data_raw:
     # raw['vx'] = raw['vx'] * preData_kwargs['unit'] / raw['temporal_baseline']
     # raw['vy'] = raw['vy'] * preData_kwargs['unit'] / raw['temporal_baseline']
-    raw['vv'] = np.sqrt(raw['vx'] ** 2 + raw['vy'] ** 2)
-    raw.index = raw['date1'] + (raw['date2'] - raw['date1']) // 2
+    raw["vv"] = np.sqrt(raw["vx"] ** 2 + raw["vy"] ** 2)
+    raw.index = raw["date1"] + (raw["date2"] - raw["date1"]) // 2
 
 ##  Best matching sinus map (amplitude and phase, and period if not fixed)
-print('[Fourier analysis] Computing periodicity maps...')
+print("[Fourier analysis] Computing periodicity maps...")
 if not impose_frequency:
     period_map = np.empty([cube.nx, cube.ny])
     period_map[:, :] = np.nan
@@ -536,30 +619,40 @@ peak_map = np.empty([cube.nx, cube.ny])
 peak_map[:, :] = np.nan
 if raw_seasonality:
     amplitude_raw_map = np.empty([cube.nx, cube.ny])
-    amplitude_raw_map[:,:] = np.nan
+    amplitude_raw_map[:, :] = np.nan
     peak_raw_map = np.empty([cube.nx, cube.ny])
-    peak_raw_map[:,:] = np.nan
+    peak_raw_map[:, :] = np.nan
 
 result_tqdm = tqdm(zip(useful_result, useful_data_raw), total=len(useful_result), mininterval=0.5)
-match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality,
-                                                                            d_raw=raw) for d, raw in result_tqdm))
+match_res = np.array(
+    Parallel(n_jobs=nb_cpu, verbose=0)(
+        delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality, d_raw=raw)
+        for d, raw in result_tqdm
+    )
+)
 if not impose_frequency:
     period = np.abs(match_res[:, 0])
     period_map[long_data, lat_data] = np.sign(period - 365) * (1 - np.minimum(period, 365) / np.maximum(period, 365))
 amplitude_map[long_data, lat_data] = np.abs(match_res[:, 1])
 peak_map[long_data, lat_data] = match_res[:, 2]
 raw_tqdm = tqdm(zip(match_res[:, 1], useful_data_raw, useful_result), total=len(useful_data_raw), mininterval=0.5)
-AtoVar_map[long_data, lat_data] = Parallel(n_jobs=nb_cpu, verbose=0)(delayed(AtoVar)(A, raw, dataf_lp, local_var_method) 
-                                                    for A, raw, dataf_lp in raw_tqdm)
+AtoVar_map[long_data, lat_data] = Parallel(n_jobs=nb_cpu, verbose=0)(
+    delayed(AtoVar)(A, raw, dataf_lp, local_var_method) for A, raw, dataf_lp in raw_tqdm
+)
 if raw_seasonality:
     amplitude_raw_map[long_data, lat_data] = np.abs(match_res[:, 3])
     peak_raw_map[long_data, lat_data] = match_res[:, 4]
 
 # Save the maps to a .tiff file with two bands (one for period, and one for amplitude)
 if impose_frequency:
-    tiff = driver.Create(f'{path_save}matching_sine_map_fconst_{filt}_{local_var_method}.tiff', 
-                         amplitude_map.shape[0], amplitude_map.shape[1], 3 if not raw_seasonality else 5, gdal.GDT_Float32)
-    tiff.SetGeoTransform([np.min(cube.ds['x'].values), resolution, 0, np.max(cube.ds['y'].values), 0, -resolution])
+    tiff = driver.Create(
+        f"{path_save}matching_sine_map_fconst_{filt}_{local_var_method}.tiff",
+        amplitude_map.shape[0],
+        amplitude_map.shape[1],
+        3 if not raw_seasonality else 5,
+        gdal.GDT_Float32,
+    )
+    tiff.SetGeoTransform([np.min(cube.ds["x"].values), resolution, 0, np.max(cube.ds["y"].values), 0, -resolution])
     tiff.GetRasterBand(1).WriteArray(np.flip(amplitude_map.T, axis=0))
     tiff.GetRasterBand(2).WriteArray(np.flip(peak_map.T, axis=0))
     tiff.GetRasterBand(3).WriteArray(np.flip(AtoVar_map.T, axis=0))
