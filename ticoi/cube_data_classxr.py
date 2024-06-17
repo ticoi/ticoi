@@ -26,7 +26,6 @@ import richdem as rd
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
-from osgeo import gdal, osr
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
 
