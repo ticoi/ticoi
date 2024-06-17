@@ -1,6 +1,5 @@
 aiohttp #to access data on the cloud
 dask
-gdal
 geopandas>=0.10.0
 jdcal
 matplotlib==3.*
