@@ -8,7 +8,7 @@ Reference:
 """
 
 import math as m
-
+import numpy as np
 import geopandas as gpd
 import matplotlib as plt
 import pandas as pd

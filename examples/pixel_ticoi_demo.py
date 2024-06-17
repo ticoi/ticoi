@@ -30,7 +30,7 @@ from ticoi.interpolation_functions import (
 ###  Selection of data
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
-dem_file = ''
+dem_file = None
 i, j = -138.18069, 60.29076
 proj = 'EPSG:4326'  # EPSG system of the given coordinates
 
@@ -38,7 +38,7 @@ proj = 'EPSG:4326'  # EPSG system of the given coordinates
 #For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
 regu = '1accelnotnull' # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 150  #Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier = 'topo_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+delete_outlier = 'vvc_angle' #delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False #Use the error as apriori
 interval_output = 30 #temporal sampling of the output results
 unit = 365 # 1 for m/d, 365 for m/y
@@ -90,7 +90,7 @@ preData_kwargs = {'smooth_method': 'gaussian', # Smoothing method to be used to 
                   'regu': regu, # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
                   'solver': 'LSMR_ini', # Solver for the inversion
                   'proj': proj, # EPSG system of the given coordinates
-                  'velo_or_disp': 'disp', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+                  'velo_or_disp': 'velo', # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
                   'verbose': True # Print information throughout the filtering process
                   }
 

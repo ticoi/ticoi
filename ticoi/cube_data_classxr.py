@@ -1612,7 +1612,7 @@ class cube_data_class:
                     # Create the GeoTIFF file
                     driver = gdal.GetDriverByName('GTiff')
                     srs = osr.SpatialReference()
-                    srs.ImportFromEPSG(int(epsg_code.split(':')[1]))
+                    srs.ImportFromEPSG(epsg_code)
                     
                     dst_ds_temp = driver.Create(f'{path_save}/mean_velocity_{variable}.tiff', mean_v.shape[1], mean_v.shape[0], 1,
                                                 gdal.GDT_Float32)
