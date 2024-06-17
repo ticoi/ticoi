@@ -26,6 +26,7 @@ import richdem as rd
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
+from osgeo import gdal, osr
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
 
@@ -131,14 +132,8 @@ class cube_data_class:
         if len(self.ds["x"].values) == 0 and len(self.ds["y"].values) == 0:
             print(f"[Data loading] The given pixel and its surrounding buffer are not part of cube {self.filename}")
 
-    def determine_optimal_chunk_size(
-        self,
-        variable_name: str = "vx",
-        x_dim: str = "x",
-        y_dim: str = "y",
-        time_dim: str = "mid_date",
-        verbose: bool = False,
-    ) -> (int, int, int):
+    def determine_optimal_chunk_size(self, variable_name: str = "vx", x_dim: str = "x", y_dim: str = "y",
+                                     time_dim: str = 'mid_date', verbose: bool = False) -> (int, int, int): # type: ignore
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
@@ -659,25 +654,15 @@ class cube_data_class:
                     {"mid_date": self.ds.chunks["mid_date"]}
                 )
 
-    def load(
-        self,
-        filepath: list | str,
-        chunks: dict | str | int = {},
-        conf: bool = False,
-        subset: str | None = None,
-        buffer: str | None = None,
-        pick_date: str | None = None,
-        pick_sensor: str | None = None,
-        pick_temp_bas: str | None = None,
-        proj: str = "EPSG:4326",
-        mask_file: str | xr.DataArray = None,
-        verbose: bool = False,
-    ):
+    def load(self, filepath: list | str, chunks: dict | str | int = {}, conf: bool = False, subset: str | None = None,
+             buffer: str | None = None, pick_date: str | None = None, pick_sensor: str | None = None,
+             pick_temp_bas: str | None = None, proj: str = 'EPSG:4326', mask: str | xr.DataArray = None,
+             verbose: bool = False):
 
         """
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
-
-        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
+        
+        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
         :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays.
                                   chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays,
                                   chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
@@ -688,7 +673,7 @@ class cube_data_class:
         :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
         :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param mask_file: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
+        :param mask: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
 
@@ -696,41 +681,17 @@ class cube_data_class:
             type(filepath) == list or type(filepath) == str
         ), f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
 
-        if type(filepath) == list:  # Merge several cubes
-            self.load(
-                filepath[0],
-                chunks=chunks,
-                conf=conf,
-                subset=subset,
-                buffer=buffer,
-                pick_date=pick_date,
-                pick_sensor=pick_sensor,
-                pick_temp_bas=pick_temp_bas,
-                proj=proj,
-                mask_file=mask_file,
-                verbose=verbose,
-            )
+        if type(filepath) == list: # Merge several cubes
+            self.load(filepath[0], chunks=chunks, conf=conf, subset=subset, buffer=buffer, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                      proj=proj, mask=mask, verbose=verbose)
+
+            cube2 = None
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
-                sub = [
-                    self.ds["x"].min().values,
-                    self.ds["x"].max().values,
-                    self.ds["y"].min().values,
-                    self.ds["y"].max().values,
-                ]
-                cube2.load(
-                    filepath[n],
-                    chunks=chunks,
-                    conf=conf,
-                    subset=sub,
-                    pick_date=pick_date,
-                    pick_sensor=pick_sensor,
-                    pick_temp_bas=pick_temp_bas,
-                    proj=proj,
-                    mask_file=mask_file,
-                    verbose=verbose,
-                )
+                sub = [self.ds['x'].min().values, self.ds['x'].max().values, self.ds['y'].min().values, self.ds['y'].max().values]
+                cube2.load(filepath[n], chunks=chunks, conf=conf, subset=sub, pick_date=pick_date, pick_sensor=pick_sensor, pick_temp_bas=pick_temp_bas,
+                           proj=proj, mask=mask, verbose=verbose)
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
                 cube2 = self.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method="nearest")
                 self.merge_cube(cube2)  # Merge the new cube to the main one
@@ -816,8 +777,8 @@ class cube_data_class:
             self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
             self.standardize_cube_for_processing(time_dim)
 
-            if mask_file is not None:
-                self.mask_cube(mask_file)
+            if mask is not None:
+                self.mask_cube(mask)
 
             # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
             #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
@@ -941,7 +902,7 @@ class cube_data_class:
     #                         PIXEL LOADING METHODS                           #
     # =====================================================================%% #
 
-    def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float):
+    def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float): # type: ignore
 
         """
         Convert the coordinate (i, j) which are in projection proj, to projection of the cube dataset.
@@ -995,8 +956,8 @@ class cube_data_class:
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
-        :param visual: [bool] [default is False] --- Return additional information (sensor and source) for future plots
-        :param output_format [str] [default is np] --- output format of the results, if np return a numpy array, elif pd return a panda dataframe
+        :param visual: [bool] [default is False] --- Return additional informations (sensor and source) for future plots
+        :param output_format [str] [default is np] --- Format of the output data (np for numpy or df for pandas dataframe)
 
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
@@ -1066,10 +1027,7 @@ class cube_data_class:
                 data = [data_dates, data_values, data_str]
             elif output_format == "df":
                 data = data.to_pandas()
-            else:
-                raise ValueError(
-                    "Please enter nc if want to have as output a numpy array, and df if you want a pandas dataframe"
-                )
+            else: raise ValueError ('Please enter np if you want to have as output a numpy array, and df if you want a pandas dataframe')
         else:
             data_values = data.drop_vars(["date1", "date2"]).to_array().values.T
             data = [data_dates, data_values]
@@ -1083,14 +1041,8 @@ class cube_data_class:
     #                             CUBE PROCESSING                             #
     # =====================================================================%% #
 
-    def delete_outliers(
-        self,
-        delete_outliers: str | float,
-        flag: xr.Dataset | None = None,
-        slope: xr.Dataset | None = None,
-        aspect: xr.Dataset | None = None,
-    ):
-
+    def delete_outliers(self, delete_outliers: str | float, flag: xr.Dataset | None = None, slope: xr.Dataset | None = None, aspect: xr.Dataset | None = None,):
+        
         """
         Delete outliers according to a certain criterium.
 
@@ -1157,7 +1109,7 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
                 .astype("float32")
             )
-
+    
     def compute_slo_asp(self, dem_file: str, blur_size: int = 5):
 
         with rio.open(dem_file) as src:
@@ -1203,6 +1155,7 @@ class cube_data_class:
         return slope, aspect
 
     def create_flag(self, flag_shp: str = None, field_name: str | None = None, default_value: str | int | None = None):
+        
         """
         Create a flag dataset based on the provided shapefile and shapefile field.
         Which is usually used to divide the pixels into different types, especially for surging glaciers.
@@ -1213,6 +1166,7 @@ class cube_data_class:
         :param default_value (str | int | None, optional): The default value for the shapefile field. Defaults to 0.
         :Returns flag: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
         """
+        
         flag_shp = geopandas.read_file(flag_shp).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
 
         # surge-type glacier: 2, other glacier: 1, stable area: 0
@@ -1300,7 +1254,7 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 900) -> (np.ndarray, np.ndarray):
+        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray): # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1395,9 +1349,15 @@ class cube_data_class:
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
         if flag is not None:
-
-            if isinstance(flag, str):  # if flag is a shape file
-                flag = self.create_flag(flag)
+            if isinstance(flag, str): 
+                if flag.split('.')[-1] == 'nc': # If flag is a netCDF file
+                    flag = xr.open_dataset(flag)
+                    if 'flags' in list(flag.variables):
+                        flag = flag.rename({'flags': 'flag'})
+                elif flag.split('.')[-1] == 'shp': # If flag is a shape file 
+                    flag = self.create_flag(flag)
+                else:
+                    raise ValueError("flag file must be .nc or .shp")
                 flag = flag.load()
             elif isinstance(flag, xr.Dataset):
                 flag = flag.load()
@@ -1415,6 +1375,7 @@ class cube_data_class:
                 regu = list(regu.split())
 
         start = time.time()
+        
         if delete_outliers is not None:
             slope, aspect = None, None
             if delete_outliers == "topo_angle":
@@ -1491,7 +1452,7 @@ class cube_data_class:
         interp_method: str = "nearest",
     ):
 
-        """
+        '''
         Reproject cube to match the resolution, projection, and region of self.
 
         :param cube: Cube to align to self
@@ -1501,7 +1462,7 @@ class cube_data_class:
         :param interp_method: Interpolation method used to reproject cube (default is 'nearest')
 
         :return: Cube projected to self
-        """
+        '''
 
         if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
             grid = np.meshgrid(cube.ds["x"], cube.ds["y"])
@@ -1580,7 +1541,7 @@ class cube_data_class:
         """
         Merge another cube to the present one. It must have been aligned first (using align_cube)
 
-        :param cube: (cube_data_class) The cube to be merged to self
+        :param cube: [cube_data_class] --- The cube to be merged to self
         """
 
         # Merge the cubes (must be previously aligned before using align_cube)
@@ -1604,11 +1565,18 @@ class cube_data_class:
         self.author.append(cube.author)
         self.source.append(cube.source)
 
-    def average_cube(self, return_format="geotiff", return_variable=["vv"], save=True, path_save=None):
-        """
+    def average_cube(self, return_format: str = 'geotiff', return_variable: list = ['vv'], save: bool = True, path_save: str | None = None):
+        
+        '''
+        Compute the mean velocity at each pixel of he cube.
+        
+        :param return_format: [str] [default is 'geotiff'] --- Type of the file to be returned ('nc' or 'geotiff')
+        :param return_variable: [list] [default is ['vv']] --- Which variable's mean must be returned
+        :param save: [bool] [default is True] --- If True, save the file to path_save
+        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
-        """
+        '''
 
         vx_mean = self.ds["vx"].mean(dim="mid_date")
         vy_mean = self.ds["vy"].mean(dim="mid_date")
@@ -1642,19 +1610,23 @@ class cube_data_class:
                     )
 
                     # Create the GeoTIFF file
-                    with rasterio.open(
-                        f"{path_save}/mean_velocity_{variable}.tiff",
-                        "w",
-                        driver="GTiff",
-                        height=mean_v.shape[0],
-                        width=mean_v.shape[1],
-                        count=1,
-                        dtype=np.float32,
-                        crs=f"EPSG:{epsg_code}",
-                        transform=transform,
-                    ) as dst_ds_temp:
-                        # Write the array to the raster band
-                        dst_ds_temp.write(mean_v, 1)
+                    driver = gdal.GetDriverByName('GTiff')
+                    srs = osr.SpatialReference()
+                    srs.ImportFromEPSG(epsg_code)
+                    
+                    dst_ds_temp = driver.Create(f'{path_save}/mean_velocity_{variable}.tiff', mean_v.shape[1], mean_v.shape[0], 1,
+                                                gdal.GDT_Float32)
+                    # Set the GeoTransform
+                    dst_ds_temp.SetGeoTransform([
+                        np.min(self.ds['x'].values), self.resolution, 0,
+                        np.min(self.ds['y'].values) - self.resolution, 0, self.resolution
+                    ])
+                    # Write the array to the raster band
+                    dst_ds_temp.GetRasterBand(1).WriteArray(mean_v)
+                    # Set the projection
+                    dst_ds_temp.SetProjection(srs.ExportToWkt())
+                    # Properly close the dataset
+                    dst_ds_temp.FlushCache()
 
                 ds_mean.append(mean_v)
 
