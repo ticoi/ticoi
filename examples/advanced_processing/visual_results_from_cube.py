@@ -37,7 +37,6 @@ save_mean_velocity = True  # Save a .tiff file with the mean reulting velocities
 compute_result_load = False
 
 ## ------------------------------ Data selection --------------------------- ##
-# Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 # If TICOI_process is 'load', it can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
 cube_name = {"raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
