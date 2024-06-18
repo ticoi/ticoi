@@ -22,7 +22,6 @@ import pandas as pd
 import rasterio as rio
 import rasterio.enums
 import rasterio.warp
-import richdem as rd
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
@@ -1167,6 +1166,9 @@ class cube_data_class:
 
         dem_warped = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
 
+        if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
+            raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
+
         dem_warped, _ = rio.warp.reproject(
             source=dem,
             destination=dem_warped,
@@ -1180,14 +1182,25 @@ class cube_data_class:
 
         dem_warped = median_filter(dem_warped, size=blur_size)
 
-        dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
-        dem_rd.geotransform = self.ds.rio.transform().to_gdal()
+        # dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
+        # dem_rd.geotransform = self.ds.rio.transform().to_gdal()
 
-        slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
-        aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
-
-        slope[slope == slope.no_data] = np.nan
-        aspect[aspect == aspect.no_data] = np.nan
+        # slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
+        # aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
+        
+        # slope[slope == slope.no_data] = np.nan
+        # aspect[aspect == aspect.no_data] = np.nan
+        
+        dem_warped[dem_warped == src.nodata] = np.nan
+        grad_x, grad_y = np.gradient(dem_warped)
+        slope = np.pi/2. - np.arctan(np.sqrt(grad_x**2 + grad_y**2))
+        aspect = np.arctan2(-grad_x, grad_y)
+        
+        slope = np.where(np.isfinite(slope), slope, np.nan)
+        aspect = np.where(np.isfinite(aspect), aspect, np.nan)
+        
+        slope = np.rad2deg(slope)
+        aspect = np.rad2deg(aspect)
 
         slope = xr.Dataset(
             data_vars=dict(
