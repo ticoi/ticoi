@@ -1672,43 +1672,19 @@ class cube_data_class:
                 mean_v = np.flip(mean_v.T, axis=0)
 
                 if save:
-                    # Convert proj4 string to EPSG code
-                    crs = CRS(self.ds.proj4)
-                    epsg_code = crs.to_epsg()
-                    # Define the transform
-                    transform = from_origin(
-                        np.min(self.ds["x"].values), np.min(self.ds["y"].values), self.resolution, self.resolution
-                    )
-
                     # Create the GeoTIFF file
-                    driver = gdal.GetDriverByName("GTiff")
-                    srs = osr.SpatialReference()
-                    srs.ImportFromEPSG(epsg_code)
-
-                    dst_ds_temp = driver.Create(
+                    with rasterio.open(
                         f"{path_save}/mean_velocity_{variable}.tiff",
-                        mean_v.shape[1],
-                        mean_v.shape[0],
-                        1,
-                        gdal.GDT_Float32,
-                    )
-                    # Set the GeoTransform
-                    dst_ds_temp.SetGeoTransform(
-                        [
-                            np.min(self.ds["x"].values),
-                            self.resolution,
-                            0,
-                            np.min(self.ds["y"].values) - self.resolution,
-                            0,
-                            self.resolution,
-                        ]
-                    )
-                    # Write the array to the raster band
-                    dst_ds_temp.GetRasterBand(1).WriteArray(mean_v)
-                    # Set the projection
-                    dst_ds_temp.SetProjection(srs.ExportToWkt())
-                    # Properly close the dataset
-                    dst_ds_temp.FlushCache()
+                        'w',
+                        driver='GTiff',
+                        height=mean_v.shape[0],
+                        width=mean_v.shape[1],
+                        count=1,
+                        dtype=str(mean_v.dtype),
+                        crs=CRS.from_proj4(self.ds.proj4),
+                        transform=self.ds.rio.transform(),
+                    ) as dst:
+                        dst.write(mean_v, 1)
 
                 ds_mean.append(mean_v)
 
@@ -2023,7 +1999,17 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # Save the dataset to a netcdf file
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc")
+            encoding={'vx': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+                      'vy': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+            }
+            if result_quality is not None:
+                if "X_contribution" in result_quality:
+                    encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                    encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                if "Error_propagation" in result_quality:
+                    encoding['error_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
+                    encoding['error_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc")
 
@@ -2152,7 +2138,13 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc")
+            encoding={'dx': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+                      'dy': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+            }
+            if result_quality is not None and "X_contribution" in result_quality:
+                encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc")
 
