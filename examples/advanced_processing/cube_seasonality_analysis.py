@@ -74,10 +74,8 @@ proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
 assign_flag = True
-flag = None
-if assign_flag:
-    flag = xr.open_dataset(flag_file)
-    flag.load()
+if not assign_flag:
+    flag_file = None
 
 # Regularization method.s to be used (for each flag if flag is not None)
 regu = {0: 1, 1: "1accelnotnull"}  # With flag (0: stable ground, 1: glaciers)
@@ -109,7 +107,7 @@ preData_kwargs = {
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": "median_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": flag_file,  # Divide the data in several areas where different methods should be used
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
@@ -123,7 +121,7 @@ inversion_kwargs = {
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
     "coef": coef,  # Regularization coefficient.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
-    "flag": flag,  # Divide the data in several areas where different methods should be used
+    "flag": flag_file,  # Divide the data in several areas where different methods should be used
     "conf": False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
@@ -145,8 +143,8 @@ inversion_kwargs = {
 }  # Print information throughout TICOI processing
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 12  # Number of CPU to be used for parallelization
-block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
+nb_cpu = 6  # Number of CPU to be used for parallelization
+block_size = 0.3  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
 # Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
@@ -188,22 +186,16 @@ cube.load(cube_name if TICOI_process != "load" else cube_name["raw"], **load_kwa
 if TICOI_process == "load":
     print("[Data loading] Loading raw data...")
     data_raw = process_blocks_refine(
-        cube, nb_cpu=nb_cpu, block_size=block_size, returned=["raw"], inversion_kwargs=inversion_kwargs
+        cube,
+        nb_cpu=nb_cpu, 
+        block_size=block_size,
+        returned=["raw"],
+        inversion_kwargs=inversion_kwargs
     )
-    data_raw = [
-        pd.DataFrame(
-            data={
-                "date1": raw[0][0][:, 0],
-                "date2": raw[0][0][:, 1],
-                "vx": raw[0][1][:, 0],
-                "vy": raw[0][1][:, 1],
-                "errorx": raw[0][1][:, 2],
-                "errory": raw[0][1][:, 3],
-                "temporal_baseline": raw[0][1][:, 4],
-            }
-        )
-        for raw in data_raw
-    ]
+    data_raw = [pd.DataFrame(data={"date1": raw[0][0][:, 0], "date2": raw[0][0][:, 1],
+                                   "vx": raw[0][1][:, 0], "vy": raw[0][1][:, 1],
+                                   "errorx": raw[0][1][:, 2], "errory": raw[0][1][:, 3],
+                                   "temporal_baseline": raw[0][1][:, 4]}) for raw in data_raw]
 
 # Prepare interpolation dates
 first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
@@ -226,12 +218,12 @@ cube_interp, cube_invert = None, None
 # TICOI computation is then parallelized among those cubes
 if TICOI_process == "block_process":
     result = process_blocks_refine(
-        cube,
-        nb_cpu=nb_cpu,
-        block_size=block_size,
+        cube, 
+        nb_cpu=nb_cpu, 
+        block_size=block_size, 
         returned=["raw", "interp"],
         preData_kwargs=preData_kwargs,
-        inversion_kwargs=inversion_kwargs,
+        inversion_kwargs=inversion_kwargs
     )
 
 # Direct computation of the whole TICOI cube
@@ -256,45 +248,26 @@ elif TICOI_process == "load":
 
     print("[TICOI processing] Loading TICOI data...")
     result = process_blocks_refine(
-        cube_interp, nb_cpu=nb_cpu, block_size=block_size, returned="raw", inversion_kwargs=inversion_kwargs
+        cube_interp, nb_cpu=nb_cpu, 
+        block_size=block_size, 
+        returned="raw", 
+        inversion_kwargs=inversion_kwargs
     )
-    result = [
-        pd.DataFrame(
-            data={
-                "First_date": r[0][0][:, 0],
-                "Second_date": r[0][0][:, 1],
-                "vx": r[0][1][:, 0],
-                "vy": r[0][1][:, 1],
-                "errorx": r[0][1][:, 2],
-                "errory": r[0][1][:, 3],
-                "temporal_baseline": r[0][1][:, 4],
-            }
-        )
-        for r in result
-    ]
+    result = [pd.DataFrame(data={"date1": r[0][0][:, 0], "date2": r[0][0][:, 1],
+                                 "vx": r[0][1][:, 0], "vy": r[0][1][:, 1],
+                                 "errorx": r[0][1][:, 2], "errory": r[0][1][:, 3],
+                                 "temporal_baseline": r[0][1][:, 4]}) for r in result]
 
 if TICOI_process == "block_process" or TICOI_process == "direct_process":
     # Raw data
-    data_raw = [
-        pd.DataFrame(
-            data={
-                "date1": r[0][0][0][:, 0],
-                "date2": r[0][0][0][:, 1],
-                "vx": r[0][0][1][:, 0],
-                "vy": r[0][0][1][:, 1],
-                "errorx": r[0][0][1][:, 2],
-                "errory": r[0][0][1][:, 3],
-                "temporal_baseline": r[0][0][1][:, 4],
-            }
-        )
-        for r in result
-    ]
+    data_raw = [pd.DataFrame(data={"date1": r[0][0][0][:, 0], "date2": r[0][0][0][:, 1],
+                                   "vx": r[0][0][1][:, 0], "vy": r[0][0][1][:, 1],
+                                   "errorx": r[0][0][1][:, 2], "errory": r[0][0][1][:, 3],
+                                   "temporal_baseline": r[0][0][1][:, 4]}) for r in result]
     result = [r[1] for r in result]  # Result of the interpolation
 
 stop.append(time.time())
-print(
-    f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s'
-)
+print(f'[TICOI processing] TICOI {"processing" if TICOI_process != "load" else "loading"} took {round(stop[-1] - start[-1], 0)} s')
 
 
 # %%========================================================================= #
@@ -313,13 +286,9 @@ if TICOI_process != "load":
             source = f'Temporal inversion on cubes {", ".join(cube.filename)} using TICOI'
         else:
             source = f"Temporal inversion on cube {cube.filename} using TICOI"
-        source += (
-            f' with a selection of dates among {load_kwargs["pick_date"]},'
-            if load_kwargs["pick_date"] is not None
-            else "" + f' with a selection of the temporal baselines among {load_kwargs["pick_temp_bas"]}'
-            if load_kwargs["pick_temp_bas"] is not None
-            else ""
-        )
+        source += (f' with a selection of dates among {load_kwargs["pick_date"]},' 
+                        if load_kwargs["pick_date"] is not None else "" + f' with a selection of the temporal baselines among {load_kwargs["pick_temp_bas"]}'
+                        if load_kwargs["pick_temp_bas"] is not None else "")
 
         if inversion_kwargs["apriori_weight"]:
             source += " and apriori weight"
@@ -342,7 +311,7 @@ if TICOI_process != "load" and save:
     # Save TICOI results to a netCDF file, thus obtaining a new data cube
     cube_interp = cube.write_result_ticoi(
         result,
-        source_interp,
+        source_interp, 
         sensor,
         filename=f"{result_fn}_interp",
         savepath=path_save if save else None,
@@ -423,9 +392,7 @@ def match_sine(
             # Find the best matching sinus to TICOI results
             if several_freq is None:
                 several_freq = 1
-            guess = np.concatenate(
-                [np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]]
-            )
+            guess = np.concatenate([np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]])
             popt, pcov = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates, vv_filt, p0=guess)
 
             f = 1 / 365.25
@@ -434,10 +401,7 @@ def match_sine(
             if phi < 0:
                 phi += 2 * np.pi
 
-            first_max_day = (
-                pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2 * np.pi * f)), "D")
-                + d["First_date"].min()
-            )
+            first_max_day = (pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2 * np.pi * f)), "D") + d["date1"].min())
             max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
 
             # A = [popt[2*freq] for freq in range(several_freq)]
@@ -449,14 +413,10 @@ def match_sine(
 
             if raw_seasonality:
                 #  Find the best matching sinus to raw data
-                dates_raw = (d_raw.index - d["First_date"].min()).days.to_numpy()
+                dates_raw = (d_raw.index - d["date1"].min()).days.to_numpy()
                 raw_c = d_raw["vv"] - d_raw["vv"].mean()
-                guess_raw = np.concatenate(
-                    [np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]]
-                )
-                popt_raw, pcov_raw = curve_fit(
-                    lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw
-                )
+                guess_raw = np.concatenate([np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]])
+                popt_raw, pcov_raw = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw)
 
                 # Parameters
                 A_raw = popt_raw[0]
@@ -464,10 +424,7 @@ def match_sine(
                 if phi_raw < 0:
                     phi_raw += 2 * np.pi
 
-                first_max_day_raw = (
-                    pd.Timedelta(int((right_phi(phi_raw) + (np.pi if A_raw < 0 else 0)) / (2 * np.pi * f)), "D")
-                    + d["First_date"].min()
-                )
+                first_max_day_raw = (pd.Timedelta(int((right_phi(phi_raw) + (np.pi if A_raw < 0 else 0)) / (2 * np.pi * f)), "D") + d["date1"].min())
                 max_day_raw = (first_max_day_raw - pd.Timestamp(year=first_max_day_raw.year, month=1, day=1)).days
 
         except RuntimeError:
@@ -495,15 +452,10 @@ def match_sine(
             return A * np.sin(2 * np.pi * f * t + phi) + off
 
         # Initial guess of the best matching sinus parameters
-        guess = np.array(
-            [
-                np.max(2 / N * np.abs(vv_win_tf)),
-                freq[np.argmax(np.abs(vv_win_tf))],
-                np.angle(vv_win_tf)[np.argmax(np.abs(vv_win_tf))],
-                np.mean(vv),
-            ],
-            dtype="float",
-        )
+        guess = np.array([np.max(2 / N * np.abs(vv_win_tf)),
+                          freq[np.argmax(np.abs(vv_win_tf))],
+                          np.angle(vv_win_tf)[np.argmax(np.abs(vv_win_tf))],
+                          np.mean(vv)], dtype="float")
 
         try:
             popt, pcov = curve_fit(sine, dates, vv, p0=guess)
@@ -511,10 +463,7 @@ def match_sine(
             if phi < 0:
                 phi += 2 * np.pi
 
-            first_max_day = (
-                pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2 * np.pi * f)), "D")
-                + d["First_date"].min()
-            )
+            first_max_day = (pd.Timedelta(int((right_phi(phi) + (np.pi if A < 0 else 0)) / (2 * np.pi * f)), "D") + d["date1"].min())
             max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days
 
         except RuntimeError:
@@ -547,18 +496,14 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
         var = raw["vv"].rolling(window="7D", center=True).std(ddof=0).drop_duplicates().dropna().median().item()
 
     elif local_var_method.split("_")[0] == "uniform":
-        period_between_dates = (
-            np.diff(np.sort(np.concatenate([raw["date1"], raw["date2"]]))).astype("timedelta64[D]").astype("int")
-        )
+        period_between_dates = (np.diff(np.sort(np.concatenate([raw["date1"], raw["date2"]]))).astype("timedelta64[D]").astype("int"))
         min_period = np.min(period_between_dates[period_between_dates > 0])
         var_dates = pd.date_range(start=raw["date1"].min(), end=raw["date2"].max(), freq=f"{min_period}D")
         local_var = pd.Series(index=var_dates)
 
         if local_var_method == "uniform_7d":
             for date in var_dates:
-                local_var[date] = raw.loc[
-                    (raw.index > date - pd.Timedelta("3D")) & (raw.index < date + pd.Timedelta("3D")), "vv"
-                ].std(ddof=0)
+                local_var[date] = raw.loc[(raw.index > date - pd.Timedelta("3D")) & (raw.index < date + pd.Timedelta("3D")), "vv"].std(ddof=0)
         elif local_var_method == "uniform_all":
             for date in var_dates:
                 local_var[date] = raw.loc[(raw["date1"] < date) & (raw["date2"] > date), "vv"].std(ddof=0)
@@ -581,15 +526,7 @@ srs = osr.SpatialReference()
 srs.ImportFromEPSG(int(proj.split(":")[1]))
 
 # Remove pixels with no data
-empty = list(
-    filter(
-        bool,
-        [
-            d if not (result[d].empty and result[d][result[d]["vx"] == 0].shape[0] == 0) else False
-            for d in range(len(result))
-        ],
-    )
-)
+empty = list(filter(bool,[d if not (result[d].empty and result[d][result[d]["vx"] == 0].shape[0] == 0) else False for d in range(len(result))]))
 positions = np.array(list(itertools.product(cube.ds["x"].values, cube.ds["y"].values)))[empty, :]
 useful_result = [result[i] for i in empty]
 useful_data_raw = [data_raw[i] for i in empty]
@@ -624,8 +561,7 @@ if raw_seasonality:
     peak_raw_map[:, :] = np.nan
 
 result_tqdm = tqdm(zip(useful_result, useful_data_raw), total=len(useful_result), mininterval=0.5)
-match_res = np.array(
-    Parallel(n_jobs=nb_cpu, verbose=0)(
+match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality, d_raw=raw)
         for d, raw in result_tqdm
     )
