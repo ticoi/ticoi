@@ -2009,9 +2009,10 @@ class cube_data_class:
                 if "Error_propagation" in result_quality:
                     encoding['error_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
                     encoding['error_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
+            start = time.time()
             cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
             if verbose:
-                print(f"[Writing results] Saved to {savepath}/{filename}.nc")
+                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
         return cubenew
 
@@ -2065,10 +2066,12 @@ class cube_data_class:
         ]
         short_name = ["date1", "date2", "x_displacement", "y_displacement", "xcount_x", "xcount_y"]
         unit = ["days", "days", "m", "m", "no unit", "no unit"]
-
-        # Build cumulative displacement time series
-        df_list = [reconstruct_common_ref(df, result_quality) for df in result]
-
+        
+        start = time.time()
+        from joblib import Parallel, delayed
+        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, result_quality) for df in result)
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+        
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
         cubenew.ds["reference_date"] = xr.DataArray(
@@ -2079,24 +2082,18 @@ class cube_data_class:
             "unit": "days",
             "description": "first date of the cumulative displacement time series",
         }
-
-        # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
-        second_date_list = list(
-            set(
-                list(
-                    itertools.chain.from_iterable(
-                        [df["Second_date"].values for df in df_list if not np.isnan(df["dx"].iloc[0])]
-                    )
-                )
-            )
-        )
+        
+        second_date_list = pd.concat(df["Second_date"] for df in df_list if not np.isnan(df["dx"].iloc[0])).drop_duplicates().tolist()
+        second_date_list = [np.datetime64(date, 's') for date in second_date_list]
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
+        start = time.time()
         df_list2 = []
         for i, df in enumerate(df_list):
             df.index = df["Second_date"]
             df_list2.append(df.reindex(second_date_list))
+        print(f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s")
         del df_list
 
         # name of variable to store
@@ -2144,9 +2141,10 @@ class cube_data_class:
             if result_quality is not None and "X_contribution" in result_quality:
                 encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
                 encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+            start = time.time()
             cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
             if verbose:
-                print(f"[Writing results] Saved to {savepath}/{filename}.nc")
+                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
         return cubenew
 
