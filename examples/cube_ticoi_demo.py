@@ -52,19 +52,12 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-# path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
-# result_fn = "test"  # Name of the netCDF file to be created
-
 # List of the paths where the data cubes are stored
-cube_name = f'/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'/media/tristan/Data3/Hala_lake/Landsat7_refine/ticoi_test/'  # Path where to stored the results
-result_fn = "Hala_lake_disp_LS7_invert"  # Name of the netCDF file to be created
-flag_shp = f'~/data/HMA_surging_glacier_inventory/HMA_surging_glacier_inventory_gamdam_v2_all.gpkg'
-dem_file =  f'/media/tristan/Data3/Hala_lake/Landsat8/hala_cop30_utm_30m.tif'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
+result_fn = "test"  # Name of the netCDF file to be created
 
-
-proj = "EPSG:32647"  # EPSG system of the given coordinates
+proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion
@@ -76,7 +69,7 @@ load_kwargs = {
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": None,  # Select dates ([min, max] or None to select all)
+    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
