@@ -989,7 +989,7 @@ class cube_data_class:
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
-                flag = np.round(flag["flags"].sel(x=i, y=j, method="nearest").values)
+                flag = np.round(flag["flag"].sel(x=i, y=j, method="nearest").values)
                 regu = regu[flag]
                 coef = coef[flag]
             else:
@@ -1051,13 +1051,14 @@ class cube_data_class:
         """
 
         if isinstance(delete_outliers, int):
-            self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
-        else:
+            inlier_mask = dask_filt_warpper(self.ds['vx'], self.ds['vy'], filt_method='error', error_thres=delete_outliers)
+            # self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
+        
+        elif isinstance(delete_outliers, str):
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
             axis = self.ds["vx"].dims.index("mid_date")
-            inlier_mask = dask_filt_warpper(
-                self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope, aspect=aspect, axis=axis
-            )
+            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, 
+                                            slope=slope, aspect=aspect, axis=axis)
 
             if flag is not None:
                 if delete_outliers != "vvc_angle":
@@ -1065,11 +1066,12 @@ class cube_data_class:
                     flag_condition = flag == 0
                     flag_condition = np.expand_dims(flag_condition, axis=axis)
                     inlier_mask = np.logical_or(inlier_mask, flag_condition)
+        else:
+            raise ValueError('delete_outliers must be a int or a string, not {type(delete_outliers)}')
 
-            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
-
-            for var in ["vx", "vy"]:
-                self.ds[var] = self.ds[var].where(inlier_flag)
+        inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
+        for var in ["vx", "vy"]:
+            self.ds[var] = self.ds[var].where(inlier_flag)
 
         self.ds = self.ds.persist()
 
@@ -1208,8 +1210,7 @@ class cube_data_class:
 
         return flag
 
-    def filter_cube(
-        self,
+    def filter_cube(self,
         i: int | float | None = None,
         j: int | float | None = None,
         smooth_method: str = "gaussian",
@@ -1220,6 +1221,7 @@ class cube_data_class:
         unit: int = 365,
         delete_outliers: str | float | None = None,
         flag: xr.Dataset | str | None = None,
+        save_flag_path: str | None = None,
         dem_file: str | None = None,
         regu: int | str = 1,
         solver: str = "LSMR_ini",
@@ -1244,6 +1246,7 @@ class cube_data_class:
         :param unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
         :param delete_outliers: [str | float | None] [default is None] --- If float delete all velocities which a quality indicator higher than delete_outliers
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param save_flag_path: [str | None] [default is None] --- Path where to save a tiff image of the flags
         :param regu: [int | str] [default is 1] --- Regularisation of the solver
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
@@ -1352,8 +1355,6 @@ class cube_data_class:
             if isinstance(flag, str): 
                 if flag.split('.')[-1] == 'nc': # If flag is a netCDF file
                     flag = xr.open_dataset(flag)
-                    if 'flags' in list(flag.variables):
-                        flag = flag.rename({'flags': 'flag'})
                 elif flag.split('.')[-1] == 'shp': # If flag is a shape file 
                     flag = self.create_flag(flag)
                 else:
@@ -1363,7 +1364,27 @@ class cube_data_class:
                 flag = flag.load()
             else:
                 raise ValueError("flag must be a str or xr.Dataset!")
-
+            
+            if 'flags' in list(flag.variables):
+                flag = flag.rename({'flags': 'flag'})
+            
+            # Save the flags as a .tiff file
+            if save_flag_path is not None:
+                flag_np = flag['flag'].values
+                
+                driver = gdal.GetDriverByName("GTiff")
+                srs = osr.SpatialReference()
+                srs.ImportFromEPSG(int(proj.split(':')[1]))
+                
+                res = flag.x.values[1] - flag.x.values[0]
+                tiff = driver.Create(f'{save_flag_path}/flags.tiff', flag_np.shape[1], flag_np.shape[0], 1, gdal.GDT_Int16)
+                tiff.SetGeoTransform([np.min(flag.x.values), res, 0,
+                                      np.max(flag.y.values), 0, -res])
+                tiff.GetRasterBand(1).WriteArray(flag_np)
+                
+                tiff = None
+                driver = None
+            
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
@@ -1433,7 +1454,6 @@ class cube_data_class:
             obs_filt.attrs["units"] = "m/y"
 
         # Unify the observations to displacement to provide displacement values during inversion
-        # if velo_or_disp == "velo":
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
@@ -1573,7 +1593,7 @@ class cube_data_class:
         :param return_format: [str] [default is 'geotiff'] --- Type of the file to be returned ('nc' or 'geotiff')
         :param return_variable: [list] [default is ['vv']] --- Which variable's mean must be returned
         :param save: [bool] [default is True] --- If True, save the file to path_save
-        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
+        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
         '''

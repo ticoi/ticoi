@@ -10,6 +10,7 @@ import ticoi.pixel_class
 
 
 class dataframe_data:
+    
     """
     Object to define a pd.Dataframe storing velocity observations
     """
@@ -31,15 +32,21 @@ class dataframe_data:
             self.dataf["temporal_baseline"] = np.array([delta[i].days for i in range(delta.shape[0])])
         self.dataf["offset_bar"] = delta // 2  # to plot the temporal baseline of the plots
 
-    def set_vx_vy_invert(self, conversion: int = 365):
+    def set_vx_vy_invert(self, type_data: str = "invert", conversion: int = 365):
+        
         """
         Convert displacements into velocity
+        
         :param conversion:  [int] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
-        :return:
         """
-        self.dataf["result_dx"] = self.dataf["result_dx"] / self.dataf["temporal_baseline"] * conversion
-        self.dataf["result_dy"] = self.dataf["result_dy"] / self.dataf["temporal_baseline"] * conversion
-        self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
+        
+        if type_data == "invert":
+            self.dataf["result_dx"] = self.dataf["result_dx"] / self.dataf["temporal_baseline"] * conversion
+            self.dataf["result_dy"] = self.dataf["result_dy"] / self.dataf["temporal_baseline"] * conversion
+            self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
+        else:
+            self.dataf["vx"] = self.dataf["vx"] / self.dataf["temporal_baseline"] * conversion
+            self.dataf["vy"] = self.dataf["vy"] / self.dataf["temporal_baseline"] * conversion
 
     def set_vv(self):
         """
@@ -109,21 +116,21 @@ class pixel_class:
         elif type_data == "interp":
             self.datainterp = dataframe_data(dataf_ilf)
             datatemp = self.datainterp
-        elif type_data == "obs":
+        elif type_data == "obs" or type_data == "obs_filt":
             self.dataobs = dataframe_data(dataf_ilf)
             datatemp = self.dataobs
         else:
-            raise ValueError("Please enter invert for inverted results and obs for observation")
+            raise ValueError("Please enter 'invert' for inverted results, 'interp' for ineterpolated results or 'obs' for observation")
 
         datatemp.set_temporal_baseline_central_date_offset_bar()  # set the temporal baseline,
-        if type_data == "invert":
+        if type_data == "invert" or type_data == "obs_filt":
             datatemp.set_vx_vy_invert(conversion)  # convert displacement in vx and vy
         if "vv" in variables:
             datatemp.set_vv()
         datatemp.set_minmax()
 
     def load(self,
-        dataf: pd.DataFrame,
+        dataf: pd.DataFrame | List[pd.DataFrame],
         type_data: str = "obs",
         dataformat: str = "df",
         save: bool = False,
@@ -137,13 +144,14 @@ class pixel_class:
         
         """
 
-        :param dataf: [pd.DataFrame] --- observations orresults from the inversion
+        :param dataf: [pd.DataFrame | List[pd.DataFrame]] --- observations orresults from the inversion
         :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
         :param save: [bool] [default is False]  --- if True, save the figures
         :param show: [bool] [default is True]  --- if True, show the figures
         :param figsize: tuple[int, int]  --- size of the figure
         :param unit: [str]   --- unit wanted for plotting
+        :param filt: [List[bool] | None] [default is None] --- Are dataf data filtered ? Put True if dataf data are displacemenst, None if all data are not filtered
         :param path_save:[str] --- path where to store the data
         :param variables: [List[str]] [default is ['vv']] --- list of variable to plot
         :param A: [np.array] --- design matrix
@@ -161,7 +169,7 @@ class pixel_class:
         dataf: pd.DataFrame,
         type_data: str = "obs",
         dataformat: str = "df",
-        variables: List[str] = ["vv", "vx", "vy"],
+        variables: List[str] = ["vv", "vx", "vy"]
     ):
         
         """
@@ -181,7 +189,7 @@ class pixel_class:
         list_dataf: pd.DataFrame,
         list_data_type=["obs", "invert"],
         dataformat: str = "df",
-        variables: List[str] = ["vv", "vx", "vy"],
+        variables: List[str] = ["vv", "vx", "vy"]
     ):
         
         """
@@ -196,7 +204,7 @@ class pixel_class:
 
     def get_dataf_invert_or_obs_or_interp(self, 
         type_data: str = "obs"
-    ) -> (pd.DataFrame, str):
+    ) -> (pd.DataFrame, str): # type: ignore
         
         """
         Get dataframe either obs or invert
@@ -236,7 +244,7 @@ class pixel_class:
 
     def get_direction(self, 
         data: "ticoi.pixel_class.dataframe_data"
-    ) -> (np.array, np.array):
+    ) -> (np.array, np.array): # type: ignore
         
         """
         Get the direction of the provided data
@@ -734,9 +742,9 @@ class pixel_class:
             print("Please provide A inside load")
             return "Please provide A inside load"
 
-        self.dataobs.dataf[self.dataobs.dataf["author"] == "L. Charrier, J. Mouginot, R.Millan, A.Derkacheva"][
-            "author"
-        ] = "IGE"
+        # self.dataobs.dataf[self.dataobs.dataf["author"] == "L. Charrier, J. Mouginot, R.Millan, A.Derkacheva"][
+        #     "author"
+        # ] = "IGE"
         dataf = self.dataobs.dataf.replace("L. Charrier, J. Mouginot, R.Millan, A.Derkacheva", "IGE")
         dataf = dataf.replace("S. Leinss, L. Charrier", "Leinss")
 
