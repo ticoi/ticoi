@@ -42,9 +42,12 @@ compute_result_load = False
 ## ------------------------------ Data selection --------------------------- ##
 # cube_name can be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
 # If it is an str (or list of str), we suppose we want to load TICOI results (like 'interp' in the dict)
-cube_name = {"raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
-             "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
-             "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'}
+
+cube_name = {
+    "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+    "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
+    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'
+}
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 proj = "EPSG:32632"  # EPSG system of the given coordinates
@@ -104,7 +107,7 @@ if type(cube_name) == dict and "raw" in cube_name.keys():
     # Load the cube.s
     cube = cube_data_class()
     cube.load(cube_name["raw"], **load_kwargs)
-    
+
     stop.append(time.time())
     print(f"[Data loading] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ")
     print(f"[Data loading] Data loading took {round(stop[-1] - start[-1], 3)} s")
