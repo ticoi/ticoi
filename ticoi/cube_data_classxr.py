@@ -27,6 +27,7 @@ from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
+from osgeo import gdal, osr
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -982,7 +983,7 @@ class cube_data_class:
         rolling_mean: xr.Dataset | None = None,
         visual: bool = False,
         output_format="np",
-    ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]):
+    ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]): # type: ignore
 
         """
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
@@ -1100,13 +1101,14 @@ class cube_data_class:
         """
 
         if isinstance(delete_outliers, int):
-            self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
-        else:
+            inlier_mask = dask_filt_warpper(self.ds['vx'], self.ds['vy'], filt_method='error', error_thres=delete_outliers)
+            # self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
+        
+        elif isinstance(delete_outliers, str):
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
             axis = self.ds["vx"].dims.index("mid_date")
-            inlier_mask = dask_filt_warpper(
-                self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope, aspect=aspect, axis=axis
-            )
+            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, 
+                                            slope=slope, aspect=aspect, axis=axis)
 
             if flag is not None:
                 if delete_outliers != "vvc_angle":
@@ -1114,11 +1116,12 @@ class cube_data_class:
                     flag_condition = flag == 0
                     flag_condition = np.expand_dims(flag_condition, axis=axis)
                     inlier_mask = np.logical_or(inlier_mask, flag_condition)
+        else:
+            raise ValueError('delete_outliers must be a int or a string, not {type(delete_outliers)}')
 
-            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
-
-            for var in ["vx", "vy"]:
-                self.ds[var] = self.ds[var].where(inlier_flag)
+        inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
+        for var in ["vx", "vy"]:
+            self.ds[var] = self.ds[var].where(inlier_flag)
 
         self.ds = self.ds.persist()
 
@@ -1274,8 +1277,7 @@ class cube_data_class:
 
         return flag
 
-    def filter_cube(
-        self,
+    def filter_cube(self,
         i: int | float | None = None,
         j: int | float | None = None,
         smooth_method: str = "gaussian",
@@ -1429,7 +1431,10 @@ class cube_data_class:
                 flag = flag.load()
             else:
                 raise ValueError("flag must be a str or xr.Dataset!")
-
+            
+            if 'flags' in list(flag.variables):
+                flag = flag.rename({'flags': 'flag'})
+            
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
@@ -1498,7 +1503,6 @@ class cube_data_class:
             obs_filt.attrs["units"] = "m/y"
 
         # Unify the observations to displacement to provide displacement values during inversion
-        # if velo_or_disp == "velo":
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
@@ -1644,7 +1648,7 @@ class cube_data_class:
         :param return_format: [str] [default is 'geotiff'] --- Type of the file to be returned ('nc' or 'geotiff')
         :param return_variable: [list] [default is ['vv']] --- Which variable's mean must be returned
         :param save: [bool] [default is True] --- If True, save the file to path_save
-        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
+        :param path_save: [str | None] [default is None] --- Path where to save the mean velocity file
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
         """
