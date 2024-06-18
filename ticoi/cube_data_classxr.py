@@ -1272,7 +1272,6 @@ class cube_data_class:
         unit: int = 365,
         delete_outliers: str | float | None = None,
         flag: xr.Dataset | str | None = None,
-        save_flag_path: str | None = None,
         dem_file: str | None = None,
         regu: int | str = 1,
         solver: str = "LSMR_ini",
@@ -1297,7 +1296,6 @@ class cube_data_class:
         :param unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
         :param delete_outliers: [str | float | None] [default is None] --- If float delete all velocities which a quality indicator higher than delete_outliers
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        :param save_flag_path: [str | None] [default is None] --- Path where to save a tiff image of the flags
         :param regu: [int | str] [default is 1] --- Regularisation of the solver
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
@@ -1420,23 +1418,6 @@ class cube_data_class:
             
             if 'flags' in list(flag.variables):
                 flag = flag.rename({'flags': 'flag'})
-            
-            # Save the flags as a .tiff file
-            if save_flag_path is not None:
-                flag_np = flag['flag'].values
-                
-                driver = gdal.GetDriverByName("GTiff")
-                srs = osr.SpatialReference()
-                srs.ImportFromEPSG(int(proj.split(':')[1]))
-                
-                res = flag.x.values[1] - flag.x.values[0]
-                tiff = driver.Create(f'{save_flag_path}/flags.tiff', flag_np.shape[1], flag_np.shape[0], 1, gdal.GDT_Int16)
-                tiff.SetGeoTransform([np.min(flag.x.values), res, 0,
-                                      np.max(flag.y.values), 0, -res])
-                tiff.GetRasterBand(1).WriteArray(flag_np)
-                
-                tiff = None
-                driver = None
             
             if isinstance(regu, dict):
                 regu = list(regu.values())

@@ -14,12 +14,8 @@ import os
 import time
 import warnings
 
-import xarray as xr
-
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.pixel_class import pixel_class
-from ticoi.core import visualization_core
-from ticoi.interpolation_functions import visualisation_interpolation
 
 
 # %%========================================================================= #
@@ -52,20 +48,20 @@ path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "re
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343654.5,5091279.7 # Pixel coordinates
+i, j = 343686.3,5091294.9 # Pixel coordinates
 
 ## ------------------------- Visualization parameters ---------------------- ##
 colors = ["blueviolet", "orange"]
 cmap = "rainbow"
 log_scale = False
-option_visual = [ # Visualization options for raw data and inverted results
+option_visual = [ # Visualization options for raw data and inverted results
     "obs_xy",
     "obs_magnitude",
     "obs_vxvy_quality",
     "xcount_xy",
     "xcount_vv"
 ]
-option_visual_interp = [ # Visualization options for interpolated results
+option_visual_interp = [ # Visualization options for interpolated results
     "interp_xy_overlaid",
     "interp_xy_overlaid_zoom",
     "invertvv_overlaid",
@@ -78,7 +74,7 @@ load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-    "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "buffer": [i, j, 250],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
