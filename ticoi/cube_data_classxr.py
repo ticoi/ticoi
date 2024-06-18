@@ -22,6 +22,7 @@ import pandas as pd
 import rasterio as rio
 import rasterio.enums
 import rasterio.warp
+import richdem as rd
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
@@ -1182,29 +1183,29 @@ class cube_data_class:
             dst_shape=self.ds.rio.shape,
             resampling=rio.warp.Resampling.bilinear,
         )
-
-        dem_warped = median_filter(dem_warped, size=blur_size)
-
-        # dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
-        # dem_rd.geotransform = self.ds.rio.transform().to_gdal()
-
-        # slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
-        # aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
-        
-        # slope[slope == slope.no_data] = np.nan
-        # aspect[aspect == aspect.no_data] = np.nan
-        
         dem_warped[dem_warped == src.nodata] = np.nan
-        grad_x, grad_y = np.gradient(dem_warped)
-        slope = np.pi/2. - np.arctan(np.sqrt(grad_x**2 + grad_y**2))
-        aspect = np.arctan2(-grad_x, grad_y)
         
-        slope = np.where(np.isfinite(slope), slope, np.nan)
-        aspect = np.where(np.isfinite(aspect), aspect, np.nan)
-        
-        slope = np.rad2deg(slope)
-        aspect = np.rad2deg(aspect)
 
+        dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
+        dem_rd.geotransform = self.ds.rio.transform().to_gdal()
+
+        slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
+        aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
+        
+        slope[slope == slope.no_data] = np.nan
+        aspect[aspect == aspect.no_data] = np.nan
+        
+        slope = median_filter(slope, size=blur_size)
+        aspect = median_filter(aspect, size=blur_size)
+        
+        # grad_y, grad_x = np.gradient(dem_warped)
+        # slope = np.arctan(np.sqrt(grad_x**2 + grad_y**2))
+        # aspect = np.rad2deg(np.arctan2(grad_y, -grad_x))
+        # aspect = np.where(aspect < 0, 90.0 - aspect, np.where(aspect > 90.0, 360.0 - aspect + 90.0, 90.0 - aspect))
+        # slope = np.where(np.isfinite(slope), slope, np.nan)
+        # slope = np.rad2deg(slope)
+        # aspect = np.where(np.isfinite(aspect), aspect, np.nan)
+        
         slope = xr.Dataset(
             data_vars=dict(
                 slope=(["y", "x"], np.array(slope)),
@@ -1218,6 +1219,7 @@ class cube_data_class:
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )
 
+        
         return slope, aspect
 
     def create_flag(self, flag_shp: str = None, field_name: str | None = None, default_value: str | int | None = None):
