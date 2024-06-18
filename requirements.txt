@@ -20,3 +20,5 @@ shapely
 tqdm
 xarray
 zarr
+h5py
+h5netcdf

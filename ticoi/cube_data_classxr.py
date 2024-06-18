@@ -1674,7 +1674,7 @@ class cube_data_class:
                 if save:
                     # Create the GeoTIFF file
                     with rasterio.open(
-                        f"{path_save}/mean_velocity_{variable}.tiff",
+                        f"{path_save}/mean_velocity_{variable}.tif",
                         'w',
                         driver='GTiff',
                         height=mean_v.shape[0],
