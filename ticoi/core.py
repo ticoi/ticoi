@@ -1118,6 +1118,7 @@ def load_block(
     if flag is not None:
         block_flag = flag.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
         block_flag = block_flag.persist()
+    else:block_flag = None
     duration = time.time() - start
 
     return block, block_flag, duration

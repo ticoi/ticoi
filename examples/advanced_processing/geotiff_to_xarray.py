@@ -3,17 +3,16 @@ import glob
 import time
 from datetime import date, datetime
 
+import dask.array as da
 import geopandas as gpd
 import rioxarray
 import xarray as xr
 from pyproj import CRS
 from rasterio import features
-import dask.array as da
-
 
 start = time.time()
 
-dst_nc = '/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc'
+dst_nc = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc"
 
 file_path = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Velo_refine/filtered/"
 
