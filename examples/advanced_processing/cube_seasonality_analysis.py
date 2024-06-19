@@ -65,6 +65,7 @@ cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 #     "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
 #     "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
 # }
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
