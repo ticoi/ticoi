@@ -11,73 +11,6 @@ from rasterio import features
 import dask.array as da
 
 
-def determine_optimal_chunk_size(
-    cube,
-    variable_name: str = "vx",
-    x_dim: str = "x",
-    y_dim: str = "y",
-    time_dim: str = "mid_date",
-    verbose: bool = False,
-) -> (int, int, int):
-
-    """
-    A function to determine the optimal chunk size for a given time series array based on its size.
-
-    :param variable_name: [str] [default is 'vx'] --- Name of the variable containing the time series array
-    :param x_dim: [str] [default is 'x'] --- Name of the x dimension in the array
-    :param y_dim: [str] [default is 'y'] --- Name of the y dimension in the array
-    :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset cube
-    :param verbose: [bool] [default is False] --- Boolean flag to control verbosity of output
-
-    :return tc: [int] --- Chunk size along the time dimension
-    :return yc: [int] --- Chunk size along the y dimension
-    :return xc: [int] --- Chunk size along the x dimension
-    """
-
-    if verbose:
-        print("[Data loading] Dask chunk size:")
-
-    # set chunk size to 5 MB if single time series array < 1 MB in size, else increase to max of 1 GB chunk sizes.
-    time_series_array_size = (
-        cube[variable_name]
-        .sel(
-            {
-                x_dim: cube[variable_name][x_dim].values[0],
-                y_dim: cube[variable_name][y_dim].values[0],
-            }
-        )
-        .nbytes
-    )
-    mb = 1048576
-    if time_series_array_size < 1e6:
-        chunk_size_limit = 50 * mb
-    elif time_series_array_size < 1e7:
-        chunk_size_limit = 100 * mb
-    elif time_series_array_size < 1e8:
-        chunk_size_limit = 200 * mb
-    else:
-        chunk_size_limit = 1000 * mb
-
-    time_axis = cube[variable_name].dims.index(time_dim)
-    x_axis = cube[variable_name].dims.index(x_dim)
-    y_axis = cube[variable_name].dims.index(y_dim)
-    axis_sizes = {i: -1 if i == time_axis else "auto" for i in range(3)}
-    dask_array = da.from_array(cube[variable_name].data)
-    arr = dask_array.rechunk(axis_sizes, block_size_limit=chunk_size_limit, balance=True)
-    tc, yc, xc = arr.chunks[time_axis][0], arr.chunks[y_axis][0], arr.chunks[x_axis][0]
-    chunksize = cube[variable_name][:tc, :yc, :xc].nbytes / 1e6
-    if verbose:
-        print("[Data loading] Chunk shape:", "(" + ",".join([str(x) for x in [tc, yc, xc]]) + ")")
-        print(
-            "[Data loading] Chunk size:",
-            cube[variable_name][:tc, :yc, :xc].nbytes,
-            "(" + str(round(chunksize, 1)) + "MB)",
-        )
-    return tc, yc, xc
-
-
-
-
 start = time.time()
 
 dst_nc = '/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc'
@@ -180,39 +113,6 @@ ds_combined.attrs.update(
     }
 )
 
-tc, yc, xc = determine_optimal_chunk_size(
-    ds_combined, variable_name="vx", x_dim="x", y_dim="y", time_dim="mid_date", verbose=True
-)
-
-ds_combined = ds_combined.chunk({"mid_date": tc, "x": xc, "y": yc})
-
 print(ds_combined)
 ds_combined.to_netcdf(dst_nc)
 print("time ", (time.time() - start), "seconds")
-
-if assign_flag:
-    flag_shp = gpd.read_file(flag_shp).to_crs(proj4).clip(ds_combined.rio.bounds())
-
-    flag_id = flag_shp["Surge_class"].apply(lambda x: 2 if x is not None else 1).astype("int16")
-    geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
-
-    flag = features.rasterize(
-        geom_value,
-        out_shape=ds_combined.rio.shape,
-        transform=ds_combined.rio.transform(),
-        all_touched=True,
-        fill=0,  # background value
-        dtype="int16",
-    )
-
-    flag = xr.Dataset(
-        data_vars=dict(
-            flag=(["y", "x"], flag),
-        ),
-        coords=dict(
-            x=(["x"], ds_combined.x.data),
-            y=(["y"], ds_combined.y.data),
-        ),
-    )
-
-    flag.to_netcdf(dst_flag_nc)
