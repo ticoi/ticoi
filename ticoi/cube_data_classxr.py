@@ -1170,6 +1170,9 @@ class cube_data_class:
 
         dem_warped = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
 
+        if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
+            raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
+
         dem_warped, _ = rio.warp.reproject(
             source=dem,
             destination=dem_warped,
@@ -1180,18 +1183,29 @@ class cube_data_class:
             dst_shape=self.ds.rio.shape,
             resampling=rio.warp.Resampling.bilinear,
         )
-
-        dem_warped = median_filter(dem_warped, size=blur_size)
+        dem_warped[dem_warped == src.nodata] = np.nan
+        
 
         dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
         dem_rd.geotransform = self.ds.rio.transform().to_gdal()
 
         slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
         aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
-
+        
         slope[slope == slope.no_data] = np.nan
         aspect[aspect == aspect.no_data] = np.nan
-
+        
+        slope = median_filter(slope, size=blur_size)
+        aspect = median_filter(aspect, size=blur_size)
+        
+        # grad_y, grad_x = np.gradient(dem_warped)
+        # slope = np.arctan(np.sqrt(grad_x**2 + grad_y**2))
+        # aspect = np.rad2deg(np.arctan2(grad_y, -grad_x))
+        # aspect = np.where(aspect < 0, 90.0 - aspect, np.where(aspect > 90.0, 360.0 - aspect + 90.0, 90.0 - aspect))
+        # slope = np.where(np.isfinite(slope), slope, np.nan)
+        # slope = np.rad2deg(slope)
+        # aspect = np.where(np.isfinite(aspect), aspect, np.nan)
+        
         slope = xr.Dataset(
             data_vars=dict(
                 slope=(["y", "x"], np.array(slope)),
@@ -1205,6 +1219,7 @@ class cube_data_class:
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )
 
+        
         return slope, aspect
 
     def create_flag(self, flag_shp: str = None, field_name: str | None = None, default_value: str | int | None = None):
@@ -1240,14 +1255,17 @@ class cube_data_class:
             # inside the polygon: 1, outside: 0
             geom_value = ((geom, 1) for geom in flag_shp.geometry)
 
-        flag = rasterio.features.rasterize(
-            geom_value,
-            out_shape=(self.ny, self.nx),
-            transform=self.ds.rio.transform(),
-            all_touched=True,
-            fill=0,  # background value
-            dtype="int16",
-        )
+        try:
+            flag = rasterio.features.rasterize(
+                geom_value,
+                out_shape=(self.ny, self.nx),
+                transform=self.ds.rio.transform(),
+                all_touched=True,
+                fill=0,  # background value
+                dtype="int16",
+            )
+        except:
+            flag = np.zeros(shape=(self.ny, self.nx), dtype="int16")
 
         flag = xr.Dataset(
             data_vars=dict(
@@ -1406,7 +1424,7 @@ class cube_data_class:
                     flag = xr.open_dataset(flag)
                     if "flags" in list(flag.variables):
                         flag = flag.rename({"flags": "flag"})
-                elif flag.split(".")[-1] == "shp":  # If flag is a shape file
+                elif flag.split(".")[-1] in ["shp", "gpkg"]:  # If flag is a shape file
                     flag = self.create_flag(flag)
                 else:
                     raise ValueError("flag file must be .nc or .shp")
@@ -1470,7 +1488,6 @@ class cube_data_class:
                 coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
                 attrs=dict(description="Smoothed velocity observations", units="m/y", projection=self.ds.proj4),
             )
-            obs_filt.load()
             del vx_filtered, vy_filtered
 
             if verbose:
@@ -1492,7 +1509,7 @@ class cube_data_class:
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
         obs_filt.load()
-        self.ds = self.ds.persist()  # Crash memory without loading
+        self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
         return obs_filt, flag
@@ -1661,43 +1678,19 @@ class cube_data_class:
                 mean_v = np.flip(mean_v.T, axis=0)
 
                 if save:
-                    # Convert proj4 string to EPSG code
-                    crs = CRS(self.ds.proj4)
-                    epsg_code = crs.to_epsg()
-                    # Define the transform
-                    transform = from_origin(
-                        np.min(self.ds["x"].values), np.min(self.ds["y"].values), self.resolution, self.resolution
-                    )
-
                     # Create the GeoTIFF file
-                    driver = gdal.GetDriverByName("GTiff")
-                    srs = osr.SpatialReference()
-                    srs.ImportFromEPSG(epsg_code)
-
-                    dst_ds_temp = driver.Create(
-                        f"{path_save}/mean_velocity_{variable}.tiff",
-                        mean_v.shape[1],
-                        mean_v.shape[0],
-                        1,
-                        gdal.GDT_Float32,
-                    )
-                    # Set the GeoTransform
-                    dst_ds_temp.SetGeoTransform(
-                        [
-                            np.min(self.ds["x"].values),
-                            self.resolution,
-                            0,
-                            np.min(self.ds["y"].values) - self.resolution,
-                            0,
-                            self.resolution,
-                        ]
-                    )
-                    # Write the array to the raster band
-                    dst_ds_temp.GetRasterBand(1).WriteArray(mean_v)
-                    # Set the projection
-                    dst_ds_temp.SetProjection(srs.ExportToWkt())
-                    # Properly close the dataset
-                    dst_ds_temp.FlushCache()
+                    with rasterio.open(
+                        f"{path_save}/mean_velocity_{variable}.tif",
+                        'w',
+                        driver='GTiff',
+                        height=mean_v.shape[0],
+                        width=mean_v.shape[1],
+                        count=1,
+                        dtype=str(mean_v.dtype),
+                        crs=CRS.from_proj4(self.ds.proj4),
+                        transform=self.ds.rio.transform(),
+                    ) as dst:
+                        dst.write(mean_v, 1)
 
                 ds_mean.append(mean_v)
 
@@ -1918,7 +1911,7 @@ class cube_data_class:
                 dims=["x", "y", "mid_date"],
                 coords={"x": self.ds["x"], "y": self.ds["y"], "mid_date": time_variable},
             )
-            cubenew.ds[var] = cubenew.ds[var].transpose("x", "y", "mid_date")
+            cubenew.ds[var] = cubenew.ds[var].transpose("mid_date", "y", "x")
             cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": "m/y", "long_name": long_name[i]}
 
         if result_quality is not None and "Norm_residual" in result_quality:
@@ -2012,9 +2005,20 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # Save the dataset to a netcdf file
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc")
+            encoding={'vx': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+                      'vy': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+            }
+            if result_quality is not None:
+                if "X_contribution" in result_quality:
+                    encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                    encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                if "Error_propagation" in result_quality:
+                    encoding['error_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
+                    encoding['error_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
+            start = time.time()
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
             if verbose:
-                print(f"[Writing results] Saved to {savepath}/{filename}.nc")
+                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
         return cubenew
 
@@ -2068,10 +2072,12 @@ class cube_data_class:
         ]
         short_name = ["date1", "date2", "x_displacement", "y_displacement", "xcount_x", "xcount_y"]
         unit = ["days", "days", "m", "m", "no unit", "no unit"]
-
-        # Build cumulative displacement time series
-        df_list = [reconstruct_common_ref(df, result_quality) for df in result]
-
+        
+        start = time.time()
+        from joblib import Parallel, delayed
+        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, result_quality) for df in result)
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+        
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
         cubenew.ds["reference_date"] = xr.DataArray(
@@ -2082,24 +2088,18 @@ class cube_data_class:
             "unit": "days",
             "description": "first date of the cumulative displacement time series",
         }
-
-        # Retrieve the list a second date in the whole data cube, by looking at all the non empty dataframe
-        second_date_list = list(
-            set(
-                list(
-                    itertools.chain.from_iterable(
-                        [df["Second_date"].values for df in df_list if not np.isnan(df["dx"].iloc[0])]
-                    )
-                )
-            )
-        )
+        
+        second_date_list = pd.concat(df["Second_date"] for df in df_list if not np.isnan(df["dx"].iloc[0])).drop_duplicates().tolist()
+        second_date_list = [np.datetime64(date, 's') for date in second_date_list]
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
+        start = time.time()
         df_list2 = []
         for i, df in enumerate(df_list):
             df.index = df["Second_date"]
             df_list2.append(df.reindex(second_date_list))
+        print(f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s")
         del df_list
 
         # name of variable to store
@@ -2141,9 +2141,16 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc")
+            encoding={'dx': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+                      'dy': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+            }
+            if result_quality is not None and "X_contribution" in result_quality:
+                encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+            start = time.time()
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
             if verbose:
-                print(f"[Writing results] Saved to {savepath}/{filename}.nc")
+                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
         return cubenew
 

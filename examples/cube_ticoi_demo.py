@@ -92,11 +92,12 @@ preData_kwargs = {
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    "flag": None,  # Divide the data in several areas where different methods should be used
+    "flag": flag_shp,  # Divide the data in several areas where different methods should be used
+    "dem_file": dem_file,
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
-    "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+    "velo_or_disp": "disp",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
     "verbose": True,  # Print information throughout the filtering process
 }
 
@@ -122,7 +123,7 @@ inversion_kwargs = {
 }
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 12  # Number of CPU to be used for parallelization
+nb_cpu = 44  # Number of CPU to be used for parallelization
 block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
