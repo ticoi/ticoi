@@ -269,7 +269,7 @@ def inversion_core(
     apriori_weight_in_second_iteration: bool = False,
     visual: bool = True,
     verbose: bool = False,
-) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
+) -> (np.ndarray, pd.DataFrame, pd.DataFrame): # type: ignore
 
     """
     Computes A in AX = Y and does the inversion using a given solver.

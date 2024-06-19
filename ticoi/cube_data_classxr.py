@@ -13,9 +13,6 @@ import itertools
 import os
 import time
 import warnings
-from datetime import date
-from typing import List, Optional, Union
-
 import dask
 import geopandas
 import pandas as pd
@@ -23,12 +20,16 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import xarray as xr
+
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from osgeo import gdal, osr
+from datetime import date
+from typing import List, Optional, Union
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -36,27 +37,44 @@ from ticoi.interpolation_functions import reconstruct_common_ref
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
 
-
 class cube_data_class:
-    def __init__(self):
+    def __init__(self, cube=None, ds=None):
 
-        """Initialisation of the main attributes"""
-
-        self.filedir = ""
-        self.filename = ""
-        self.nx = 250
-        self.ny = 250
-        self.nz = 0
-        self.author = ""
-        self.source = ""
-        self.ds = xr.Dataset({})
-        self.resolution = 50
-        self.is_TICO = False
-
+        """
+        Initialisation of the main attributes, or copy cube's attributes and ds dataset if given.
+        
+        :param cube: [cube_data_class] --- Cube to copy
+        :param ds: [xr dataset | None] --- New dataset. If None, copy cube's dataset
+        """
+        
+        if not isinstance(cube, cube_data_class):
+            self.filedir = ""
+            self.filename = ""
+            self.nx = 250
+            self.ny = 250
+            self.nz = 0
+            self.author = ""
+            self.source = ""
+            self.ds = xr.Dataset({})
+            self.resolution = 50
+            self.is_TICO = False
+        else:
+            self.filedir = cube.filedir
+            self.filename = cube.filename
+            self.nx = cube.nx
+            self.ny = cube.ny
+            self.nz = cube.nz
+            self.author = cube.author
+            self.source = cube.source
+            self.ds = cube.ds if ds is None else ds
+            self.resolution = cube.resolution
+            self.is_TICO = cube.is_TICO
+        
     def update_dimension(self, time_dim: str = "mid_date"):
 
         """
@@ -194,6 +212,7 @@ class cube_data_class:
                 "(" + str(round(chunksize, 1)) + "MB)",
             )
         return tc, yc, xc
+
 
     # %% ==================================================================== #
     #                         CUBE LOADING METHODS                            #
@@ -853,6 +872,7 @@ class cube_data_class:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
 
+
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
     # =====================================================================%% #
@@ -939,6 +959,7 @@ class cube_data_class:
         """
 
         return np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
+
 
     # %% ==================================================================== #
     #                         PIXEL LOADING METHODS                           #
@@ -1081,6 +1102,7 @@ class cube_data_class:
             return data, mean, dates_range, regu, coef
         else:
             return data, mean, dates_range
+
 
     # %% ==================================================================== #
     #                             CUBE PROCESSING                             #
@@ -1497,6 +1519,35 @@ class cube_data_class:
 
         return obs_filt, flag
 
+    def split_cube(self, 
+        n_split: int = 2, 
+        dim: str = 'x', 
+        savepath: str = None,
+        verbose = True
+    ):
+        
+        cubes = []
+        for s in range(n_split):
+            if isinstance(dim, str):
+                cube = cube_data_class(self, self.ds.isel({dim: slice(s*len(self.ds[dim].values)//2, 
+                                                                     (s+1)*len(self.ds[dim].values)//2, 1)}))
+                if savepath is not None:
+                    cube.ds.to_netcdf(f'{savepath}{dim}_{s}.nc')
+                    print(f"Splitted cube saved at {savepath}{dim}_{s}.nc")
+                cubes.append(cube)
+            elif isinstance(dim, list):
+                cube = cube_data_class(self, self.ds.isel({dim[0]: slice(s*len(self.ds[dim[0]].values)//2, 
+                                                                     (s+1)*len(self.ds[dim[0]].values)//2, 1)}))
+                if len(dim) > 1:
+                    cubes += cube.split_cube(n_split=n_split, dim=dim[1:], savepath=f"{savepath}{dim[0]}_{s}_")
+                else:
+                    if savepath is not None:
+                        cube.ds.to_netcdf(f'{savepath}{dim[0]}_{s}.nc')
+                        print(f"Splitted cube saved at {savepath}{dim[0]}_{s}.nc")
+                    cubes.append(cube)
+
+        return cubes
+
     def align_cube(
         self,
         cube: "cube_data_class",
@@ -1810,6 +1861,7 @@ class cube_data_class:
                 for j in range(self.ny)
             ]
         ).reshape(self.nx, self.ny)
+
 
     # %% ======================================================================== #
     #                            WRITING RESULTS AS NETCDF                        #

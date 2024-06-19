@@ -53,19 +53,18 @@ warnings.filterwarnings("ignore")
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (at least
 # 'raw' and 'interp' must be given)
 
-TICOI_process = "load"
+TICOI_process = "block_process"
 
 save = True  # If True, save TICOI results to a netCDF file
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # If TICOI_process is 'load', must be a dictionary like {name: path} to load existing cubes and name them (path can be a list of str or a single str)
-cube_name = {
-    "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
-    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
-}
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
+# cube_name = {
+#     "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
+#     "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
+# }
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
@@ -73,15 +72,17 @@ result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if sa
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
-assign_flag = True
+assign_flag = False
 if not assign_flag:
     flag_file = None
 
 # Regularization method.s to be used (for each flag if flag is not None)
-regu = {0: 1, 1: "1accelnotnull"}  # With flag (0: stable ground, 1: glaciers)
+# regu = {0: 1, 1: "1accelnotnull"}  # With flag (0: stable ground, 1: glaciers)
+regu = '1accelnotnull'
 # regu = '1accelnotnull' # Without flag
 # Regularization coefficient.s to be used (for each flag if flag is not None)
-coef = {0: 500, 1: 200}  # With flag (0: stable ground, 1: glaciers)
+# coef = {0: 500, 1: 200}  # With flag (0: stable ground, 1: glaciers)
+coef = 200
 # coef = 200 # Without flag
 solver = "LSMR_ini"  # Solver for the inversion
 
@@ -144,7 +145,7 @@ inversion_kwargs = {
 
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 6  # Number of CPU to be used for parallelization
-block_size = 0.3  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
+block_size = 0.1  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
 # Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
@@ -158,7 +159,7 @@ raw_seasonality = True
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
 # 'lowpass' : or apply a lowpass filter only (to Nyquist frequency) : risk of tackling an interannual trend (long period)
-filt = "highpass"
+filt = None
 # Method used to compute local variations
 # 'rolling_7d' : median of the std of the data centered in +- 3 days around each central date
 # 'uniform_7d' : median of the std of the data centered in +- 3 days around dates constantly distributed every redundnacy
@@ -365,18 +366,23 @@ def match_sine(
     dates = (d["date1"] + (d["date2"] - d["date1"]) // 2 - d["date1"].min()).dt.days.to_numpy()
     N = len(dates)
     if N <= 4:
-        return np.nan, np.nan
+        if raw_seasonality:
+            return np.nan, np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan
     vv = np.sqrt(d["vx"] ** 2 + d["vy"] ** 2).to_numpy()
     Ts = dates[1] - dates[0]
 
     # Filtering
-    if filt == "highpass":
-        b, a = signal.butter(4, [1 / (1.5 * 365), 1 / (2.001 * Ts)], "bandpass", fs=1 / Ts, output="ba")
-        vv_filt = signal.filtfilt(b, a, vv - np.mean(vv))
-    elif filt == "lowpass":
-        sos = signal.butter(4, 1 / (2.001 * Ts), "lowpass", fs=1 / Ts, output="sos")
-        vv_filt = signal.sosfilt(sos, vv - np.mean(vv))
-    else:
+    try:
+        if filt == "highpass":
+            b, a = signal.butter(4, [1 / (1.5 * 365), 1 / (2.001 * Ts)], "bandpass", fs=1 / Ts, output="ba")
+            vv_filt = signal.filtfilt(b, a, vv - np.mean(vv))
+        elif filt == "lowpass":
+            sos = signal.butter(4, 1 / (2.001 * Ts), "lowpass", fs=1 / Ts, output="sos")
+            vv_filt = signal.sosfilt(sos, vv - np.mean(vv))
+        else:
+            vv_filt = vv
+    except:
         vv_filt = vv
 
     # Frequency is set to 1/365.25 (one year)
@@ -471,9 +477,9 @@ def match_sine(
 
     # Return Period, amplitude and phase of the periodicity
     if raw_seasonality:
-        return 1 / f, A, max_day, A_raw, max_day_raw
+        return 1/f, A, max_day, A_raw, max_day_raw
     else:
-        return 1 / f, A, max_day
+        return 1/f, A, max_day
 
 
 def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
@@ -561,11 +567,8 @@ if raw_seasonality:
     peak_raw_map[:, :] = np.nan
 
 result_tqdm = tqdm(zip(useful_result, useful_data_raw), total=len(useful_result), mininterval=0.5)
-match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality, d_raw=raw)
-        for d, raw in result_tqdm
-    )
-)
+match_res = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(match_sine)(d, filt=filt, impose_frequency=impose_frequency, 
+                                    raw_seasonality=raw_seasonality, d_raw=raw) for d, raw in result_tqdm))
 if not impose_frequency:
     period = np.abs(match_res[:, 0])
     period_map[long_data, lat_data] = np.sign(period - 365) * (1 - np.minimum(period, 365) / np.maximum(period, 365))
@@ -582,7 +585,7 @@ if raw_seasonality:
 # Save the maps to a .tiff file with two bands (one for period, and one for amplitude)
 if impose_frequency:
     tiff = driver.Create(
-        f"{path_save}matching_sine_map_fconst_{filt}_{local_var_method}.tiff",
+        f"{path_save}matching_sine_map_fconst_{local_var_method}.tiff",
         amplitude_map.shape[0],
         amplitude_map.shape[1],
         3 if not raw_seasonality else 5,
