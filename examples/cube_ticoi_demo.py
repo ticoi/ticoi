@@ -123,7 +123,7 @@ inversion_kwargs = {
 }
 
 ## ----------------------- Parallelization parameters ---------------------- ##
-nb_cpu = 44  # Number of CPU to be used for parallelization
+nb_cpu = 8  # Number of CPU to be used for parallelization
 block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
 if not os.path.exists(path_save):
