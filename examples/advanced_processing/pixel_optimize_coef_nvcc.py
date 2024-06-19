@@ -273,7 +273,7 @@ for param_value in list_parameter:
     A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, **inversion_kwargs)
     stop.append(time.time())
     print(f"[Inversion] Inversion took {round((stop[3] - start[3]), 4)} s")
-    
+
     if interpolation or save:
         save_path = f"{path_save}/{parameter}_{param_value}/"
     if not os.path.exists(save_path):  # cree un sous dossier
@@ -290,8 +290,7 @@ for param_value in list_parameter:
             cmap="rainbow",
             colors=["orange", "blue"],
         )
-        
-        
+
     # Save the results
     if save:
         result.to_csv(f"{save_path}/ILF_result.csv")
@@ -317,9 +316,11 @@ for param_value in list_parameter:
 
     if save:
         dataf_lp.to_csv(f"{path_save}/RLF_result.csv")
-    
+
     if visual:
-        visualisation_interpolation([dataf, dataf_lp], save=True, show=True, path_save=path_save, colors=["orange", "blue"])
+        visualisation_interpolation(
+            [dataf, dataf_lp], save=True, show=True, path_save=path_save, colors=["orange", "blue"]
+        )
 
     stop.append(time.time())
     print(f"[Interpolation] Interpolation took {round((stop[4] - start[3]), 4)} s")

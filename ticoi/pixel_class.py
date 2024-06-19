@@ -10,7 +10,7 @@ import ticoi.pixel_class
 
 
 class dataframe_data:
-    
+
     """
     Object to define a pd.Dataframe storing velocity observations
     """
@@ -33,13 +33,13 @@ class dataframe_data:
         self.dataf["offset_bar"] = delta // 2  # to plot the temporal baseline of the plots
 
     def set_vx_vy_invert(self, type_data: str = "invert", conversion: int = 365):
-        
+
         """
         Convert displacements into velocity
-        
+
         :param conversion:  [int] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
         """
-        
+
         if type_data == "invert":
             self.dataf["result_dx"] = self.dataf["result_dx"] / self.dataf["temporal_baseline"] * conversion
             self.dataf["result_dy"] = self.dataf["result_dy"] / self.dataf["temporal_baseline"] * conversion
@@ -118,7 +118,9 @@ class pixel_class:
             self.dataobs = dataframe_data(dataf_ilf)
             datatemp = self.dataobs
         else:
-            raise ValueError("Please enter 'invert' for inverted results, 'interp' for ineterpolated results or 'obs' for observation")
+            raise ValueError(
+                "Please enter 'invert' for inverted results, 'interp' for ineterpolated results or 'obs' for observation"
+            )
 
         datatemp.set_temporal_baseline_central_date_offset_bar()  # set the temporal baseline,
         if type_data == "invert" or type_data == "obs_filt":
@@ -127,7 +129,8 @@ class pixel_class:
             datatemp.set_vv()
         datatemp.set_minmax()
 
-    def load(self,
+    def load(
+        self,
         dataf: pd.DataFrame | List[pd.DataFrame],
         type_data: str = "obs",
         dataformat: str = "df",
@@ -168,7 +171,7 @@ class pixel_class:
         dataf: pd.DataFrame,
         type_data: str = "obs",
         dataformat: str = "df",
-        variables: List[str] = ["vv", "vx", "vy"]
+        variables: List[str] = ["vv", "vx", "vy"],
     ):
 
         """
@@ -189,7 +192,7 @@ class pixel_class:
         list_dataf: pd.DataFrame,
         list_data_type=["obs", "invert"],
         dataformat: str = "df",
-        variables: List[str] = ["vv", "vx", "vy"]
+        variables: List[str] = ["vv", "vx", "vy"],
     ):
 
         """
@@ -204,10 +207,8 @@ class pixel_class:
                 list_dataf[i], type_data=list_data_type[i], dataformat=dataformat, variables=variables
             )
 
-    def get_dataf_invert_or_obs_or_interp(self, 
-        type_data: str = "obs"
-    ) -> (pd.DataFrame, str): # type: ignore
-        
+    def get_dataf_invert_or_obs_or_interp(self, type_data: str = "obs") -> (pd.DataFrame, str):  # type: ignore
+
         """
         Get dataframe either obs or invert
 
@@ -244,10 +245,8 @@ class pixel_class:
         conversion = 365 if self.unit == "m/y" else 1
         return conversion
 
-    def get_direction(self, 
-        data: "ticoi.pixel_class.dataframe_data"
-    ) -> (np.array, np.array): # type: ignore
-        
+    def get_direction(self, data: "ticoi.pixel_class.dataframe_data") -> (np.array, np.array):  # type: ignore
+
         """
         Get the direction of the provided data
         :param data: [ticoi.pixel_class.dataframe_data] --- dataframe from obs, invert or interp

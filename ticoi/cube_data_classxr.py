@@ -27,8 +27,6 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
-from rasterio.transform import from_origin
-from osgeo import gdal, osr
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -984,7 +982,7 @@ class cube_data_class:
         rolling_mean: xr.Dataset | None = None,
         visual: bool = False,
         output_format="np",
-    ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]): # type: ignore
+    ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]):  # type: ignore
 
         """
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
@@ -1102,14 +1100,17 @@ class cube_data_class:
         """
 
         if isinstance(delete_outliers, int):
-            inlier_mask = dask_filt_warpper(self.ds['vx'], self.ds['vy'], filt_method='error', error_thres=delete_outliers)
+            inlier_mask = dask_filt_warpper(
+                self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
+            )
             # self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
-        
+
         elif isinstance(delete_outliers, str):
             # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
             axis = self.ds["vx"].dims.index("mid_date")
-            inlier_mask = dask_filt_warpper(self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, 
-                                            slope=slope, aspect=aspect, axis=axis)
+            inlier_mask = dask_filt_warpper(
+                self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope, aspect=aspect, axis=axis
+            )
 
             if flag is not None:
                 if delete_outliers != "vvc_angle":
@@ -1118,7 +1119,7 @@ class cube_data_class:
                     flag_condition = np.expand_dims(flag_condition, axis=axis)
                     inlier_mask = np.logical_or(inlier_mask, flag_condition)
         else:
-            raise ValueError('delete_outliers must be a int or a string, not {type(delete_outliers)}')
+            raise ValueError("delete_outliers must be a int or a string, not {type(delete_outliers)}")
 
         inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
         for var in ["vx", "vy"]:
@@ -1184,20 +1185,19 @@ class cube_data_class:
             resampling=rio.warp.Resampling.bilinear,
         )
         dem_warped[dem_warped == src.nodata] = np.nan
-        
 
         dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
         dem_rd.geotransform = self.ds.rio.transform().to_gdal()
 
         slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
         aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
-        
+
         slope[slope == slope.no_data] = np.nan
         aspect[aspect == aspect.no_data] = np.nan
-        
+
         slope = median_filter(slope, size=blur_size)
         aspect = median_filter(aspect, size=blur_size)
-        
+
         # grad_y, grad_x = np.gradient(dem_warped)
         # slope = np.arctan(np.sqrt(grad_x**2 + grad_y**2))
         # aspect = np.rad2deg(np.arctan2(grad_y, -grad_x))
@@ -1205,7 +1205,7 @@ class cube_data_class:
         # slope = np.where(np.isfinite(slope), slope, np.nan)
         # slope = np.rad2deg(slope)
         # aspect = np.where(np.isfinite(aspect), aspect, np.nan)
-        
+
         slope = xr.Dataset(
             data_vars=dict(
                 slope=(["y", "x"], np.array(slope)),
@@ -1219,7 +1219,6 @@ class cube_data_class:
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )
 
-        
         return slope, aspect
 
     def create_flag(self, flag_shp: str = None, field_name: str | None = None, default_value: str | int | None = None):
@@ -1279,7 +1278,8 @@ class cube_data_class:
 
         return flag
 
-    def filter_cube(self,
+    def filter_cube(
+        self,
         i: int | float | None = None,
         j: int | float | None = None,
         smooth_method: str = "gaussian",
@@ -1433,10 +1433,10 @@ class cube_data_class:
                 flag = flag.load()
             else:
                 raise ValueError("flag must be a str or xr.Dataset!")
-            
-            if 'flags' in list(flag.variables):
-                flag = flag.rename({'flags': 'flag'})
-            
+
+            if "flags" in list(flag.variables):
+                flag = flag.rename({"flags": "flag"})
+
             if isinstance(regu, dict):
                 regu = list(regu.values())
             else:
@@ -1681,8 +1681,8 @@ class cube_data_class:
                     # Create the GeoTIFF file
                     with rasterio.open(
                         f"{path_save}/mean_velocity_{variable}.tif",
-                        'w',
-                        driver='GTiff',
+                        "w",
+                        driver="GTiff",
                         height=mean_v.shape[0],
                         width=mean_v.shape[1],
                         count=1,
@@ -2005,18 +2005,19 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # Save the dataset to a netcdf file
-            encoding={'vx': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
-                      'vy': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+            encoding = {
+                "vx": {"zlib": True, "complevel": 5, "dtype": "float32"},
+                "vy": {"zlib": True, "complevel": 5, "dtype": "float32"},
             }
             if result_quality is not None:
                 if "X_contribution" in result_quality:
-                    encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
-                    encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                    encoding["xcount_x"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
+                    encoding["xcount_y"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
                 if "Error_propagation" in result_quality:
-                    encoding['error_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
-                    encoding['error_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'float32'}
+                    encoding["error_x"] = {"zlib": True, "complevel": 5, "dtype": "float32"}
+                    encoding["error_y"] = {"zlib": True, "complevel": 5, "dtype": "float32"}
             start = time.time()
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
@@ -2072,12 +2073,13 @@ class cube_data_class:
         ]
         short_name = ["date1", "date2", "x_displacement", "y_displacement", "xcount_x", "xcount_y"]
         unit = ["days", "days", "m", "m", "no unit", "no unit"]
-        
+
         start = time.time()
         from joblib import Parallel, delayed
+
         df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, result_quality) for df in result)
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
-        
+
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
         cubenew.ds["reference_date"] = xr.DataArray(
@@ -2088,9 +2090,11 @@ class cube_data_class:
             "unit": "days",
             "description": "first date of the cumulative displacement time series",
         }
-        
-        second_date_list = pd.concat(df["Second_date"] for df in df_list if not np.isnan(df["dx"].iloc[0])).drop_duplicates().tolist()
-        second_date_list = [np.datetime64(date, 's') for date in second_date_list]
+
+        second_date_list = (
+            pd.concat(df["Second_date"] for df in df_list if not np.isnan(df["dx"].iloc[0])).drop_duplicates().tolist()
+        )
+        second_date_list = [np.datetime64(date, "s") for date in second_date_list]
         second_date_list.sort()
 
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
@@ -2099,7 +2103,9 @@ class cube_data_class:
         for i, df in enumerate(df_list):
             df.index = df["Second_date"]
             df_list2.append(df.reindex(second_date_list))
-        print(f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s")
+        print(
+            f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s"
+        )
         del df_list
 
         # name of variable to store
@@ -2141,14 +2147,15 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
-            encoding={'dx': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
-                      'dy': {'zlib': True, 'complevel': 5, 'dtype': 'float32'},
+            encoding = {
+                "dx": {"zlib": True, "complevel": 5, "dtype": "float32"},
+                "dy": {"zlib": True, "complevel": 5, "dtype": "float32"},
             }
             if result_quality is not None and "X_contribution" in result_quality:
-                encoding['xcount_x'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
-                encoding['xcount_y'] = {'zlib': True, 'complevel': 5, 'dtype': 'int16'}
+                encoding["xcount_x"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
+                encoding["xcount_y"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
             start = time.time()
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine='h5netcdf', encoding=encoding)
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
