@@ -17,7 +17,6 @@ import warnings
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.pixel_class import pixel_class
 
-
 # %%========================================================================= #
 #                                   PARAMETERS                                #
 # =========================================================================%% #
@@ -42,31 +41,31 @@ compute_result_load = False
 cube_name = {
     "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
     "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
-    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc'
+    "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
 }
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343686.3,5091294.9 # Pixel coordinates
+i, j = 343686.3, 5091294.9  # Pixel coordinates
 
 ## ------------------------- Visualization parameters ---------------------- ##
 colors = ["blueviolet", "orange"]
 cmap = "rainbow"
 log_scale = False
-option_visual = [ # Visualization options for raw data and inverted results
+option_visual = [  # Visualization options for raw data and inverted results
     "obs_xy",
     "obs_magnitude",
     "obs_vxvy_quality",
     "xcount_xy",
-    "xcount_vv"
+    "xcount_vv",
 ]
-option_visual_interp = [ # Visualization options for interpolated results
+option_visual_interp = [  # Visualization options for interpolated results
     "interp_xy_overlaid",
     "interp_xy_overlaid_zoom",
     "invertvv_overlaid",
     "invertvv_overlaid_zoom",
-    "direction_overlaid"
+    "direction_overlaid",
 ]
 
 ## ---------------------------- Loading parameters ------------------------- ##
@@ -79,13 +78,15 @@ load_kwargs = {
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "verbose": False, # Print information throughout the loading process
+    "verbose": False,  # Print information throughout the loading process
 }
 
 ## --------------------------- Filtering parameters ------------------------ ##
 # Filter the raw data cube before plotting
 filt = True
-delete_outliers = 'vvc_angle' # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+delete_outliers = (
+    "vvc_angle"  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+)
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -147,23 +148,31 @@ dico_visual = {
     "invert_weight": (lambda pix: pix.plot_weights_inversion()),
 }
 dico_visual_interp = {
-    "interp_xy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(type_data="interp", colors=colors, zoom_on_results=False)),
-    "interp_xy_overlaid_zoom": (lambda pix: pix.plot_vx_vy_overlaid(type_data="interp", colors=colors, zoom_on_results=True)),
+    "interp_xy_overlaid": (
+        lambda pix: pix.plot_vx_vy_overlaid(type_data="interp", colors=colors, zoom_on_results=False)
+    ),
+    "interp_xy_overlaid_zoom": (
+        lambda pix: pix.plot_vx_vy_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
+    ),
     "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=False)),
-    "invertvv_overlaid_zoom": (lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True)),
-    "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp"))
+    "invertvv_overlaid_zoom": (
+        lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
+    ),
+    "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp")),
 }
 
 # Interpolated data cube
 t = cube_interp.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
 
 # Filter and load raw data
-if filt: cube.filter_cube(delete_outliers=delete_outliers)
+if filt:
+    cube.filter_cube(delete_outliers=delete_outliers)
 t2 = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
 
 pixel_object = pixel_class()
-pixel_object.load([t, t2], save=False, show=True, A=False, path_save=path_save, 
-                  type_data=["interp", "obs_filt" if filt else "obs"])
+pixel_object.load(
+    [t, t2], save=False, show=True, A=False, path_save=path_save, type_data=["interp", "obs_filt" if filt else "obs"]
+)
 
 for option in option_visual:
     if option not in dico_visual.keys():
@@ -171,7 +180,9 @@ for option in option_visual:
     dico_visual[option](pixel_object)
 for option in option_visual_interp:
     if option not in dico_visual_interp.keys():
-        raise ValueError(f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}")
+        raise ValueError(
+            f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}"
+        )
     dico_visual_interp[option](pixel_object)
 
 stop.append(time.time())

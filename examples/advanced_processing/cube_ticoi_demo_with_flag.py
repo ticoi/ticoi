@@ -102,7 +102,7 @@ load_kwargs = {
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
     "mask": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
-    "verbose": False, # Print information throughout the loading process
+    "verbose": False,  # Print information throughout the loading process
 }
 
 ## ----------------------- Data preparation parameters --------------------- ##
@@ -113,13 +113,13 @@ preData_kwargs = {
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": 'vvc_angle',  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": flag_file,  # Divide the data in several areas where different methods should be used
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-    "verbose": True, # Print information throughout the filtering process
+    "verbose": True,  # Print information throughout the filtering process
 }
 
 ## ---------------- Inversion and interpolation parameters ----------------- ##
@@ -144,7 +144,7 @@ inversion_kwargs = {
     "result_quality": "X_contribution",  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": False,  # Plot results along the way
     "path_save": path_save,  # Path where to store the results
-    "verbose": False, # Print information throughout TICOI processing
+    "verbose": False,  # Print information throughout TICOI processing
 }
 
 ## ----------------------- Parallelization parameters ---------------------- ##

@@ -269,7 +269,7 @@ def inversion_core(
     apriori_weight_in_second_iteration: bool = False,
     visual: bool = True,
     verbose: bool = False,
-) -> (np.ndarray, pd.DataFrame, pd.DataFrame): # type: ignore
+) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
 
     """
     Computes A in AX = Y and does the inversion using a given solver.
@@ -847,7 +847,9 @@ def interpolation_to_data(
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result, result_quality)  # Build cumulative displacement time series
     start_date = dataf["Ref_date"][0]  # First date at the considered pixel
-    x = np.array((dataf["date2"] - np.datetime64(start_date)).dt.days)  # Number of days according to the start_date
+    x = np.array(
+        (dataf["Second_date"] - np.datetime64(start_date)).dt.days
+    )  # Number of days according to the start_date
 
     # Interpolation must be caried out in between the min and max date of the original data
     if data["date1"].min() < result["date2"].min() or data["date2"].max() > result["date2"].max():
@@ -1295,7 +1297,8 @@ def visualization_core(
     }
 
     for option in option_visual:
-        dico_visual[option](pixel_object)
+        if option in dico_visual.keys():
+            dico_visual[option](pixel_object)
 
 
 def save_cube_parameters(

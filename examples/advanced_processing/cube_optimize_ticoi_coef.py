@@ -21,7 +21,6 @@ from joblib import Parallel, delayed
 from osgeo import gdal, osr
 from tqdm import tqdm
 
-from examples.advanced_processing.pixel_optimize_ticoi_coef import optimize_coef
 from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.other_functions import optimize_coef
@@ -34,9 +33,11 @@ warnings.filterwarnings("ignore")
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Sentinel_2_2022_2023"))}/c_x01470_y03675.nc'
 # Path to the "ground truth" cube used to optimize the regularisation
-cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
+# cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
+cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Pleiades"))}/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'
 flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
 mask_file = None  # Path where the mask file is stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "optimize_coef"))}/'  # Path where to store the results
@@ -44,7 +45,7 @@ path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "re
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
-assign_flag = True
+assign_flag = False
 flag = None  # Do not put it in load_kwargs and/or preData_kwargs but pass it to optimize_coef directly
 if assign_flag:
     flag = xr.open_dataset(flag_file)
@@ -56,7 +57,7 @@ flag_name = {0: "stable ground", 1: "glacier"}
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used (don't put it in inversion_kwargs)
-regu = {0: 1, 1: "1accelnotnull"}
+# regu = {0: 1, 1: "1accelnotnull"}
 solver = "LSMR_ini"  # Solver for the inversion
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = (
@@ -130,8 +131,13 @@ coef_maps = ["best", "good"]
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
+    "subset": [
+        338703.2,
+        339258.9,
+        5081177.4,
+        5081947.2,
+    ],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
@@ -163,8 +169,7 @@ load_pixel_kwargs = {
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "visual": False,  # Plot results along the way
-    "verbose": False,
-}  # Print information throughout TICOI processing
+}
 
 ## ----------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {
@@ -175,7 +180,7 @@ inversion_kwargs = {
     "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
     "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
-    "weight": True,  # If True, use apriori weights
+    "apriori_weight": True,  # If True, use apriori weights
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
