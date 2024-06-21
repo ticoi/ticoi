@@ -189,7 +189,7 @@ cube.load(cube_name if TICOI_process != "load" else cube_name["raw"], **load_kwa
 if TICOI_process == "load":
     print("[Data loading] Loading raw data...")
     data_raw = process_blocks_refine(
-        cube, nb_cpu=nb_cpu, block_size=block_size, returned=["raw_filt"], inversion_kwargs=inversion_kwargs
+        cube, nb_cpu=nb_cpu, block_size=block_size, returned=["raw"], inversion_kwargs=inversion_kwargs
     )
     data_raw = [
         pd.DataFrame(

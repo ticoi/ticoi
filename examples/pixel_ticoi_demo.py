@@ -30,11 +30,11 @@ from ticoi.interpolation_functions import (
 ###  Selection of data
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343617.7, 5091275.0
+i, j = 343617.7, 5091275.0 # Pixel coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
@@ -96,7 +96,7 @@ preData_kwargs = {
     "delete_outliers": {
         "median_magnitude": 3,
         "vvc_angle": None,
-    },  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    },  # Delete the outliers from the data according to one (int or str) or several (dict) criteriums
     "flag": None,  # Divide the data in several areas where different methods should be used
     "dem_file": dem_file,  # Path to the DEM file for calculating the slope and aspect
     "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube

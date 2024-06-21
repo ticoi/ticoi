@@ -3,6 +3,7 @@ import glob
 import time
 from datetime import date, datetime
 
+import dask.array as da
 import geopandas as gpd
 import rioxarray
 import xarray as xr
@@ -11,9 +12,9 @@ from rasterio import features
 
 start = time.time()
 
-dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7.nc"
+dst_nc = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc"
 
-file_path = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS7/"
+file_path = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Velo_refine/filtered/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
 
@@ -22,7 +23,7 @@ unit = "m/y"  # if obs_mode is 'velocity', need to specify the unit of the veloc
 files = glob.glob(f"{file_path}*filt.tif")
 files.sort()
 
-assign_flag = True
+assign_flag = False
 flag_shp = "~/data/HMA_surging_glacier_inventory/HMA_surging_glacier_inventory_gamdam_v2_all.gpkg"
 dst_flag_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc"
 
@@ -111,34 +112,6 @@ ds_combined.attrs.update(
     }
 )
 
-
 print(ds_combined)
 ds_combined.to_netcdf(dst_nc)
 print("time ", (time.time() - start), "seconds")
-
-if assign_flag:
-    flag_shp = gpd.read_file(flag_shp).to_crs(proj4).clip(ds_combined.rio.bounds())
-
-    flag_id = flag_shp["Surge_class"].apply(lambda x: 2 if x is not None else 1).astype("int16")
-    geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
-
-    flag = features.rasterize(
-        geom_value,
-        out_shape=ds_combined.rio.shape,
-        transform=ds_combined.rio.transform(),
-        all_touched=True,
-        fill=0,  # background value
-        dtype="int16",
-    )
-
-    flag = xr.Dataset(
-        data_vars=dict(
-            flag=(["y", "x"], flag),
-        ),
-        coords=dict(
-            x=(["x"], ds_combined.x.data),
-            y=(["y"], ds_combined.y.data),
-        ),
-    )
-
-    flag.to_netcdf(dst_flag_nc)
