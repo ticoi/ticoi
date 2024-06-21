@@ -1175,7 +1175,8 @@ def process_blocks_refine(
 
         # Filter the cube
         obs_filt, flag_block = block.filter_cube(**preData_kwargs)
-        inversion_kwargs.update({"flag": flag_block})
+        if isinstance(inversion_kwargs, dict) and "flag" in inversion_kwargs.keys():
+            inversion_kwargs.update({"flag": flag_block})
 
         # There is no data on the whole block (masked data)
         if obs_filt is None and "interp" in returned:
@@ -1201,9 +1202,12 @@ def process_blocks_refine(
         return result_block
 
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned="interp", verbose=False):
-        flag = preData_kwargs["flag"]
-        if flag is not None and not isinstance(flag, xr.Dataset):
-            flag = cube.create_flag(flag)
+        if isinstance(preData_kwargs, dict) and "flag" in preData_kwargs.keys():
+            flag = preData_kwargs["flag"]
+            if flag is not None and not isinstance(flag, xr.Dataset):
+                flag = cube.create_flag(flag)
+        else:
+            flag = None
 
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
 
@@ -1227,8 +1231,10 @@ def process_blocks_refine(
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
             # need to change the flag back...
-            inversion_kwargs.update({"flag": block_flag})
-            preData_kwargs.update({"flag": block_flag})
+            if flag is not None:
+                preData_kwargs.update({"flag": block_flag})        
+                if isinstance(inversion_kwargs, dict) and "flag" in inversion_kwargs.keys():
+                    inversion_kwargs.update({"flag": block_flag})
             block_result = await process_block(
                 block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
             )  # Process TICOI
@@ -1255,7 +1261,6 @@ def process_blocks_refine(
 # %% ======================================================================== #
 #                               VISUALISATION                                 #
 # =========================================================================%% #
-
 
 def visualization_core(
     list_dataf: pd.DataFrame,
