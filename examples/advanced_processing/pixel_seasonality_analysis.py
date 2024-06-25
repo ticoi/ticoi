@@ -24,8 +24,9 @@ import scipy.signal as signal
 from scipy.optimize import curve_fit
 from sklearn.metrics import root_mean_squared_error
 
-from ticoi.core import interpolation_core, inversion_core, visualisation
+from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import cube_data_class
+from ticoi.interpolation_functions import visualisation_interpolation
 
 # %%========================================================================= #
 #                                    PARAMETERS                               #
@@ -33,15 +34,16 @@ from ticoi.cube_data_classxr import cube_data_class
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Sentinel_2_2022_2023"))}/c_x01470_y03675.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 342537.1, 5092253.3  # Point (pixel) where to carry on the computation
+# i, j = 342537.1, 5092253.3  # Point (pixel) where to carry on the computation
 
 ## --------------------------- Main parameters ----------------------------- ##
-regu = 1  # Regularization method to be used
-coef = 300  # Regularization coefficient to be used
+regu = "1accelnotnull"  # Regularization method to be used
+coef = 5000  # Regularization coefficient to be used
 solver = "LSMR_ini"  # Solver for the inversion
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = (
@@ -75,7 +77,7 @@ load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "buffer": [i, j, 500],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
@@ -95,8 +97,8 @@ preData_kwargs = {
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-    "verbose": verbose,
-}  # Print information throughout the filtering process
+    "verbose": verbose,  # Print information throughout TICOI processing
+}
 
 ## ---------------- Parameters for the pixel loading part ------------------ ##
 load_pixel_kwargs = {
@@ -106,8 +108,7 @@ load_pixel_kwargs = {
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "visual": visual,  # Plot results along the way
-    "verbose": verbose,
-}  # Print information throughout TICOI processing
+}
 
 ## --------------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {
@@ -119,13 +120,13 @@ inversion_kwargs = {
     "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
     "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
-    "weight": True,  # If True, use apriori weights
+    "apriori_weight": True,  # If True, use apriori weights
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": visual,  # Plot results along the way
-    "verbose": verbose,
-}  # Print information throughout TICOI processing
+    "verbose": verbose,  # Print information throughout TICOI processing
+}
 
 ## ----------------------- Interpolation parameters ------------------------ ##
 interpolation_kwargs = {
@@ -136,22 +137,22 @@ interpolation_kwargs = {
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
     "visual": visual,  # Plot results along the way
     "vmax": vmax,  # vmin and vmax of the legend
-    "verbose": verbose,
-}  # Print information throughout TICOI processing
+    "verbose": verbose,  # Print information throughout TICOI processing
+}
 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
 # Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
 impose_frequency = True
 # Add several sinus at different freqs (1/365.25 and harmonics (2/365.25, 3/365.25...) if impose_frequency is True)
 #   (only available for impose_frequency = True for now)
-several_freq = 1
+several_freq = 5
 # Compute also the best matching sinus to raw data, for comparison
 raw_seasonality = True
 # Filter to use in the first place
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
 # 'lowpass' : or apply a lowpass filter only (to Nyquist frequency) : risk of tackling an interannual trend (long period)
-filt = "highpass"
+filt = None
 # Method used to compute local variations
 # 'rolling_7d' : median of the std of the data centered in +- 3 days around each central date
 # 'uniform_7d' : median of the std of the data centered in +- 3 days around dates constantly distributed every redundnacy
@@ -207,19 +208,6 @@ A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean
 stop.append(time.time())
 print(f"[Inversion] Inversion took {round((stop[-1] - start[-1]), 4)} s")
 
-# Plot the results of the inversion
-if visual:
-    visualisation(
-        dataf,
-        result,
-        option_visual,
-        path_save,
-        A=A,
-        dataf=dataf,
-        unit=inversion_kwargs["unit"],
-        show=True,
-        figsize=(12, 6),
-    )
 if save:
     result.to_csv(f"{path_save}/ILF_result.csv")
 
@@ -250,6 +238,19 @@ print(f"[Interpolation] Interpolation took {round((stop[-1] - start[-1]), 4)} s"
 
 if save:
     dataf_lp.to_csv(f"{path_save}/RLF_result.csv")
+if visual:
+    visualization_core(
+        [dataf, result],
+        option_visual=option_visual,
+        save=True,
+        show=True,
+        path_save=path_save,
+        A=A,
+        log_scale=False,
+        cmap="rainbow",
+        colors=["orange", "blue"],
+    )
+    visualisation_interpolation([dataf, dataf_lp], save=True, show=True, path_save=path_save, colors=["orange", "blue"])
 
 
 # %% ======================================================================== #
@@ -268,9 +269,9 @@ if not os.path.exists(f"{path_save}Fourier/"):
 dataf_lp = dataf_lp.dropna()
 
 # Get dates and velocities from TICOI results
-dates_c = dataf_lp["First_date"] + (dataf_lp["Second_date"] - dataf_lp["First_date"]) // 2  # Central dates
+dates_c = dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2  # Central dates
 dates = (
-    dates_c - dataf_lp["First_date"].min()
+    dates_c - dataf_lp["date1"].min()
 ).dt.days.to_numpy()  # Number of days to the reference day (first day of acquisition at the point)
 vv = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2).to_numpy()  # Velocity magnitude
 vv_c = vv - np.mean(vv)  # Centered velocities
@@ -360,7 +361,7 @@ if impose_frequency:
     )
     first_max_day = [
         pd.Timedelta(int((right_phi(phi[i]) + (np.pi if A[i] < 0 else 0)) / (2 * np.pi * f)), "D")
-        + dataf_lp["First_date"].min()
+        + dataf_lp["date1"].min()
         for i in range(several_freq)
     ]
     max_day = [
@@ -374,7 +375,7 @@ if impose_frequency:
 
     if raw_seasonality:
         ##  Find the best matching sinus to raw data
-        dates_raw = (dataff.index - dataf_lp["First_date"].min()).days.to_numpy()
+        dates_raw = (dataff.index - dataf_lp["date1"].min()).days.to_numpy()
         raw_c = dataff["vv"] - dataff["vv"].mean()
         guess_raw = np.concatenate(
             [np.concatenate([[np.max(raw_c) - np.min(raw_c), 0] for _ in range(several_freq)]), [0]]
@@ -397,7 +398,7 @@ if impose_frequency:
         )
         first_max_day_raw = [
             pd.Timedelta(int((right_phi(phi_raw[i]) + (np.pi if A_raw[i] < 0 else 0)) / (2 * np.pi * f)), "D")
-            + dataf_lp["First_date"].min()
+            + dataf_lp["date1"].min()
             for i in range(several_freq)
         ]
         max_day_raw = [
@@ -490,7 +491,7 @@ if impose_frequency and raw_seasonality:
     plt.plot(dataff.index, sine_raw + dataff["vv"].mean(), linewidth=3, label="Best matching sinus to raw data")
 plt.plot(dates_c, sine + np.mean(vv), "cyan", linewidth=3, label="Best matching sinus to TICOI results")
 plt.vlines(
-    pd.date_range(start=first_max_day[0], end=dataf_lp["Second_date"].max(), freq=f"{int(1/f)}D"),
+    pd.date_range(start=first_max_day[0], end=dataf_lp["date2"].max(), freq=f"{int(1/f)}D"),
     np.min(vv),
     np.max(vv),
     "black",
@@ -560,7 +561,7 @@ plt.show()
 # =========================================================================%% #
 # Superpose the curves for each year
 
-dates_c = dataf_lp["First_date"] + (dataf_lp["Second_date"] - dataf_lp["First_date"]) // 2  # Central dates
+dates_c = dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2  # Central dates
 vv = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2).to_numpy()  # Velocity magnitude
 
 years = np.unique(np.array([dates_c.iloc[i].year for i in range(dates_c.size)]))

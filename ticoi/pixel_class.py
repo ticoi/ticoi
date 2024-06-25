@@ -124,7 +124,7 @@ class pixel_class:
 
         datatemp.set_temporal_baseline_central_date_offset_bar()  # set the temporal baseline,
         if type_data == "invert" or type_data == "obs_filt":
-            datatemp.set_vx_vy_invert(conversion)  # convert displacement in vx and vy
+            datatemp.set_vx_vy_invert(type_data=type_data, conversion=conversion)  # convert displacement in vx and vy
         if "vv" in variables:
             datatemp.set_vv()
         datatemp.set_minmax()

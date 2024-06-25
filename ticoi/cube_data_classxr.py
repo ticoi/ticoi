@@ -18,15 +18,19 @@ from typing import List, Optional, Union
 
 import dask
 import geopandas
+import numpy as np
 import pandas as pd
 import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import xarray as xr
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
+from osgeo import gdal, osr
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
+from rasterio.transform import from_origin
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -40,20 +44,37 @@ from ticoi.mjd2date import mjd2date
 
 
 class cube_data_class:
-    def __init__(self):
+    def __init__(self, cube=None, ds=None):
 
-        """Initialisation of the main attributes"""
+        """
+        Initialisation of the main attributes, or copy cube's attributes and ds dataset if given.
 
-        self.filedir = ""
-        self.filename = ""
-        self.nx = 250
-        self.ny = 250
-        self.nz = 0
-        self.author = ""
-        self.source = ""
-        self.ds = xr.Dataset({})
-        self.resolution = 50
-        self.is_TICO = False
+        :param cube: [cube_data_class] --- Cube to copy
+        :param ds: [xr dataset | None] --- New dataset. If None, copy cube's dataset
+        """
+
+        if not isinstance(cube, cube_data_class):
+            self.filedir = ""
+            self.filename = ""
+            self.nx = 250
+            self.ny = 250
+            self.nz = 0
+            self.author = ""
+            self.source = ""
+            self.ds = xr.Dataset({})
+            self.resolution = 50
+            self.is_TICO = False
+        else:
+            self.filedir = cube.filedir
+            self.filename = cube.filename
+            self.nx = cube.nx
+            self.ny = cube.ny
+            self.nz = cube.nz
+            self.author = cube.author
+            self.source = cube.source
+            self.ds = cube.ds if ds is None else ds
+            self.resolution = cube.resolution
+            self.is_TICO = cube.is_TICO
 
     def update_dimension(self, time_dim: str = "mid_date"):
 
@@ -346,6 +367,8 @@ class cube_data_class:
         self.author = "IGE"  # name of the author
         self.source = self.ds.source
         del filepath
+
+        # self.split_cube(n_split=2, dim=['x', 'y'], savepath=f"{self.filedir}/{self.filename[:-3]}_")
 
         if subset is not None:  # Crop according to 4 coordinates
             self.subset(proj, subset)
@@ -1090,6 +1113,7 @@ class cube_data_class:
         flag: xr.Dataset | None = None,
         slope: xr.Dataset | None = None,
         aspect: xr.Dataset | None = None,
+        **kwargs,
     ):
 
         """
@@ -1098,34 +1122,74 @@ class cube_data_class:
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         """
+        if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
+            if isinstance(delete_outliers, int):
+                inlier_mask = dask_filt_warpper(
+                    self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
+                )
 
-        if isinstance(delete_outliers, int):
-            inlier_mask = dask_filt_warpper(
-                self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
-            )
-            # self.ds = self.ds.where((self.ds["errorx"] < delete_outliers) & (self.ds["errory"] < delete_outliers))
+            elif isinstance(delete_outliers, str):
+                axis = self.ds["vx"].dims.index("mid_date")
+                inlier_mask = dask_filt_warpper(
+                    self.ds["vx"],
+                    self.ds["vy"],
+                    filt_method=delete_outliers,
+                    slope=slope,
+                    aspect=aspect,
+                    axis=axis,
+                    **kwargs,
+                )
 
-        elif isinstance(delete_outliers, str):
-            # inlier_mask = median_angle_filt_np(self.ds["vx"].values, self.ds["vy"].values, angle_thres=45)
-            axis = self.ds["vx"].dims.index("mid_date")
-            inlier_mask = dask_filt_warpper(
-                self.ds["vx"], self.ds["vy"], filt_method=delete_outliers, slope=slope, aspect=aspect, axis=axis
-            )
+                if flag is not None:
+                    if delete_outliers != "vvc_angle":
+                        flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
+                        flag_condition = flag == 0
+                        flag_condition = np.expand_dims(flag_condition, axis=axis)
+                        inlier_mask = np.logical_or(inlier_mask, flag_condition)
 
-            if flag is not None:
-                if delete_outliers != "vvc_angle":
-                    flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
-                    flag_condition = flag == 0
-                    flag_condition = np.expand_dims(flag_condition, axis=axis)
-                    inlier_mask = np.logical_or(inlier_mask, flag_condition)
+            inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
+            for var in ["vx", "vy"]:
+                self.ds[var] = self.ds[var].where(inlier_flag)
+
+            self.ds = self.ds.persist()
+
+        elif isinstance(delete_outliers, dict):
+            for method in delete_outliers.keys():
+                if method == "error":
+                    if delete_outliers["error"] is None:
+                        self.delete_outliers("error", flag)
+                    else:
+                        self.delete_outliers(delete_outliers["error"], flag)
+                elif method == "magnitude":
+                    if delete_outliers["magnitude"] is None:
+                        self.delete_outliers("magnitude", flag)
+                    else:
+                        self.delete_outliers("magnitude", flag, magnitude_thres=delete_outliers["magnitude"])
+                elif method == "median_magnitude":
+                    if delete_outliers["median_magnitude"] is None:
+                        self.delete_outliers("median_magnitude", flag)
+                    else:
+                        self.delete_outliers(
+                            "median_magnitude", flag, median_magnitude_thres=delete_outliers["median_magnitude"]
+                        )
+                elif method == "z_score":
+                    if delete_outliers["z_score"] is None:
+                        self.delete_outliers("z_score", flag)
+                    else:
+                        self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
+                elif method == "vvc_angle":
+                    if delete_outliers["vvc_angle"] is None:
+                        self.delete_outliers("vvc_angle", flag)
+                    else:
+                        self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
+                elif method == "topo_angle":
+                    self.delete_outliers("topo_angle", flag, slope=slope, aspect=aspect)
+                else:
+                    raise ValueError(
+                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude' or 'error'"
+                    )
         else:
-            raise ValueError("delete_outliers must be a int or a string, not {type(delete_outliers)}")
-
-        inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
-        for var in ["vx", "vy"]:
-            self.ds[var] = self.ds[var].where(inlier_flag)
-
-        self.ds = self.ds.persist()
+            raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
 
     def mask_cube(self, mask: xr.DataArray | str):
 
@@ -1451,7 +1515,9 @@ class cube_data_class:
 
         if delete_outliers is not None:
             slope, aspect = None, None
-            if delete_outliers == "topo_angle":
+            if (isinstance(delete_outliers, str) and delete_outliers == "topo_angle") or (
+                isinstance(delete_outliers, dict) and "topo_angle" in delete_outliers.keys()
+            ):
                 if isinstance(dem_file, str):
                     slope, aspect = self.compute_slo_asp(dem_file=dem_file)
                 else:
@@ -1513,6 +1579,42 @@ class cube_data_class:
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
         return obs_filt, flag
+
+    def split_cube(self, n_split: int = 2, dim: str = "x", savepath: str = None, verbose=True):
+
+        cubes = []
+        for s in range(n_split):
+            if isinstance(dim, str):
+                cube = cube_data_class(
+                    self,
+                    self.ds.isel(
+                        {dim: slice(s * len(self.ds[dim].values) // 2, (s + 1) * len(self.ds[dim].values) // 2, 1)}
+                    ),
+                )
+                if savepath is not None:
+                    cube.ds.to_netcdf(f"{savepath}{dim}_{s}.nc")
+                    print(f"Splitted cube saved at {savepath}{dim}_{s}.nc")
+                cubes.append(cube)
+            elif isinstance(dim, list):
+                cube = cube_data_class(
+                    self,
+                    self.ds.isel(
+                        {
+                            dim[0]: slice(
+                                s * len(self.ds[dim[0]].values) // 2, (s + 1) * len(self.ds[dim[0]].values) // 2, 1
+                            )
+                        }
+                    ),
+                )
+                if len(dim) > 1:
+                    cubes += cube.split_cube(n_split=n_split, dim=dim[1:], savepath=f"{savepath}{dim[0]}_{s}_")
+                else:
+                    if savepath is not None:
+                        cube.ds.to_netcdf(f"{savepath}{dim[0]}_{s}.nc")
+                        print(f"Splitted cube saved at {savepath}{dim[0]}_{s}.nc")
+                    cubes.append(cube)
+
+        return cubes
 
     def align_cube(
         self,
@@ -1858,7 +1960,6 @@ class cube_data_class:
                 (element for element in result if element.shape[0] != 0), None
             )  # First result array which is not empty, and have size corresponding to the time period common between every pixel
             del non_null_results, first_date_results
-            print("[Writing results] Same time dimension for every pixels")
         else:
             print("Not the same time dimension for every pixels")
             raise ValueError("Not the same time dimension for every pixels, cannot save cube")

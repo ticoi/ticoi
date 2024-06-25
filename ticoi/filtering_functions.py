@@ -284,7 +284,7 @@ def dask_smooth_wrapper(
     return da_smooth
 
 
-def z_score_filt(obs: da.array, z_thres: int = 3, axis: int = 2):
+def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
     """
 
     :param obs: cube data to filter
@@ -303,7 +303,7 @@ def z_score_filt(obs: da.array, z_thres: int = 3, axis: int = 2):
 
 
 def NVVC_angle_filt(
-    obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 3, axis: int = 2
+    obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
 ) -> (np.array):
     """
     Combine angle filter and zscore
@@ -382,6 +382,17 @@ def topo_angle_filt(
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
 
 
+def median_magnitude_filt(obs_cpx: np.array, median_magnitude_thres: int = 3, axis: int = 2):
+    vv = np.abs(obs_cpx)
+    mean_magnitude = np.nanmedian(vv, axis=axis, keepdims=True)
+
+    inlier_flag = np.where(
+        (vv > mean_magnitude / median_magnitude_thres) & (vv < mean_magnitude * median_magnitude_thres), True, False
+    )
+
+    return inlier_flag
+
+
 def median_angle_filt(obs_cpx: np.array, angle_thres: int = 45, axis: int = 2):
     """
     Remove the observation if it is angle_thres away from the median vector
@@ -414,8 +425,9 @@ def dask_filt_warpper(
     filt_method: str = "median_angle",
     vvc_thres: float = 0.3,
     angle_thres: int = 30,
-    z_thres: int = 3,
+    z_thres: int = 2,
     magnitude_thres: int = 1000,
+    median_magnitude_thres=3,
     error_thres: int = 100,
     slope: xr.Dataset = None,
     aspect: xr.Dataset = None,
@@ -450,9 +462,17 @@ def dask_filt_warpper(
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
-    elif filt_method == "magnitude":  # delete according to a threshold  in magnitude
+    elif filt_method == "magnitude":  # delete according to a threshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)
         inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
+
+    elif (
+        filt_method == "median_magnitude"
+    ):  # the threshold in magnitude is computed relatively to the median of the data
+        obs_arr = da_vx.data + 1j * da_vy.data
+        inlier_mask = obs_arr.map_blocks(
+            median_magnitude_filt, median_magnitude_thres=median_magnitude_thres, axis=axis, dtype=obs_arr.dtype
+        )
 
     elif filt_method == "error":  # delete according to a threshold  in error
         inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
@@ -477,6 +497,3 @@ def dask_filt_warpper(
         )
 
     return inlier_mask.compute()
-
-
-# %%

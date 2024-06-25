@@ -269,7 +269,7 @@ def inversion_core(
     apriori_weight_in_second_iteration: bool = False,
     visual: bool = True,
     verbose: bool = False,
-) -> (np.ndarray, pd.DataFrame, pd.DataFrame):
+) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
 
     """
     Computes A in AX = Y and does the inversion using a given solver.
@@ -847,7 +847,9 @@ def interpolation_to_data(
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result, result_quality)  # Build cumulative displacement time series
     start_date = dataf["Ref_date"][0]  # First date at the considered pixel
-    x = np.array((dataf["date2"] - np.datetime64(start_date)).dt.days)  # Number of days according to the start_date
+    x = np.array(
+        (dataf["Second_date"] - np.datetime64(start_date)).dt.days
+    )  # Number of days according to the start_date
 
     # Interpolation must be caried out in between the min and max date of the original data
     if data["date1"].min() < result["date2"].min() or data["date2"].max() > result["date2"].max():
@@ -1173,7 +1175,8 @@ def process_blocks_refine(
 
         # Filter the cube
         obs_filt, flag_block = block.filter_cube(**preData_kwargs)
-        inversion_kwargs.update({"flag": flag_block})
+        if isinstance(inversion_kwargs, dict) and "flag" in inversion_kwargs.keys():
+            inversion_kwargs.update({"flag": flag_block})
 
         # There is no data on the whole block (masked data)
         if obs_filt is None and "interp" in returned:
@@ -1199,9 +1202,12 @@ def process_blocks_refine(
         return result_block
 
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned="interp", verbose=False):
-        flag = preData_kwargs["flag"]
-        if flag is not None and not isinstance(flag, xr.Dataset):
-            flag = cube.create_flag(flag)
+        if isinstance(preData_kwargs, dict) and "flag" in preData_kwargs.keys():
+            flag = preData_kwargs["flag"]
+            if flag is not None and not isinstance(flag, xr.Dataset):
+                flag = cube.create_flag(flag)
+        else:
+            flag = None
 
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
 
@@ -1225,8 +1231,10 @@ def process_blocks_refine(
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
             # need to change the flag back...
-            inversion_kwargs.update({"flag": block_flag})
-            preData_kwargs.update({"flag": block_flag})
+            if flag is not None:
+                preData_kwargs.update({"flag": block_flag})        
+                if isinstance(inversion_kwargs, dict) and "flag" in inversion_kwargs.keys():
+                    inversion_kwargs.update({"flag": block_flag})
             block_result = await process_block(
                 block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
             )  # Process TICOI
@@ -1253,7 +1261,6 @@ def process_blocks_refine(
 # %% ======================================================================== #
 #                               VISUALISATION                                 #
 # =========================================================================%% #
-
 
 def visualization_core(
     list_dataf: pd.DataFrame,
@@ -1302,7 +1309,8 @@ def visualization_core(
     }
 
     for option in option_visual:
-        dico_visual[option](pixel_object)
+        if option in dico_visual.keys():
+            dico_visual[option](pixel_object)
 
 
 def save_cube_parameters(

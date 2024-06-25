@@ -224,4 +224,5 @@ def visualisation_interpolation(
     }
 
     for option in option_visual:
-        dico_visual[option](pixel_object)
+        if option in dico_visual.keys():
+            dico_visual[option](pixel_object)

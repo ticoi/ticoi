@@ -53,11 +53,11 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'  # Path where the Sentinel-2 IGE cubes are stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
-result_fn = "test"  # Name of the netCDF file to be created
+result_fn = "Argentiere_example"  # Name of the netCDF file to be created
 
-proj = "EPSG:3413"  # EPSG system of the given coordinates
+proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion
@@ -82,7 +82,6 @@ regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if f
 coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
 delete_outlier = "vvc_angle"
 apriori_weight = True
-interpolation_bas = 90
 
 preData_kwargs = {
     "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
@@ -115,7 +114,7 @@ inversion_kwargs = {
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "interval_output": 30,
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
-    "redundancy": 30,  # Redundancy in the interpolated time series in number of days, no redundancy if None
+    "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "result_quality": "X_contribution",  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": False,  # Plot results along the way
     "path_save": path_save,  # Path where to store the results

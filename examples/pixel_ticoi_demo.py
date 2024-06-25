@@ -30,17 +30,16 @@ from ticoi.interpolation_functions import (
 ###  Selection of data
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343686.3, 5091294.9  # Pixel coordinates
-
+i, j = 343617.7, 5091275.0 # Pixel coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
-# For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
+# For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 150  # Regularization coefficient.s to be used (for each flag if flags is not None)
+coef = 200  # Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outlier = None  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
@@ -64,7 +63,13 @@ option_visual = [
     "xcount_xy",
     "xcount_vv",
     "invert_weight",
+    "interp_xy_overlaid",
+    "interp_xy_overlaid_zoom",
+    "invertvv_overlaid",
+    "invertvv_overlaid_zoom",
+    "direction_overlaid",
 ]  # see README_visualization_pixel_output.md
+
 vmax = [False, False]  # vmin and vmax of the legend
 
 ## ---------------------------- Loading parameters ------------------------- ##
@@ -73,7 +78,7 @@ load_kwargs = {
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": [i, j, 250],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
@@ -82,13 +87,16 @@ load_kwargs = {
 
 ## ----------------------- Data preparation parameters --------------------- ##
 preData_kwargs = {
-    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+    "smooth_method": "savgol",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
     "s_win": 3,  # Size of the spatial window
     "t_win": 90,  # Time window size for 'ewma' smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "delete_outliers": {
+        "median_magnitude": 3,
+        "vvc_angle": None,
+    },  # Delete the outliers from the data according to one (int or str) or several (dict) criteriums
     "flag": None,  # Divide the data in several areas where different methods should be used
     "dem_file": dem_file,  # Path to the DEM file for calculating the slope and aspect
     "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
@@ -107,7 +115,6 @@ load_pixel_kwargs = {
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "visual": visual,  # Plot results along the way
 }
-
 
 ## --------------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {
@@ -147,6 +154,7 @@ for common_parameter in ["regu", "solver", "unit"]:
 # Create a subfolder if it does not exist
 if not os.path.exists(path_save):
     os.mkdir(path_save)
+
 
 # %% ======================================================================== #
 #                                DATA LOADING                                 #
@@ -224,6 +232,13 @@ if visual:
         cmap="rainbow",
         colors=["orange", "blue"],
     )
-    visualisation_interpolation([dataf, dataf_lp], save=True, show=True, path_save=path_save, colors=["orange", "blue"])
+    visualisation_interpolation(
+        [dataf, dataf_lp],
+        option_visual=option_visual,
+        save=True,
+        show=True,
+        path_save=path_save,
+        colors=["orange", "blue"],
+    )
 
 print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")
