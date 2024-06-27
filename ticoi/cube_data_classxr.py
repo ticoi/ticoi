@@ -34,7 +34,7 @@ from rasterio.transform import from_origin
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
-from ticoi.interpolation_functions import reconstruct_common_ref
+from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
@@ -1122,6 +1122,7 @@ class cube_data_class:
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         """
+        
         if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
             if isinstance(delete_outliers, int):
                 inlier_mask = dask_filt_warpper(
@@ -1285,60 +1286,77 @@ class cube_data_class:
 
         return slope, aspect
 
-    def create_flag(self, flag_shp: str = None, field_name: str | None = None, default_value: str | int | None = None):
+    def create_flag(self, flag: str = None, field_name: str | None = None, default_value: str | int | None = None):
 
         """
         Create a flag dataset based on the provided shapefile and shapefile field.
         Which is usually used to divide the pixels into different types, especially for surging glaciers.
         If you just want to divide by polygon, set the shp_field to None
 
-        :param flag_shp (str, optional): The path to the shapefile. Defaults to None.
+        :param flag (str, optional): The path to the shapefile. Defaults to None.
         :param shp_field (str, optional): The name of the shapefile field. Defaults to 'surge_type' (used in RGI7).
         :param default_value (str | int | None, optional): The default value for the shapefile field. Defaults to 0.
         :Returns flag: xr.Dataset, The flag dataset with dimensions 'y' and 'x'.
         """
 
-        flag_shp = geopandas.read_file(flag_shp).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
+        if isinstance(flag, str):
+            if flag.split(".")[-1] == "nc":  # If flag is a netCDF file
+                flag = xr.open_dataset(flag)
+                    
+            elif flag.split(".")[-1] in ["shp", "gpkg"]:  # If flag is a shape file
+                flag = geopandas.read_file(flag).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
 
-        # surge-type glacier: 2, other glacier: 1, stable area: 0
-        if field_name is None:
-            if "surge_type" in flag_shp.columns:  # RGI inventory, surge-type glacier: 2, other glacier: 0
-                default_value = 0
-                field_name = "surge_type"
-            elif (
-                "Surge_class" in flag_shp.columns
-            ):  # HMA surging glacier inventory, surge-type glacier: 2, other glacier: ''
-                default_value = None
-                field_name = "Surge_class"
+                # surge-type glacier: 2, other glacier: 1, stable area: 0
+                if field_name is None:
+                    if "surge_type" in flag.columns:  # RGI inventory, surge-type glacier: 2, other glacier: 0
+                        default_value = 0
+                        field_name = "surge_type"
+                    elif (
+                        "Surge_class" in flag.columns
+                    ):  # HMA surging glacier inventory, surge-type glacier: 2, other glacier: ''
+                        default_value = None
+                        field_name = "Surge_class"
 
-        if field_name is not None:
-            flag_id = flag_shp[field_name].apply(lambda x: 2 if x != default_value else 1).astype("int16")
-            geom_value = ((geom, value) for geom, value in zip(flag_shp.geometry, flag_id))
+                if field_name is not None:
+                    flag_id = flag[field_name].apply(lambda x: 2 if x != default_value else 1).astype("int16")
+                    geom_value = ((geom, value) for geom, value in zip(flag.geometry, flag_id))
+                else:
+                    # inside the polygon: 1, outside: 0
+                    geom_value = ((geom, 1) for geom in flag.geometry)
+
+                try:
+                    flag = rasterio.features.rasterize(
+                        geom_value,
+                        out_shape=(self.ny, self.nx),
+                        transform=self.ds.rio.transform(),
+                        all_touched=True,
+                        fill=0,  # background value
+                        dtype="int16",
+                    )
+                except:
+                    flag = np.zeros(shape=(self.ny, self.nx), dtype="int16")
+
+                flag = xr.Dataset(
+                    data_vars=dict(
+                        flag=(["y", "x"], flag),
+                    ),
+                    coords=dict(
+                        x=(["x"], self.ds.x.data),
+                        y=(["y"], self.ds.y.data),
+                    ),
+                )
+                
+            else:
+                raise ValueError("flag file must be .nc or .shp")
+        
+        elif isinstance(flag, xr.Dataset):
+            pass
+        
         else:
-            # inside the polygon: 1, outside: 0
-            geom_value = ((geom, 1) for geom in flag_shp.geometry)
+            raise ValueError("flag must be a str or xr.Dataset!")
 
-        try:
-            flag = rasterio.features.rasterize(
-                geom_value,
-                out_shape=(self.ny, self.nx),
-                transform=self.ds.rio.transform(),
-                all_touched=True,
-                fill=0,  # background value
-                dtype="int16",
-            )
-        except:
-            flag = np.zeros(shape=(self.ny, self.nx), dtype="int16")
-
-        flag = xr.Dataset(
-            data_vars=dict(
-                flag=(["y", "x"], flag),
-            ),
-            coords=dict(
-                x=(["x"], self.ds.x.data),
-                y=(["y"], self.ds.y.data),
-            ),
-        )
+        if "flags" in list(flag.variables):
+            flag = flag.rename({"flags": "flag"})
 
         return flag
 
@@ -1483,23 +1501,8 @@ class cube_data_class:
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
         if flag is not None:
-            if isinstance(flag, str):
-                if flag.split(".")[-1] == "nc":  # If flag is a netCDF file
-                    flag = xr.open_dataset(flag)
-                    if "flags" in list(flag.variables):
-                        flag = flag.rename({"flags": "flag"})
-                elif flag.split(".")[-1] in ["shp", "gpkg"]:  # If flag is a shape file
-                    flag = self.create_flag(flag)
-                else:
-                    raise ValueError("flag file must be .nc or .shp")
-                flag = flag.load()
-            elif isinstance(flag, xr.Dataset):
-                flag = flag.load()
-            else:
-                raise ValueError("flag must be a str or xr.Dataset!")
-
-            if "flags" in list(flag.variables):
-                flag = flag.rename({"flags": "flag"})
+            flag = self.create_flag(flag)
+            flag.load()
 
             if isinstance(regu, dict):
                 regu = list(regu.values())
@@ -1580,9 +1583,19 @@ class cube_data_class:
 
         return obs_filt, flag
 
-    def split_cube(self, n_split: int = 2, dim: str = "x", savepath: str = None, verbose=True):
+    def split_cube(self, n_split: int = 2, dim: str | list = "x", savepath: str | None = None):
+        
+        """
+        Split the cube into smaller cubes (taking less memory to load) acording to the given dimensions.
+        
+        :param n_split: [int] [default is 2] --- Number of split to compute along each dimensions in dim
+        :param dim: [str | list] [default is "x"] --- Dimension.s along which must be splitted the cube
+        :param savepath: [str | None] [default is None] --- If not None, save the new cubes at this location
+        
+        :return cubes: [dict] --- Dictionnary of the splitted cubes (keys describe the position of the cube)
+        """
 
-        cubes = []
+        cubes = dict()
         for s in range(n_split):
             if isinstance(dim, str):
                 cube = cube_data_class(
@@ -1594,7 +1607,7 @@ class cube_data_class:
                 if savepath is not None:
                     cube.ds.to_netcdf(f"{savepath}{dim}_{s}.nc")
                     print(f"Splitted cube saved at {savepath}{dim}_{s}.nc")
-                cubes.append(cube)
+                cubes[f"{savepath.split('/')[-1]}{dim}_{s}"] = cube
             elif isinstance(dim, list):
                 cube = cube_data_class(
                     self,
@@ -1607,12 +1620,12 @@ class cube_data_class:
                     ),
                 )
                 if len(dim) > 1:
-                    cubes += cube.split_cube(n_split=n_split, dim=dim[1:], savepath=f"{savepath}{dim[0]}_{s}_")
+                    cubes |= cube.split_cube(n_split=n_split, dim=dim[1:], savepath=f"{savepath}{dim[0]}_{s}_")
                 else:
                     if savepath is not None:
                         cube.ds.to_netcdf(f"{savepath}{dim[0]}_{s}.nc")
                         print(f"Splitted cube saved at {savepath}{dim[0]}_{s}.nc")
-                    cubes.append(cube)
+                    cubes[f"{savepath.split('/')[-1]}{dim}_{s}"] = cube
 
         return cubes
 
@@ -1809,6 +1822,7 @@ class cube_data_class:
         freq: str = "MS",
         method: str = "mean",
     ) -> pd.DataFrame:
+        
         """
         Compute a heatmap of the average monthly velocity, average all the velocities which are overlapping a given month
 
@@ -1918,6 +1932,10 @@ class cube_data_class:
         filename: str = "Time_series",
         savepath: str | None = None,
         result_quality: list | None = None,
+        smooth_res: bool = False,
+        smooth_window_size: int = 3,
+        smooth_filt: np.ndarray | None = None, 
+        return_result: bool = False,
         verbose: bool = False,
     ) -> Union["cube_data_class", str]:
 
@@ -2007,6 +2025,14 @@ class cube_data_class:
                 ]
             )
             result_arr = result_arr.reshape((self.nx, self.ny, len(time_variable)))
+            
+            # Spatially smooth (apply a convolutional filter on) the data
+            if smooth_res:
+                result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
+                for x in range(self.nx):
+                    for y in range(self.ny):
+                        result[x * self.ny + y][var] = result_arr[x, y, :]
+            
             cubenew.ds[var] = xr.DataArray(
                 result_arr,
                 dims=["x", "y", "mid_date"],
@@ -2034,6 +2060,14 @@ class cube_data_class:
                     ]
                 )
                 result_arr = result_arr.reshape((self.nx, self.ny))
+                
+                # Spatially smooth (apply a convolutional filter on) the data
+                if smooth_res:
+                    result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
+                    for x in range(self.nx):
+                        for y in range(self.ny):
+                            result[x * self.ny + y][var] = result_arr[x, y, :]
+                
                 cubenew.ds[short_name[k]] = xr.DataArray(
                     result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
                 )
@@ -2059,6 +2093,14 @@ class cube_data_class:
                     ]
                 )
                 result_arr = result_arr.reshape((self.nx, self.ny))
+                
+                # Spatially smooth (apply a convolutional filter on) the data
+                if smooth_res:
+                    result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
+                    for x in range(self.nx):
+                        for y in range(self.ny):
+                            result[x * self.ny + y][var] = result_arr[x, y, :]
+                
                 cubenew.ds[short_name[k]] = xr.DataArray(
                     result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
                 )
@@ -2121,7 +2163,9 @@ class cube_data_class:
             cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
-
+        
+        if return_result:
+            return cubenew, result
         return cubenew
 
     def write_result_tico(

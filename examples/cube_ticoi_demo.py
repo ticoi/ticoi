@@ -13,7 +13,8 @@ Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
     observation networks. IEEE Transactions on Geoscience and Remote Sensing.
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
-    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318."""
+    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+"""
 
 import itertools
 import os
@@ -183,6 +184,10 @@ elif TICOI_process == "direct_process":
         delayed(process)(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
         for i, j in xy_values_tqdm
     )
+    
+    result = {"raw": [result[i][0] for i in range(len(result))],
+              "interp": [result[i][1] for i in range(len(result))]}
+    
 else:
     raise NameError("Please enter either direct_process or block_process")
 
@@ -217,7 +222,7 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
     several = type(returned) == list and len(returned) >= 2
     if "invert" in returned:
         cube_invert = cube.write_result_tico(
-            [result[i][0] for i in range(len(result))] if several else result,
+            result["invert"] if several else result,
             source,
             sensor,
             filename=f"{result_fn}_invert" if several else result_fn,
@@ -227,7 +232,7 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
         )
     if "interp" in returned:
         cube_interp = cube.write_result_ticoi(
-            [result[i][1] for i in range(len(result))] if several else result,
+            result["interp"] if several else result,
             source_interp,
             sensor,
             filename=f"{result_fn}_interp" if several else result_fn,

@@ -981,6 +981,7 @@ def process(
         # Inversion
         if delete_outliers == "median_angle":
             conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
+
         result = inversion_core(
             data[0],
             i,
@@ -1175,7 +1176,7 @@ def process_blocks_refine(
 
         # Filter the cube
         obs_filt, flag_block = block.filter_cube(**preData_kwargs)
-        if isinstance(inversion_kwargs, dict) and "flag" in inversion_kwargs.keys():
+        if isinstance(inversion_kwargs, dict):
             inversion_kwargs.update({"flag": flag_block})
 
         # There is no data on the whole block (masked data)
@@ -1204,7 +1205,7 @@ def process_blocks_refine(
     async def process_blocks_main(cube, nb_cpu=8, block_size=0.5, returned="interp", verbose=False):
         if isinstance(preData_kwargs, dict) and "flag" in preData_kwargs.keys():
             flag = preData_kwargs["flag"]
-            if flag is not None and not isinstance(flag, xr.Dataset):
+            if flag is not None:
                 flag = cube.create_flag(flag)
         else:
             flag = None
@@ -1232,9 +1233,8 @@ def process_blocks_refine(
 
             # need to change the flag back...
             if flag is not None:
-                preData_kwargs.update({"flag": block_flag})        
-                if isinstance(inversion_kwargs, dict) and "flag" in inversion_kwargs.keys():
-                    inversion_kwargs.update({"flag": block_flag})
+                preData_kwargs.update({"flag": block_flag})
+                
             block_result = await process_block(
                 block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
             )  # Process TICOI
@@ -1248,6 +1248,9 @@ def process_blocks_refine(
                 dataf_list[idx] = block_result[i]
 
             del block_result, block
+            
+        if isinstance(returned, list) and len(returned) > 1:
+            dataf_list = {returned[r]: [dataf_list[i][r] for i in range(len(dataf_list))] for r in range(len(returned))}
 
         return dataf_list
 
