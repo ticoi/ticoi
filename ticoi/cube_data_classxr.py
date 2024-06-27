@@ -1122,7 +1122,7 @@ class cube_data_class:
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         """
-        
+
         if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
             if isinstance(delete_outliers, int):
                 inlier_mask = dask_filt_warpper(
@@ -1302,7 +1302,7 @@ class cube_data_class:
         if isinstance(flag, str):
             if flag.split(".")[-1] == "nc":  # If flag is a netCDF file
                 flag = xr.open_dataset(flag)
-                    
+
             elif flag.split(".")[-1] in ["shp", "gpkg"]:  # If flag is a shape file
                 flag = geopandas.read_file(flag).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
 
@@ -1345,13 +1345,13 @@ class cube_data_class:
                         y=(["y"], self.ds.y.data),
                     ),
                 )
-                
+
             else:
                 raise ValueError("flag file must be .nc or .shp")
-        
+
         elif isinstance(flag, xr.Dataset):
             pass
-        
+
         else:
             raise ValueError("flag must be a str or xr.Dataset!")
 
@@ -1584,14 +1584,14 @@ class cube_data_class:
         return obs_filt, flag
 
     def split_cube(self, n_split: int = 2, dim: str | list = "x", savepath: str | None = None):
-        
+
         """
         Split the cube into smaller cubes (taking less memory to load) acording to the given dimensions.
-        
+
         :param n_split: [int] [default is 2] --- Number of split to compute along each dimensions in dim
         :param dim: [str | list] [default is "x"] --- Dimension.s along which must be splitted the cube
         :param savepath: [str | None] [default is None] --- If not None, save the new cubes at this location
-        
+
         :return cubes: [dict] --- Dictionnary of the splitted cubes (keys describe the position of the cube)
         """
 
@@ -1822,7 +1822,7 @@ class cube_data_class:
         freq: str = "MS",
         method: str = "mean",
     ) -> pd.DataFrame:
-        
+
         """
         Compute a heatmap of the average monthly velocity, average all the velocities which are overlapping a given month
 
@@ -1934,7 +1934,7 @@ class cube_data_class:
         result_quality: list | None = None,
         smooth_res: bool = False,
         smooth_window_size: int = 3,
-        smooth_filt: np.ndarray | None = None, 
+        smooth_filt: np.ndarray | None = None,
         return_result: bool = False,
         verbose: bool = False,
     ) -> Union["cube_data_class", str]:
@@ -2025,14 +2025,14 @@ class cube_data_class:
                 ]
             )
             result_arr = result_arr.reshape((self.nx, self.ny, len(time_variable)))
-            
+
             # Spatially smooth (apply a convolutional filter on) the data
             if smooth_res:
                 result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
                 for x in range(self.nx):
                     for y in range(self.ny):
                         result[x * self.ny + y][var] = result_arr[x, y, :]
-            
+
             cubenew.ds[var] = xr.DataArray(
                 result_arr,
                 dims=["x", "y", "mid_date"],
@@ -2060,14 +2060,14 @@ class cube_data_class:
                     ]
                 )
                 result_arr = result_arr.reshape((self.nx, self.ny))
-                
+
                 # Spatially smooth (apply a convolutional filter on) the data
                 if smooth_res:
                     result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
                     for x in range(self.nx):
                         for y in range(self.ny):
                             result[x * self.ny + y][var] = result_arr[x, y, :]
-                
+
                 cubenew.ds[short_name[k]] = xr.DataArray(
                     result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
                 )
@@ -2093,14 +2093,14 @@ class cube_data_class:
                     ]
                 )
                 result_arr = result_arr.reshape((self.nx, self.ny))
-                
+
                 # Spatially smooth (apply a convolutional filter on) the data
                 if smooth_res:
                     result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
                     for x in range(self.nx):
                         for y in range(self.ny):
                             result[x * self.ny + y][var] = result_arr[x, y, :]
-                
+
                 cubenew.ds[short_name[k]] = xr.DataArray(
                     result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
                 )
@@ -2163,7 +2163,7 @@ class cube_data_class:
             cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
-        
+
         if return_result:
             return cubenew, result
         return cubenew

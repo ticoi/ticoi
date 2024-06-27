@@ -1,13 +1,13 @@
 import copy
-import matplotlib.pyplot as plt
+from typing import List, Optional, Union
+
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import scipy.fft as fft
 import scipy.signal as signal
-
-from typing import List, Optional, Union
+import seaborn as sns
 from scipy.optimize import curve_fit
 from sklearn.metrics import root_mean_squared_error
 
@@ -17,17 +17,18 @@ import ticoi.pixel_class
 #                           DATAFRAME_DATA OBJECT                             #
 # =========================================================================%% #
 
+
 class dataframe_data:
 
-    """ Object to define a pd.Dataframe storing velocity observations """
+    """Object to define a pd.Dataframe storing velocity observations"""
 
     def __init__(self, dataf: pd.DataFrame = pd.DataFrame()):
         self.dataf = dataf
 
     def set_temporal_baseline_central_date_offset_bar(self):
-        
-        """ Set temporal baselines ('temporal_baseline'), centrale date (date_cori), and offset bar ('offset_bar'), used for plotting """
-        
+
+        """Set temporal baselines ('temporal_baseline'), centrale date (date_cori), and offset bar ('offset_bar'), used for plotting"""
+
         delta = self.dataf["date2"] - self.dataf["date1"]  # temporal baseline of the observations
         self.dataf["date_cori"] = np.asarray(self.dataf["date1"] + delta // 2).astype("datetime64[D]")  # central date
         try:
@@ -56,17 +57,17 @@ class dataframe_data:
             self.dataf["vy"] = self.dataf["vy"] / self.dataf["temporal_baseline"] * conversion
 
     def set_vv(self):
-        
-        """ Set velocity magnitude variable (here vv) in the dataframe """
-        
+
+        """Set velocity magnitude variable (here vv) in the dataframe"""
+
         self.dataf["vv"] = np.round(
             np.sqrt((self.dataf["vx"] ** 2 + self.dataf["vy"] ** 2).astype("float")), 2
         )  # Compute the magnitude of the velocity
 
     def set_minmax(self):
-        
-        """ Set the attribute minimum and maximum fir vx, vy, and possibly vv """
-        
+
+        """Set the attribute minimum and maximum fir vx, vy, and possibly vv"""
+
         self.vxymin = int(self.dataf["vx"].min())
         self.vxymax = int(self.dataf["vx"].max())
         self.vyymin = int(self.dataf["vy"].min())
@@ -74,15 +75,16 @@ class dataframe_data:
         if "vv" in self.dataf.columns:
             self.vvymin = int(self.dataf["vv"].min())
             self.vvymax = int(self.dataf["vv"].max())
-            
-            
+
+
 # %%========================================================================= #
 #                             PIXEL_CLASS OBJECT                              #
 # =========================================================================%% #
 
+
 class pixel_class:
 
-    """ Object class to store the data on a given pixel """
+    """Object class to store the data on a given pixel"""
 
     def __init__(
         self,
@@ -94,15 +96,15 @@ class pixel_class:
         A: np.ndarray | None = None,
         dataobs: pd.DataFrame | None = None,
     ):
-        
+
         """
         Initialize the pixel_class object with general plotting parameters, or set them to default values if no parameters are given.
-        
+
         :param save: [bool] [default is False] --- Save the figures to path_save
         :param path_save: [str] [default is ""] --- Path where to save the figures if save is True
         :param show: [bool] [default is True] --- Plot the figures
         :param figsize: [tuple<int, int>] [default is (10, 6)] --- Size of the figures
-        :param unit: [str] [default is "m/y"] --- Unit of the velocities ("m/y" or "m/d") 
+        :param unit: [str] [default is "m/y"] --- Unit of the velocities ("m/y" or "m/d")
         :param A: [np.array | None] [default is None] --- Design matrix
         :param dataobs: [pd.DataFrame | None] [default is None] --- Observation data
         """
@@ -124,7 +126,7 @@ class pixel_class:
         """
         Set the data as a pandas DataFrame (using methods from the dataframe_data object).
 
-        :param dataf_ilf: [pd.DataFrame] --- Data 
+        :param dataf_ilf: [pd.DataFrame] --- Data
         :param type_data: [str] [default is "invert"] --- Type of the data (raw data, results of TICO, TICOI...)
         :param conversion: [int] [default is 365] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
         :param variables: [List<str>] [default is ['vv']] --- List of variable to plot
@@ -183,26 +185,33 @@ class pixel_class:
         """
 
         self.__init__(save=save, show=show, figsize=figsize, unit=unit, path_save=path_save, A=A)
-        
-        conversion = self.get_conversion() # Conversion factor
+
+        conversion = self.get_conversion()  # Conversion factor
         if isinstance(dataf, list) and len(dataf) > 1:
-            assert isinstance(type_data, list) and (len(dataf) == len(type_data)), \
-                f"If 'dataf' is a list, 'type_data' must be a list of the same length"
-            
+            assert isinstance(type_data, list) and (
+                len(dataf) == len(type_data)
+            ), f"If 'dataf' is a list, 'type_data' must be a list of the same length"
+
             for i in range(len(dataf)):
                 if dataformat == "df":
-                    self.set_data_from_pandas_df(dataf[i], type_data=type_data[i], conversion=conversion, variables=variables)       
+                    self.set_data_from_pandas_df(
+                        dataf[i], type_data=type_data[i], conversion=conversion, variables=variables
+                    )
         elif (isinstance(dataf, list) and len(dataf) == 1) or isinstance(dataf, pd.DataFrame):
-            assert (isinstance(type_data, list) and len(type_data) == 1) or isinstance(type_data, str), \
-                "If 'dataf' is a dataframe or list of a single dataframe, 'type_data' must either be a list of a single string element, or a string"
-            
+            assert (isinstance(type_data, list) and len(type_data) == 1) or isinstance(
+                type_data, str
+            ), "If 'dataf' is a dataframe or list of a single dataframe, 'type_data' must either be a list of a single string element, or a string"
+
             if dataformat == "df":
-                self.set_data_from_pandas_df(dataf[0] if isinstance(dataf, list) else dataf, 
-                                             type_data=type_data[0] if isinstance(type_data, list) else type_data, 
-                                             conversion=conversion, variables=variables)
+                self.set_data_from_pandas_df(
+                    dataf[0] if isinstance(dataf, list) else dataf,
+                    type_data=type_data[0] if isinstance(type_data, list) else type_data,
+                    conversion=conversion,
+                    variables=variables,
+                )
         else:
             raise ValueError(f"'dataf' must be a list or a pandas dataframe, not {type(dataf)}")
-        
+
     def get_dataf_invert_or_obs_or_interp(self, type_data: str = "obs") -> (pd.DataFrame, str):  # type: ignore
 
         """
@@ -245,9 +254,9 @@ class pixel_class:
 
         """
         Get the direction of the provided data
-        
+
         :param data: [ticoi.pixel_class.dataframe_data] --- Dataframe from obs, invert or interp
-        
+
         :return directionm: [np.array] --- Directions of the data
         :return directionm_mean: [np.array] --- Averaged direction of the data
         """
@@ -263,14 +272,11 @@ class pixel_class:
         directionm_mean *= 360 / (2 * np.pi)
         return directionm, directionm_mean
 
-    def get_filtered_results(
-        self,
-        filt: str | None = None
-    ):
-        
+    def get_filtered_results(self, filt: str | None = None):
+
         """
         Filter TICOI results using a given filter.
-        
+
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
 
         :return vv_filt: [np array] --- Filtered velocities (magnitude)
@@ -278,19 +284,21 @@ class pixel_class:
         :return dates_c: [np array] --- Central dates of the data
         :return dates: [np array] --- For each data, the number of days between its central date and a reference (first date of the data)
         """
-        
+
         # Get dates and velocities from TICOI results
-        dates_c = self.datainterp.dataf["date1"] + (self.datainterp.dataf["date2"] - self.datainterp.dataf["date1"]) // 2  # Central dates
+        dates_c = (
+            self.datainterp.dataf["date1"] + (self.datainterp.dataf["date2"] - self.datainterp.dataf["date1"]) // 2
+        )  # Central dates
         dates = (
             dates_c - self.datainterp.dataf["date1"].min()
         ).dt.days.to_numpy()  # Number of days to the reference day (first day of acquisition at the point)
 
-        vv = self.datainterp.dataf['vv']  # Velocity magnitude
+        vv = self.datainterp.dataf["vv"]  # Velocity magnitude
         vv_c = vv - np.mean(vv)  # Centered velocities
-        
+
         N = len(dates)
         Ts = dates[1] - dates[0]
-        
+
         # Filter the results...
         if filt == "highpass":  # ...to remove low frequencies (general trend over several years)
             b, a = signal.butter(4, [1 / (1.5 * 365), 1 / (2.001 * Ts)], "bandpass", fs=1 / Ts, output="ba")
@@ -302,35 +310,35 @@ class pixel_class:
             vv_filt = vv_c
 
         return vv_filt, vv_c, dates_c, dates
-    
-    def get_TF(        
+
+    def get_TF(
         self,
         filtered_results: list = None,
         filt: str | None = None,
         verbose: bool = False,
     ):
-        
+
         """
         Compute the Fourier Transform (TF) of the interpolated results after applying a Hanning window.
-        
+
         :param filtered_results: [list | None] [default is None] --- Results of the filtering (get_filtered_results method) if previously processed. If None, it is processed here
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param verbose: [bool] [default is False] --- If True, print the maximum and the amplitude of the TF
-        
+
         :return vv_tf: [np array] --- TF of the interpolated velocities without windowing
         :return vv_win_tf: [np array] --- TF of the interpolated velocities after windowing
         :return freq: [np array] --- Frequencies of the TF
         :return N: [np array] --- Number of dates
         """
-      
+
         if filtered_results is not None:
             vv_filt, vv_c, dates_c, dates = filtered_results
         else:
             vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt)
-        
+
         N = len(dates)
         Ts = dates[1] - dates[0]
-        
+
         # Hanning window
         window = signal.windows.hann(N)
 
@@ -339,33 +347,35 @@ class pixel_class:
         vv_tf = fft.rfft(vv_filt, n=n)
         vv_win_tf = fft.rfft(vv_filt * window, n=n)
         freq = fft.rfftfreq(n, d=Ts)
-        
+
         if verbose:
             f = freq[np.argmax(np.abs(vv_win_tf))]
             print(f"TF maximum for f = {round(f, 5)} day-1 (period of {round(1/f, 2)} days)")
-            print(f"Amplitude of the TF at this frequency : {round(2/N * np.abs(vv_tf[np.argmax(np.abs(vv_win_tf))]), 2)} m/y")
-        
+            print(
+                f"Amplitude of the TF at this frequency : {round(2/N * np.abs(vv_tf[np.argmax(np.abs(vv_win_tf))]), 2)} m/y"
+            )
+
         return vv_tf, vv_win_tf, freq, N
 
     def get_best_matching_sinus(
-        self, 
-        filt: str | None = None, 
-        impose_frequency: bool = True, 
+        self,
+        filt: str | None = None,
+        impose_frequency: bool = True,
         raw_seasonality: bool = False,
         several_freq: int = 1,
-        verbose: bool = False
+        verbose: bool = False,
     ):
-        
+
         """
         Match a sinus (with fixed frequency or not) or a composition of several sinus (fundamental and harmonics) to the resulting TICOI data (and raw data)
         to measure its amplitude, the position of its maximum, the RMSE with the original data...
-        
+
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param impose_frequency: [bool] [default is True] --- If True, impose the frequency to 1/365.25 days-1 (one year seasonality). If False, look for the best matching frequency too, using the Fourier Transform in the first place
         :param raw_seasonality: [bool] [default is False] --- Also look for the best matching sinus directly on the raw data
         :param several_freq: [int] [default is 1] --- Number of harmonics to be computed (combination of sinus at frequencies 1/365.25, 2/365.25, etc...). If 1, only compute the fundamental.
         :param verbose: [bool] [default is False] --- If True, print the amplitude, the position of the maximum and the RMSE between the best matching sinus and the original data (TICOI results and raw data), and the best matching frequency if impose_frequency is False
-        
+
         :return sine_f: [function] --- The function used for the optimization (can be used like sine = sine_f(dates[0], *popt, freqs=several_freq))
         :return popt: [list] --- Parameters of the best matching sinus to TICOI results
         :return popt_raw: [list] --- Parameters of the best matching sinus to raw data
@@ -375,45 +385,49 @@ class pixel_class:
         :return stats_raw: [list] --- Statistics about the best matching sinus to raw data
         """
 
-# sine_fconst if impose_frequency else sine_fvar, popt, popt_raw, [dates, dates_c, dates_raw], vv_filt, stats, stats_raw
+        # sine_fconst if impose_frequency else sine_fvar, popt, popt_raw, [dates, dates_c, dates_raw], vv_filt, stats, stats_raw
 
-        vv = self.datainterp.dataf['vv']
+        vv = self.datainterp.dataf["vv"]
         vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt=filt)
-        
+
         N = len(dates)
         Ts = dates[1] - dates[0]
-        
+
         if impose_frequency:
-            
+
             # Sinus function (can add harmonics)
-            def sine_fconst(t, *args, freqs=1, f=1/365.25):
+            def sine_fconst(t, *args, freqs=1, f=1 / 365.25):
                 sine = args[0] * np.sin(2 * np.pi * f * t + args[1])
                 for freq in range(1, freqs):
                     sine += args[2 * freq] * np.sin(2 * np.pi * (freq + 1) * f * t + args[2 * freq + 1])
                 return sine + args[-1]
-            
+
             f = 1 / 365.25
-            
+
             # Find the best matching sinus to TICOI results
-            guess = np.concatenate([np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]])
+            guess = np.concatenate(
+                [np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]]
+            )
             popt, pcov = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates, vv_filt, p0=guess)
 
             # Parameters
             sine = sine_fconst(dates, *popt, freqs=several_freq)
             sine_year = sine_fconst(np.linspace(1, 365, 365), *popt, freqs=several_freq)
-            
+
             first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + self.datainterp.dataf["date1"].min()
             max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
             max_value = np.max(sine_year) - popt[-1]
             RMSE = root_mean_squared_error(sine, vv_filt)
-        
+
             del sine_year
-                
+
             if verbose:
-                print(f"Amplitude of the best matching sinus (with period 365.25 days) to TICOI results: {round(max_value, 2)} m/y")
+                print(
+                    f"Amplitude of the best matching sinus (with period 365.25 days) to TICOI results: {round(max_value, 2)} m/y"
+                )
                 print(f"Maximum at day {max_day.days}")
                 print(f"RMSE : {round(RMSE, 2)} m/y")
-            
+
             if raw_seasonality:
                 # Find the best matching sinus to raw data
                 dates_raw = (self.dataobs.dataf.index - self.datainterp.dataf["date1"].min()).days.to_numpy()
@@ -424,31 +438,33 @@ class pixel_class:
                 popt_raw, pcov_raw = curve_fit(
                     lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw
                 )
-                
+
                 # Parameters
                 sine_raw = sine_fconst(dates_raw, *popt_raw, freqs=several_freq)
                 sine_year_raw = sine_fconst(np.linspace(1, 365, 365), *popt_raw, freqs=several_freq)
-            
+
                 first_max_day_raw = pd.Timedelta(np.argmax(sine_year_raw), "D") + self.datainterp.dataf["date1"].min()
                 max_day_raw = first_max_day_raw - pd.Timestamp(year=first_max_day_raw.year, month=1, day=1)
                 max_value_raw = np.max(sine_year_raw) - popt_raw[-1]
                 RMSE_raw = root_mean_squared_error(sine_raw, raw_c)
-                
+
                 stats_raw = [first_max_day_raw, max_day_raw, max_value_raw, RMSE_raw]
                 del sine_year_raw
-                
+
                 if verbose:
-                    print(f"Amplitude of the best matching sinus (with period 365.25 days) to raw data: {round(max_value_raw, 2)} m/y")
+                    print(
+                        f"Amplitude of the best matching sinus (with period 365.25 days) to raw data: {round(max_value_raw, 2)} m/y"
+                    )
                     print(f"Maximum at day {max_day_raw.days}")
                     print(f"RMSE : {round(RMSE_raw, 2)} m/y")
-        
+
         else:
             vv_tf, vv_win_tf, freq, _ = self.get_TF(vv_filt, vv_c, dates_c, dates, filt=filt, verbose=False)
-            
+
             # Sinus function
             def sine_fvar(t, A, f, phi, off, freqs=None):
                 return A * np.sin(2 * np.pi * f * t + phi) + off
-            
+
             # Initial guess from the TF
             guess = np.array(
                 [
@@ -464,26 +480,33 @@ class pixel_class:
             A, f, phi, off = popt
             sine = sine_fvar(dates, A, f, phi, off)
             sine_year = sine_fvar(np.linspace(1, 365, 365), A, f, phi, off)
-            
+
             first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + self.datainterp.dataf["date1"].min()
             max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
             max_value = np.max(sine_year) - off
             RMSE = root_mean_squared_error(sine, vv_filt)
-            
+
             del sine_year
-            
+
             if verbose:
                 print(f"Period of the best matching sinus : {round(1/f, 2)} days")
                 print(f"Amplitude : {round(max_value, 2)} m/y")
                 print(f"Maximum at day {max_day.days}")
                 print(f"RMSE : {round(RMSE, 2)} m/y")
-        
+
         stats = [first_max_day, max_day, max_value, RMSE]
         if not (impose_frequency and raw_seasonality):
             popt_raw, dates_raw, stats_raw = None, None, None
-            
-        return sine_fconst if impose_frequency else sine_fvar, popt, popt_raw, [dates, dates_c, dates_raw], vv_filt, stats, stats_raw
 
+        return (
+            sine_fconst if impose_frequency else sine_fvar,
+            popt,
+            popt_raw,
+            [dates, dates_c, dates_raw],
+            vv_filt,
+            stats,
+            stats_raw,
+        )
 
     # %%========================================================================= #
     #              PLOTS ABOUT RAW DATA / INTERPOLATION RESULTS                   #
@@ -497,7 +520,7 @@ class pixel_class:
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to observations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-                
+
         :return ax, fig: Axis and Figures of the plot
         """
 
@@ -535,17 +558,23 @@ class pixel_class:
         ax[1].set_ylabel(f"Vy [{self.unit}]", fontsize=14)
         ax[1].set_xlabel("Central dates", fontsize=14)
         plt.subplots_adjust(bottom=0.2)
-        ax[1].legend(loc="lower left", bbox_to_anchor=(0.02, -0.4),  fontsize=14)
-        
+        ax[1].legend(loc="lower left", bbox_to_anchor=(0.02, -0.4), fontsize=14)
+
         fig.suptitle("X and Y components of raw data velocities", y=0.95, fontsize=16)
 
-        if self.show: plt.show(block=block_plot)
-        if self.save: fig.savefig(f"{self.path_save}/vx_vy_{type_data}.png")
+        if self.show:
+            plt.show(block=block_plot)
+        if self.save:
+            fig.savefig(f"{self.path_save}/vx_vy_{type_data}.png")
 
         return ax, fig
 
     def plot_vx_vy_overlaid(
-        self, colors: List[str] = ["orange", "blue"], type_data: str = "invert", zoom_on_results: bool = False, block_plot: bool = True
+        self,
+        colors: List[str] = ["orange", "blue"],
+        type_data: str = "invert",
+        zoom_on_results: bool = False,
+        block_plot: bool = True,
     ):
 
         """
@@ -555,7 +584,7 @@ class pixel_class:
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param zoom_on_results: [bool] [default is False] --- Set the limits of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-                 
+
         :return ax, fig: Axis and Figures of the plot
         """
 
@@ -572,7 +601,7 @@ class pixel_class:
             ax[0].set_ylim(data.vxymin, data.vxymax)
         ax[0].plot(
             data.dataf["date_cori"], data.dataf["vx"], linestyle="", marker="o", markersize=2, color=colors[1]
-        ) # Display the vx components
+        )  # Display the vx components
         ax[0].errorbar(
             data.dataf["date_cori"],
             data.dataf["vx"],
@@ -603,7 +632,11 @@ class pixel_class:
             zorder=1,
         )
         ax[1].legend(loc="lower left", bbox_to_anchor=(0.0, -0.65), fontsize=14)
-        fig.suptitle(f"X and Y components of {'interpolated' if type_data=='interp' else 'inverted'} results, along with raw data", y=0.95, fontsize=16)
+        fig.suptitle(
+            f"X and Y components of {'interpolated' if type_data=='interp' else 'inverted'} results, along with raw data",
+            y=0.95,
+            fontsize=16,
+        )
 
         if self.show:
             plt.show(block=block_plot)
@@ -612,18 +645,18 @@ class pixel_class:
                 fig.savefig(f"{self.path_save}/vx_vy_overlaid_zoom_on_results_{type_data}.png")
             else:
                 fig.savefig(f"{self.path_save}/vx_vy_overlaid_{type_data}.png")
-                
+
         return ax, fig
 
     def plot_vv(self, color: str = "orange", type_data: str = "invert", block_plot: bool = True):
-        
+
         """
         Plot the velocity magnitude.
-        
+
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-        
+
         :return ax, fig: Axis and Figure of the plot
         """
 
@@ -655,27 +688,35 @@ class pixel_class:
         plt.subplots_adjust(bottom=0.2)
         ax.legend(loc="lower left", bbox_to_anchor=(0.02, -0.2), fontsize=14)
         ax.set_xlabel("Central dates", fontsize=14)
-        
+
         fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
-        
-        if self.show: plt.show(block=block_plot)
-        if self.save: fig.savefig(f"{self.path_save}/vv_{type_data}.png")
-            
+
+        if self.show:
+            plt.show(block=block_plot)
+        if self.save:
+            fig.savefig(f"{self.path_save}/vv_{type_data}.png")
+
         return ax, fig
 
-    def plot_vv_overlaid(self, colors: List[str] = ["orange", "blue"], type_data: str = "invert", zoom_on_results: bool = False, block_plot: bool = True):
-        
+    def plot_vv_overlaid(
+        self,
+        colors: List[str] = ["orange", "blue"],
+        type_data: str = "invert",
+        zoom_on_results: bool = False,
+        block_plot: bool = True,
+    ):
+
         """
         Plot the velocity magnitude of inverted/interpolated results, overlaying the velocity magnitude of the observations (raw data).
-        
+
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param zoom_on_results: [bool] [default is False] --- Set the limites of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-             
+
         :return ax, fig: Axis and Figure of the plots
         """
-        
+
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         show = copy.copy(self.show)
@@ -707,8 +748,12 @@ class pixel_class:
             zorder=1,
         )
         ax.legend(loc="lower left", bbox_to_anchor=(0, -0.3), fontsize=14)
-        fig.suptitle(f"Magnitude of {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data magnitude", y=0.95, fontsize=16)
-        
+        fig.suptitle(
+            f"Magnitude of {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data magnitude",
+            y=0.95,
+            fontsize=16,
+        )
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
@@ -716,23 +761,24 @@ class pixel_class:
                 fig.savefig(f"{self.path_save}/vv_overlaid_zoom_on_results_{type_data}.png")
             else:
                 fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
-                
+
         return ax, fig
 
     def plot_vx_vy_quality(self, cmap: str = "rainbow", type_data: str = "obs", block_plot: bool = True):
-        
+
         """
         Plot error on top of velocity vx and vy.
-        
+
         :param cmap: [str] [default is 'rainbow''] --- Color map used to mark the errors in the plots
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting
-                
+
         :return ax, fig: Axis and Figure of the plots
         """
-        
-        assert "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns, \
-            "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
+
+        assert (
+            "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns
+        ), "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
@@ -756,23 +802,23 @@ class pixel_class:
         plt.subplots_adjust(bottom=0.22)
         ax[1].set_xlabel("Central dates", fontsize=14)
         fig.suptitle("Error associated to the velocity data", y=0.95, fontsize=16)
-        
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
             fig.savefig(f"{self.path_save}/vxvy_quality_bas_{type_data}.png")
-            
+
         return ax, fig
 
     def plot_direction(self, color: str = "orange", type_data: str = "obs", block_plot: bool = True):
-        
+
         """
         Plot the direction of the velocities for each of the data at this point.
-        
+
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-        
+
         :return ax, fig: Axis and Figure of the plot
         """
 
@@ -793,23 +839,25 @@ class pixel_class:
         plt.subplots_adjust(bottom=0.25)
         ax.legend(loc="lower left", bbox_to_anchor=(0, -0.4), ncol=2, fontsize=14)
         fig.suptitle("Direction of the observations", y=0.95, fontsize=16)
-        
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
             fig.savefig(f"{self.path_save}/direction_{type_data}.png")
-            
+
         return ax, fig
 
-    def plot_direction_overlaid(self, colors: List[str] = ["orange", "blue"], type_data: str = "interp", block_plot: bool = True):
-        
+    def plot_direction_overlaid(
+        self, colors: List[str] = ["orange", "blue"], type_data: str = "interp", block_plot: bool = True
+    ):
+
         """
         Plot the velocity direction of inverted/interpolated results, overlaying the velocity direction of the observations (raw data).
-        
+
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-        
+
         :return ax, fig: Axis and Figure of the plot
         """
 
@@ -830,36 +878,41 @@ class pixel_class:
         ax.set_ylabel("Direction [°]", fontsize=14)
         ax.set_xlabel("Central Dates", fontsize=14)
         ax.legend(loc="lower left", bbox_to_anchor=(0, -0.4), ncol=2, fontsize=14)
-        fig.suptitle(f"Direction of the {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data direction", y=0.95, fontsize=16)
-        
+        fig.suptitle(
+            f"Direction of the {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data direction",
+            y=0.95,
+            fontsize=16,
+        )
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
             fig.savefig(f"{self.path_save}/direction_overlaid_{type_data}.png")
-            
-        return ax, fig
 
+        return ax, fig
 
     # %%========================================================================= #
     #                       PLOTS ABOUT INVERSION RESULTS                         #
     # =========================================================================%% #
 
     def plot_xcount_vx_vy(self, cmap: str = "rainbow", block_plot: bool = True):
-        
+
         """
         Plot the obersvation contribution to the inversion on top of velocities x and y components.
-        
+
         :param cmap: [str] [default is 'rainbow] --- Color map used to mark the xcount values in the plots.
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
-                
+
         :return ax, fig: Axis and Figure of the plot
         """
-        
-        assert self.datainvert is not None, \
-            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vx_vy()"
-        assert "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns, \
-            "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
-        
+
+        assert (
+            self.datainvert is not None
+        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vx_vy()"
+        assert (
+            "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns
+        ), "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
+
         fig, ax = plt.subplots(2, 1, figsize=self.figsize)
         ax[0].set_ylabel(f"Vx [{self.unit}]", fontsize=14)
         ax[0].scatter(
@@ -885,35 +938,41 @@ class pixel_class:
             bbox_to_anchor=(0, -0.7),
             ncol=5,
             title="Amount of contributing observations",
-            fontsize=14
+            fontsize=14,
         )
         plt.subplots_adjust(bottom=0.22)
         ax[1].add_artist(legend1)
-        fig.suptitle("Contribution of the observations to the resulting inverted velocity x and y components", y=0.95, fontsize=16)
-        
+        fig.suptitle(
+            "Contribution of the observations to the resulting inverted velocity x and y components",
+            y=0.95,
+            fontsize=16,
+        )
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
             fig.savefig(f"{self.path_save}/X_dates_contribution_vx_vy.png")
-            
+
         return ax, fig
 
     def plot_xcount_vv(self, cmap: str = "rainbow", block_plot: bool = True):
-        
+
         """
         Plot the observation contribution to the inversion on top of the velocity magnitude.
-        
+
         :param cmap: [str] [default is 'rainbow''] --- Color map used in the plots
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
 
         :return ax, fig: Axis and Figure of the plot
         """
-        
-        assert self.datainvert is not None, \
-            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
-        assert "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns, \
-            "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
-        
+
+        assert (
+            self.datainvert is not None
+        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        assert (
+            "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns
+        ), "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
+
         fig, ax = plt.subplots(figsize=self.figsize)
         ax.set_ylabel(f"Velocity magnitude [{self.unit}]", fontsize=14)
         ax.set_xlabel("Central dates", fontsize=14)
@@ -922,7 +981,7 @@ class pixel_class:
             self.datainvert.dataf["vx"],
             c=(self.datainvert.dataf["xcount_x"] + self.datainvert.dataf["xcount_y"]) / 2,
             s=4,
-            cmap=cmap
+            cmap=cmap,
         )
         legend1 = ax.legend(
             *scat.legend_elements(num=5),
@@ -935,27 +994,28 @@ class pixel_class:
         plt.subplots_adjust(bottom=0.2)
         ax.add_artist(legend1)
         fig.suptitle("Contribution of the observations to the resulting inverted velocities", y=0.95, fontsize=16)
-        
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
             fig.savefig(f"{self.path_save}/X_dates_contribution_vv.png")
-            
+
         return ax, fig
 
-    def plot_weights_inversion(self, cmap: str ='plasma_r', block_plot: bool = True):
-        
+    def plot_weights_inversion(self, cmap: str = "plasma_r", block_plot: bool = True):
+
         """
         Plot initial and final weights used in the inversion.
-        
+
         :param cmap: [str] [default is 'plasma_r'] --- Color map used in the plots
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
 
         :return ax_f, fig_f, ax_l, fig_l: Axis and Figure of the plots (weights from f: the first inversion, l: the last inversion)
         """
 
-        assert self.datainvert is not None, \
-            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        assert (
+            self.datainvert is not None
+        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
 
         ## ----------------------- Weights used during the first inversion ------------------------- ##
         fig_f, ax_f = plt.subplots(2, 1, figsize=(8, 4))
@@ -999,7 +1059,7 @@ class pixel_class:
         ax_f[1].add_artist(legend1)
         ax_f[1].add_artist(legend2)
         fig_f.suptitle("Initial weights before the inversion", y=0.95, fontsize=16)
-        
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
@@ -1047,16 +1107,16 @@ class pixel_class:
         ax_l[1].add_artist(legend1)
         ax_l[1].add_artist(legend2)
         fig_l.suptitle("Final weights after the inversion", y=0.95, fontsize=16)
-        
+
         if self.show:
             plt.show(block=block_plot)
         if self.save:
             fig_l.savefig(f"{self.path_save}/weightlast_vx_vy.png")
-            
+
         return ax_f, fig_f, ax_l, fig_l
 
     def plot_residuals(self, log_scale: bool = False, block_plot: bool = True):
-        
+
         """
         Statistics about the residuals from the inversion:
             - Plot of the final residuals overlaid in colors on vx and vy measurements ('residuals_vx_vy_final_residual.png').
@@ -1064,15 +1124,15 @@ class pixel_class:
             - Comparison of residuals according to the temporal baseline (residuals_tempbaseline.png),
             - the type of sensor and authors (residuals_author_abs.png,residuals_vy_author.png,residuals_vx_author_abs.png),
             - and the quality indicators (residuals_quality.png).
-            
+
         :param log_scale: [bool] [default is False] --- if True, plot the figure in a log scale
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
         """
-        
-        assert self.datainvert is not None, \
-            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
-        assert self.A is not None, \
-            "Please provide A (design matrix) when loading the pixel_class"
+
+        assert (
+            self.datainvert is not None
+        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        assert self.A is not None, "Please provide A (design matrix) when loading the pixel_class"
 
         # self.dataobs.dataf[self.dataobs.dataf["author"] == "L. Charrier, J. Mouginot, R.Millan, A.Derkacheva"][
         #     "author"
@@ -1300,42 +1360,37 @@ class pixel_class:
             else:
                 fig.savefig(f"{self.path_save}/residuals_tempbaseline.png")
 
-
     # %%========================================================================= #
     #                         PLOTS ABOUT THE SEASONALITY                         #
     # =========================================================================%% #
-    
-    def plot_filtered_results(
-        self, 
-        filt: str | None = None,
-        impose_frequency: bool = True
-    ):
-        
+
+    def plot_filtered_results(self, filt: str | None = None, impose_frequency: bool = True):
+
         """
         Plot the filtered TICOI results, with a given filter.
-        
+
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param impose_frequency: [bool] [default is True] --- If True, impose the frequency to 1/365.25 days-1 (one year seasonality). If False, look for the best matching frequency too, using the Fourier Transform in the first place
-        
-        :return ax, fig: Axis and Figure of the plot  
+
+        :return ax, fig: Axis and Figure of the plot
         """
-        
+
         window, vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt=filt)
-        
+
         if impose_frequency:
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=self.figsize)
             axe = ax
         else:
             fig, ax = plt.subplots(nrows=2, ncols=1, figsize=self.figsize)
             axe = ax[0]
-        
+
         axe.plot(dates_c, vv_c, "blue", label="Before filtering")
         axe.plot(dates_c, vv_filt, "red", label="After filtering")
         axe.set_xlabel("Centered velocity [m/y]", fontsize=16)
         axe.set_ylabel("Central date", fontsize=16)
         axe.set_title("Effect of filtering", fontsize=16)
         axe.legend(loc="lower left")
-        
+
         if not impose_frequency:
             ax[1].plot(dates_c, vv_filt * window, "blue", label="With Hanning windowing")
             ax[1].plot(dates_c, vv_filt, "black", label="Without windowing")
@@ -1343,33 +1398,29 @@ class pixel_class:
             ax[1].set_ylabel("Central date", fontsize=16)
             ax[1].set_title("Effect of Hanning windowing", fontsize=16)
             ax[1].legend(loc="best")
-        
+
             fig.tight_layout()
-        
+
         if self.show:
             plt.show()
         if self.save:
             fig.savefig(f"{self.path_save}/filtered_results.png")
-        
+
         return ax, fig
-    
-    def plot_TF(
-        self, 
-        filt=None, 
-        verbose=False
-    ):
-        
+
+    def plot_TF(self, filt=None, verbose=False):
+
         """
         Plot the Fourier Transform (TF) of the TICOI results after filtering with a given filter.
-        
+
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param verbose:[bool] [default is False] --- If True, print the maximum and the amplitude of the TF
-        
-        :return ax, fig: Axis and Figure of the plot       
+
+        :return ax, fig: Axis and Figure of the plot
         """
-        
+
         vv_tf, vv_win_tf, freq, N = self.get_TF(filt=filt, verbose=verbose)
-        
+
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=self.figsize)
         ax.plot(freq, 2 / N * np.abs(vv_tf), "blue", label="TF without windowing")
         ax.plot(freq, 2 / N * np.abs(vv_win_tf), "red", label="TF after Hanning windowing")
@@ -1386,56 +1437,85 @@ class pixel_class:
         ax.set_ylabel("Amplitude [m/y]", fontsize=16)
         ax.legend(loc="best")
         ax.set_title(f"Fourier Transform of the TICOI-resulting velocities", fontsize=16)
-        
+
         if self.show:
             plt.show()
         if self.save:
             fig.savefig(f"{self.path_save}TF.png")
-            
+
         return ax, fig
-    
+
     def plot_best_matching_sinus(
         self,
         filt: str | None = None,
-        impose_frequency: bool = True, 
+        impose_frequency: bool = True,
         raw_seasonality: bool = False,
         several_freq: int = 1,
-        verbose: bool = False
+        verbose: bool = False,
     ):
-        
+
         """
         Plot the best matching sinus to the TICOI results (and to the raw data if required), by fixing the frequency to 1/365.25 days-1 or looking for the best matching one.
-        
+
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param impose_frequency: [bool] [default is True] --- If True, impose the frequency to 1/365.25 days-1 (one year seasonality). If False, look for the best matching frequency too, using the Fourier Transform in the first place
         :param raw_seasonality: [bool] [default is False] --- Also look for the best matching sinus directly on the raw data
         :param several_freq: [int] [default is 1] --- Number of harmonics to be computed (combination of sinus at frequencies 1/365.25, 2/365.25, etc...). If 1, only compute the fundamental
         :param verbose: [bool] [default is False] --- If True, print the amplitude, the position of the maximum and the RMSE between the best matching sinus and the original data (TICOI results and raw data), and the best matching frequency if impose_frequency is False
-        
-        :return ax, fig: Axis and Figure of the plots   
+
+        :return ax, fig: Axis and Figure of the plots
         """
-        
-        sine_f, popt, popt_raw, dates, vv_filt, stats, stats_raw = self.get_best_matching_sinus(filt=filt, impose_frequency=impose_frequency, 
-                                                                                                raw_seasonality=raw_seasonality,
-                                                                                                several_freq=several_freq,
-                                                                                                verbose=verbose)
-        
+
+        sine_f, popt, popt_raw, dates, vv_filt, stats, stats_raw = self.get_best_matching_sinus(
+            filt=filt,
+            impose_frequency=impose_frequency,
+            raw_seasonality=raw_seasonality,
+            several_freq=several_freq,
+            verbose=verbose,
+        )
+
         sine = sine_f(dates[0], *popt, freqs=several_freq)
-        f = popt[1] if not impose_frequency else 1/365.25
-        
+        f = popt[1] if not impose_frequency else 1 / 365.25
+
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
-        ax.plot(self.dataobs.dataf.index, self.dataobs.dataf["vv"], linestyle="", marker="x", markersize=2, color="orange", label="Raw data")
-        ax.plot(dates[1], self.datainterp.dataf['vv'], "black", alpha=0.6, label="TICOI velocities")
+        ax.plot(
+            self.dataobs.dataf.index,
+            self.dataobs.dataf["vv"],
+            linestyle="",
+            marker="x",
+            markersize=2,
+            color="orange",
+            label="Raw data",
+        )
+        ax.plot(dates[1], self.datainterp.dataf["vv"], "black", alpha=0.6, label="TICOI velocities")
         if filt is not None:
-            ax.plot(dates[1], vv_filt + np.mean(self.datainterp.dataf['vv']), "red", alpha=0.6, label="Filtered TICOI velocities")
+            ax.plot(
+                dates[1],
+                vv_filt + np.mean(self.datainterp.dataf["vv"]),
+                "red",
+                alpha=0.6,
+                label="Filtered TICOI velocities",
+            )
         if impose_frequency and raw_seasonality:
             sine_raw = sine_f(dates[2], *popt_raw, freqs=several_freq) if impose_frequency else sine_f(dates[2], *popt)
-            ax.plot(self.dataobs.dataf.index, sine_raw + self.dataobs.dataf["vv"].mean(), linewidth=3, color="forestgreen", label="Best matching sinus to raw data")
-        ax.plot(dates[1], sine + np.mean(self.datainterp.dataf['vv']), color="deepskyblue", linewidth=3, label="Best matching sinus to TICOI results")
+            ax.plot(
+                self.dataobs.dataf.index,
+                sine_raw + self.dataobs.dataf["vv"].mean(),
+                linewidth=3,
+                color="forestgreen",
+                label="Best matching sinus to raw data",
+            )
+        ax.plot(
+            dates[1],
+            sine + np.mean(self.datainterp.dataf["vv"]),
+            color="deepskyblue",
+            linewidth=3,
+            label="Best matching sinus to TICOI results",
+        )
         ax.vlines(
             pd.date_range(start=stats[0], end=self.datainterp.dataf["date2"].max(), freq=f"{int(1/f)}D"),
-            np.min(self.datainterp.dataf['vv']),
-            np.max(self.datainterp.dataf['vv']),
+            np.min(self.datainterp.dataf["vv"]),
+            np.max(self.datainterp.dataf["vv"]),
             "black",
             label="Maximum (TICOI)",
         )
@@ -1443,38 +1523,52 @@ class pixel_class:
         ax.set_ylabel("Velocity", fontsize=16)
         ax.legend(loc="best")
         ax.set_title("Best matching sinus around an annual seasonality")
-        
+
         if self.show:
             plt.show()
         if self.save:
             fig.savefig(f"{self.path_save}matching_sine.png")
-            
+
     def plot_annual_curves(
         self,
         normalize: bool = False,
-        statistics: List[str] = ['min', 'max', 'mean', 'median', 'std', 'amplitude', 'max_day', 'nb_peaks', 'relative_max'],
-        cmap: str = 'hsv',
-        markers: List[str] = ['.', 'p', 's', 'v', 'D', '*', 'x', '1', '+'], 
+        statistics: List[str] = [
+            "min",
+            "max",
+            "mean",
+            "median",
+            "std",
+            "amplitude",
+            "max_day",
+            "nb_peaks",
+            "relative_max",
+        ],
+        cmap: str = "hsv",
+        markers: List[str] = [".", "p", "s", "v", "D", "*", "x", "1", "+"],
         markers_size: List[int] = [5, 4, 3, 4, 3, 4, 4, 7, 4],
-        verbose: bool = True
+        verbose: bool = True,
     ):
-        
+
         """
         Plot the velocity curves of each year on top of ones anothers and compute some statistics about it ().
-        
+
         :param normalize: [bool] [default is False] --- Normalize the curves to [0-1] before plotting
         :param statistics: [List[str]] [default is everything] --- List of the statistics to compute and return (in ['min_max', 'mean', 'median', 'std', 'amplitude', 'max_day', 'nb_peaks', 'relative_max'])
         :param cmap: [str] [default is 'hsv'] --- Color map among which the colors for plotting the annual curves are picked
         :param markers: [List[str]] [default is ['.', 'p', 's', 'v', 'D', '*', 'x', '1', '+']] --- Symbols of the markers for the plot
         :param markers_size: [List[int]] [default is [5, 4, 3, 4, 3, 4, 4, 6, 4]] --- Marker size to use for each marker
         :param verbose: [bool] [default is False] --- Print a recap of the year statistics for each year
-        
+
         :return ax, fig: Axis and Figure of the plots
         :return stats: [dict] --- Dictionnary of the statistics (each key is associated to a list with every year's value of the statistic related to the key)
         """
-        
-        dates_c = self.datainterp.dataf["date1"] + (self.datainterp.dataf["date2"] - self.datainterp.dataf["date1"]) // 2  # Central dates
-        vv = np.sqrt(self.datainterp.dataf["vx"] ** 2 + self.datainterp.dataf["vy"] ** 2).to_numpy()  # Velocity magnitude
+
+        dates_c = (
+            self.datainterp.dataf["date1"] + (self.datainterp.dataf["date2"] - self.datainterp.dataf["date1"]) // 2
+        )  # Central dates
+        vv = np.sqrt(
+            self.datainterp.dataf["vx"] ** 2 + self.datainterp.dataf["vy"] ** 2
+        ).to_numpy()  # Velocity magnitude
 
         years = np.unique(np.array([dates_c.iloc[i].year for i in range(dates_c.size)]))
         months_start = {
@@ -1491,72 +1585,107 @@ class pixel_class:
             "November": 305,
             "December": 335,
         }
-        
-        stats = {'min': [], 'max': [],
-                 'mean': [], 'median': [],
-                 'std': [],
-                 'amplitude': [],
-                 'max_day': [],
-                 'nb_peaks': [],
-                 'relative_max': []}
-        
+
+        stats = {
+            "min": [],
+            "max": [],
+            "mean": [],
+            "median": [],
+            "std": [],
+            "amplitude": [],
+            "max_day": [],
+            "nb_peaks": [],
+            "relative_max": [],
+        }
+
         cmap = matplotlib.cm.get_cmap(cmap)
         colors = [cmap(i) for i in np.linspace(0, 1, len(years))]
         fig, ax = plt.subplots(figsize=(12, 4))
         for y in range(len(years)):
-            dates = dates_c[[dates_c.iloc[i].year == years[y] for i in range(dates_c.size)]] - pd.Timestamp(year=years[y], month=1, day=1)
+            dates = dates_c[[dates_c.iloc[i].year == years[y] for i in range(dates_c.size)]] - pd.Timestamp(
+                year=years[y], month=1, day=1
+            )
             dates = np.array([dates.iloc[i].days for i in range(dates.size)])
             vv_y = vv[[dates_c.iloc[i].year == years[y] for i in range(dates_c.size)]]
-            
+
             if verbose:
                 print(f"Year {years[y]} :")
-            
-            if 'min' in statistics: # Min value of the velocities over the year
-                stats['min'].append(np.min(vv_y))
-                if verbose: print("   Min = {:.1f} m/y".format(stats['min'][y]))
-            if 'max' in statistics: # Max value of the velocities over the year
-                stats['max'].append(np.max(vv_y))
-                if verbose: print("   Max = {:.1f} m/y".format(stats['max'][y]))
-            if 'mean' in statistics: 
-                stats['mean'].append(np.mean(vv_y)) # Mean value of the velocities over the year
-                if verbose: print("   Mean = {:.1f} m/y".format(stats['mean'][y]))
-            if 'median' in statistics: 
-                stats['median'].append(np.median(vv_y)) # Median value of the velocities over the year
-                if verbose: print("   Median = {:.1f} m/y".format(stats['median'][y]))
-            if 'std' in statistics: 
-                stats['std'].append(np.std(vv_y, ddof=0)) # Standard deviation of the velocities over the year
-                if verbose: print("   Standard deviation = {:.1f} m/y".format(stats['std'][y]))
-            if 'amplitude' in statistics: 
-                stats['amplitude'].append((np.max(vv_y) - np.min(vv_y)) / 2) # Amplitude of the velocity variations (computed as (max - min)/2)
-                if verbose: print("   Amplitude = {:.1f} m/y".format(stats['amplitude'][y]))
-            if 'max_day' in statistics: 
-                stats['max_day'].append(dates[np.argmax(vv_y)]) # Position of the maximum (in day)
+
+            if "min" in statistics:  # Min value of the velocities over the year
+                stats["min"].append(np.min(vv_y))
                 if verbose:
-                    diff_month = stats['max_day'][y] - np.array(list(months_start.values()))
+                    print("   Min = {:.1f} m/y".format(stats["min"][y]))
+            if "max" in statistics:  # Max value of the velocities over the year
+                stats["max"].append(np.max(vv_y))
+                if verbose:
+                    print("   Max = {:.1f} m/y".format(stats["max"][y]))
+            if "mean" in statistics:
+                stats["mean"].append(np.mean(vv_y))  # Mean value of the velocities over the year
+                if verbose:
+                    print("   Mean = {:.1f} m/y".format(stats["mean"][y]))
+            if "median" in statistics:
+                stats["median"].append(np.median(vv_y))  # Median value of the velocities over the year
+                if verbose:
+                    print("   Median = {:.1f} m/y".format(stats["median"][y]))
+            if "std" in statistics:
+                stats["std"].append(np.std(vv_y, ddof=0))  # Standard deviation of the velocities over the year
+                if verbose:
+                    print("   Standard deviation = {:.1f} m/y".format(stats["std"][y]))
+            if "amplitude" in statistics:
+                stats["amplitude"].append(
+                    (np.max(vv_y) - np.min(vv_y)) / 2
+                )  # Amplitude of the velocity variations (computed as (max - min)/2)
+                if verbose:
+                    print("   Amplitude = {:.1f} m/y".format(stats["amplitude"][y]))
+            if "max_day" in statistics:
+                stats["max_day"].append(dates[np.argmax(vv_y)])  # Position of the maximum (in day)
+                if verbose:
+                    diff_month = stats["max_day"][y] - np.array(list(months_start.values()))
                     month = list(months_start.keys())[np.argmin(diff_month[diff_month > 0])]
-                    day = np.min(diff_month[diff_month > 0])+1    
+                    day = np.min(diff_month[diff_month > 0]) + 1
                     print(f"   Day of the maximum = {stats['max_day'][y]}th day of the year ({month}, {day})")
-            
-            if 'nb_peaks' in statistics or 'relative_max' in statistics or 'start_accel' in statistics:
-                deriv = np.diff(vv_y) / np.diff(dates) # Compute the derivative of the velocities
-                peak_pos = [False] + [(np.sign(deriv[i+1]) == -1 and np.sign(deriv[i]) == 1) for i in range(len(deriv)-1)] + [False]
+
+            if "nb_peaks" in statistics or "relative_max" in statistics or "start_accel" in statistics:
+                deriv = np.diff(vv_y) / np.diff(dates)  # Compute the derivative of the velocities
+                peak_pos = (
+                    [False]
+                    + [(np.sign(deriv[i + 1]) == -1 and np.sign(deriv[i]) == 1) for i in range(len(deriv) - 1)]
+                    + [False]
+                )
                 peak_dates = dates[peak_pos]
-                peak_amplitudes = vv_y[peak_pos] - np.mean(vv_y) # This time, the amplitudes are compute as max - mean
-                
-                if 'nb_peaks' in statistics: 
-                    stats['nb_peaks'].append(len(peak_dates)) # Number of velocitiy peaks during the year
-                    if verbose: print("   Number of maximum = {}".format(stats['nb_peaks'][y]))
-                if 'relative_max' in statistics: # Amplitude of the second maximum divided by the amplitude of the first maximum
-                    if len(peak_dates) == 0: stats['relative_max'].append(None)
-                    else: 
-                        stats['relative_max'].append(np.max(peak_amplitudes[np.arange(len(peak_amplitudes)) != np.argmax(peak_amplitudes)]) / np.max(peak_amplitudes))
-                        if verbose: print("   Relative maximum value = {:.2f}".format(stats['relative_max'][y]))
-                if 'start_accel' in statistics: pass
-            
+                peak_amplitudes = vv_y[peak_pos] - np.mean(vv_y)  # This time, the amplitudes are compute as max - mean
+
+                if "nb_peaks" in statistics:
+                    stats["nb_peaks"].append(len(peak_dates))  # Number of velocitiy peaks during the year
+                    if verbose:
+                        print("   Number of maximum = {}".format(stats["nb_peaks"][y]))
+                if (
+                    "relative_max" in statistics
+                ):  # Amplitude of the second maximum divided by the amplitude of the first maximum
+                    if len(peak_dates) == 0:
+                        stats["relative_max"].append(None)
+                    else:
+                        stats["relative_max"].append(
+                            np.max(peak_amplitudes[np.arange(len(peak_amplitudes)) != np.argmax(peak_amplitudes)])
+                            / np.max(peak_amplitudes)
+                        )
+                        if verbose:
+                            print("   Relative maximum value = {:.2f}".format(stats["relative_max"][y]))
+                if "start_accel" in statistics:
+                    pass
+
             if normalize:
                 vv_y = (vv_y - np.min(vv_y)) / (np.max(vv_y) - np.min(vv_y))
-                
-            ax.plot(dates, vv_y, linestyle="", marker=markers[y], markersize=markers_size[y], label=str(years[y]), color=colors[y])
+
+            ax.plot(
+                dates,
+                vv_y,
+                linestyle="",
+                marker=markers[y],
+                markersize=markers_size[y],
+                label=str(years[y]),
+                color=colors[y],
+            )
 
         ax.set_xticks(list(months_start.values()), list(months_start.keys()))
         plt.setp(ax.get_xticklabels(), rotation=20, ha="right", rotation_mode="anchor")
@@ -1565,10 +1694,10 @@ class pixel_class:
         ax.legend(loc="best")
         ax.set_title("Superposed annual TICOI resulting velocities", fontsize=16)
         plt.subplots_adjust(bottom=0.2)
-        
+
         if self.show:
             plt.show()
         if self.save:
             fig.savefig(f"{self.path_save}annual_curves.png")
-            
+
         return ax, fig, {key: stats[key] for key in statistics}

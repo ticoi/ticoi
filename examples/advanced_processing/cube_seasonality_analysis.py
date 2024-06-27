@@ -99,24 +99,24 @@ load_kwargs = {
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
     "mask": mask_file,  # Path to mask file (.shp file) to mask some of the data on cube
-    "verbose": False # Print information throughout the loading process
+    "verbose": False,  # Print information throughout the loading process
 }
 
 ## ----------------------- Data preparation parameters --------------------- ##
 preData_kwargs = {
     "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
-    "s_win": 3, # Size of the spatial window
-    "t_win": 90, # Time window size for 'ewma' smoothing
-    "sigma": 3, # Standard deviation for 'gaussian' filter
-    "order": 3, # Order of the smoothing function
-    "unit": 365, # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": "vvc_angle", # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    "flag": flag_file, # Divide the data in several areas where different methods should be used
-    "regu": regu, # Regularization method.s to be used (for each flag if flag is not None)
-    "solver": solver, # Solver for the inversion
-    "proj": proj, # EPSG system of the given coordinates
-    "velo_or_disp": "velo", # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-    "verbose": True # Print information throughout the filtering process
+    "s_win": 3,  # Size of the spatial window
+    "t_win": 90,  # Time window size for 'ewma' smoothing
+    "sigma": 3,  # Standard deviation for 'gaussian' filter
+    "order": 3,  # Order of the smoothing function
+    "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
+    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "flag": flag_file,  # Divide the data in several areas where different methods should be used
+    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
+    "solver": solver,  # Solver for the inversion
+    "proj": proj,  # EPSG system of the given coordinates
+    "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+    "verbose": True,  # Print information throughout the filtering process
 }
 
 ## ---------------- Inversion and interpolation parameters ----------------- ##
@@ -142,12 +142,14 @@ inversion_kwargs = {
     "result_quality": "X_contribution",  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": False,  # Plot results along the way
     "path_save": path_save,  # Path where to store the results
-    "verbose": False, # Print information throughout TICOI processing
+    "verbose": False,  # Print information throughout TICOI processing
 }
 
-smooth_res = False # Smooth TICOI results (to limit the noise)
-smooth_window_size = 3 # Size of the window for the average filter used to smooth the cube
-smooth_filt = None # Specify here the filter you want to use to smooth the cube (if None, an average filter will be used)
+smooth_res = False  # Smooth TICOI results (to limit the noise)
+smooth_window_size = 3  # Size of the window for the average filter used to smooth the cube
+smooth_filt = (
+    None  # Specify here the filter you want to use to smooth the cube (if None, an average filter will be used)
+)
 
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 6  # Number of CPU to be used for parallelization
@@ -254,9 +256,8 @@ elif TICOI_process == "direct_process":
         delayed(process)(cube, i, j, returned=["raw", "interp"], obs_filt=obs_filt, **inversion_kwargs)
         for i, j in xy_values_tqdm
     )
-    
-    result = {"raw": [result[i][0] for i in range(len(result))],
-              "interp": [result[i][1] for i in range(len(result))]}
+
+    result = {"raw": [result[i][0] for i in range(len(result))], "interp": [result[i][1] for i in range(len(result))]}
 
 elif TICOI_process == "load":
     cube_interp = cube_data_class()
@@ -283,13 +284,20 @@ elif TICOI_process == "load":
 
 if TICOI_process == "block_process" or TICOI_process == "direct_process":
     # Raw data
-    data_raw = [pd.DataFrame(data={"date1": result["raw"][r][0][0][:, 0],
-                                   "date2": result["raw"][r][0][0][:, 1],
-                                   "vx": result["raw"][r][0][1][:, 0],
-                                   "vy": result["raw"][r][0][1][:, 1],
-                                   "errorx": result["raw"][r][0][1][:, 2],
-                                   "errory": result["raw"][r][0][1][:, 3],
-                                   "temporal_baseline": result["raw"][r][0][1][:, 4]}) for r in range(len(result))]
+    data_raw = [
+        pd.DataFrame(
+            data={
+                "date1": result["raw"][r][0][0][:, 0],
+                "date2": result["raw"][r][0][0][:, 1],
+                "vx": result["raw"][r][0][1][:, 0],
+                "vy": result["raw"][r][0][1][:, 1],
+                "errorx": result["raw"][r][0][1][:, 2],
+                "errory": result["raw"][r][0][1][:, 3],
+                "temporal_baseline": result["raw"][r][0][1][:, 4],
+            }
+        )
+        for r in range(len(result))
+    ]
     result = result["interp"]  # Result of the interpolation
 
 stop.append(time.time())
@@ -425,7 +433,7 @@ def match_sine(
                 [np.concatenate([[np.max(vv_filt) - np.min(vv_filt), 0] for _ in range(several_freq)]), [0]]
             )
             popt, pcov = curve_fit(lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates, vv_filt, p0=guess)
-            
+
             sine_year = sine_fconst(np.linspace(1, 365, 365), *popt, freqs=several_freq)
             A = np.max(sine_year) - popt[-1]
             f = 1 / 365.25
@@ -443,7 +451,7 @@ def match_sine(
                 popt_raw, pcov_raw = curve_fit(
                     lambda t, *args: sine_fconst(t, *args, freqs=several_freq), dates_raw, raw_c, p0=guess_raw
                 )
-                
+
                 sine_raw_year = sine_fconst(np.linspace(1, 365, 365), *popt_raw, freqs=several_freq)
                 A_raw = np.max(sine_raw_year) - popt_raw[-1]
                 first_max_day_raw = pd.Timedelta(np.argmax(sine_raw_year), "D") + d["date1"].min()
@@ -479,7 +487,7 @@ def match_sine(
 
         try:
             popt, pcov = curve_fit(sine_fvar, dates, vv, p0=guess)
-            
+
             sine_year = sine_fvar(np.linspace(1, 365, 365), *popt, freqs=several_freq)
             A = np.max(sine_year) - popt[-1]
             first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + d["date1"].min()

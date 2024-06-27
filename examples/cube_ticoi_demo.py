@@ -184,10 +184,9 @@ elif TICOI_process == "direct_process":
         delayed(process)(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
         for i, j in xy_values_tqdm
     )
-    
-    result = {"raw": [result[i][0] for i in range(len(result))],
-              "interp": [result[i][1] for i in range(len(result))]}
-    
+
+    result = {"raw": [result[i][0] for i in range(len(result))], "interp": [result[i][1] for i in range(len(result))]}
+
 else:
     raise NameError("Please enter either direct_process or block_process")
 

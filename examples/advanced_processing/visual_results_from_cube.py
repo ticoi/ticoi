@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""
+r"""
 Visualization of the cube results from TICO (without interpolation), or TICOI (with interpolation).
 Additional visualisation functions related to the stufy of the seasonality of the data are available.
    /!\ A TICOI cube must be processed and saved to a netCDF file before calling this script (it can be done in cube_ticoi_demo.py
 or cube_ticoi_demo_advanced.py)
- 
+
 Author : Laurane Charrier, Lei Guo, Nathan Lioret
 Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
@@ -62,7 +62,7 @@ option_visual_seasonality = [  # Visualization options to study the seasonality 
     "filtered_results",
     "TF",
     "best_matching_sinus",
-    "annual_curves"
+    "annual_curves",
 ]
 
 ## ---------------------------- Loading parameters ------------------------- ##
@@ -81,7 +81,9 @@ load_kwargs = {
 ## --------------------------- Filtering parameters ------------------------ ##
 # Filter the raw data cube before plotting
 filt_raw = True
-delete_outliers = "vvc_angle" # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+delete_outliers = (
+    "vvc_angle"  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+)
 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
 # Is the periodicity frequency imposed to 1/365.25 (one year seasonality) ?
@@ -103,12 +105,12 @@ filt = None
 # 'uniform_all' : median of the std of each data covering the dates, which are constantly distributed every redundancy days
 # 'residu' : standard deviation of the data previously subtracted by TICOI results (ground truth) = standard deviation of the "noise"
 local_var_method = "uniform_7d"
-verbose = True # Plot informations throughout the seasonality plotting process
+verbose = True  # Plot informations throughout the seasonality plotting process
 
 # Parameters for annual curves plotting
-normalize = True # Normalize the annual velocities between 0 and 1
-# Statistics to be computed, plotted and returned
-statistics = ['min_max', 'mean', 'median', 'std', 'amplitude', 'max_day', 'nb_peaks', 'relative_max']
+normalize = True  # Normalize the annual velocities between 0 and 1
+# Statistics to be computed, plotted and returned
+statistics = ["min_max", "mean", "median", "std", "amplitude", "max_day", "nb_peaks", "relative_max"]
 
 if not os.path.exists(path_save):
     os.mkdir(path_save)
@@ -130,7 +132,7 @@ if type(cube_name) == dict and "raw" in cube_name.keys():
 if type(cube_name) == dict and "invert" in cube_name.keys():
     cube_invert = cube_data_class()
     cube_invert.load(cube_name["invert"], **load_kwargs)
-    
+
 # Load interpolation results
 if type(cube_name) == dict and "interp" in cube_name.keys():
     cube_interp = cube_data_class()
@@ -174,9 +176,16 @@ dico_visual_interp = {
 dico_visual_seasonality = {
     "filtered_results": (lambda pix: pix.plot_filtered_results(filt=filt, impose_frequency=impose_frequency)),
     "TF": (lambda pix: pix.plot_TF(filt=filt, verbose=verbose)),
-    "best_matching_sinus": (lambda pix: pix.plot_best_matching_sinus(filt=filt, impose_frequency=impose_frequency, raw_seasonality=raw_seasonality, 
-                                                                     several_freq=several_freq, verbose=verbose)),
-    "annual_curves": (lambda pix: pix.plot_annual_curves())
+    "best_matching_sinus": (
+        lambda pix: pix.plot_best_matching_sinus(
+            filt=filt,
+            impose_frequency=impose_frequency,
+            raw_seasonality=raw_seasonality,
+            several_freq=several_freq,
+            verbose=verbose,
+        )
+    ),
+    "annual_curves": (lambda pix: pix.plot_annual_curves()),
 }
 
 # Interpolated data cube
@@ -189,21 +198,26 @@ data_raw = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
 
 pixel_object = pixel_class()
 pixel_object.load(
-    [result, data_raw], save=save, show=True, A=False, path_save=path_save, type_data=["interp", "obs_filt" if filt_raw else "obs"]
+    [result, data_raw],
+    save=save,
+    show=True,
+    A=False,
+    path_save=path_save,
+    type_data=["interp", "obs_filt" if filt_raw else "obs"],
 )
 
 for option in option_visual:
     if option not in dico_visual.keys():
         raise ValueError(f"'{option}' is not a valid visual option, please choose among {list(dico_visual.keys())}")
     dico_visual[option](pixel_object)
-    
+
 for option in option_visual_interp:
     if option not in dico_visual_interp.keys():
         raise ValueError(
             f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}"
         )
     dico_visual_interp[option](pixel_object)
-    
+
 for option in option_visual_seasonality:
     if option not in dico_visual_seasonality.keys():
         raise ValueError(

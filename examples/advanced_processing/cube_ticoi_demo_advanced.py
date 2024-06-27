@@ -146,9 +146,11 @@ inversion_kwargs = {
     "verbose": False,  # Print information throughout TICOI processing
 }
 
-smooth_res = False # Smooth TICOI results (to limit the noise)
-smooth_window_size = 3 # Size of the window for the average filter used to smooth the cube
-smooth_filt = None # Specify here the filter you want to use to smooth the cube (if None, an average filter will be used)
+smooth_res = False  # Smooth TICOI results (to limit the noise)
+smooth_window_size = 3  # Size of the window for the average filter used to smooth the cube
+smooth_filt = (
+    None  # Specify here the filter you want to use to smooth the cube (if None, an average filter will be used)
+)
 
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 6  # Number of CPU to be used for parallelization
@@ -246,7 +248,7 @@ elif TICOI_process == "direct_process":
         delayed(process)(cube, i, j, returned=returned, obs_filt=obs_filt, **inversion_kwargs)
         for i, j in xy_values_tqdm
     )
-    
+
     if isinstance(returned, list) and len(returned) > 1:
         result = {returned[r]: [result[i][r] for i in range(len(result))] for r in range(len(returned))}
 
@@ -336,7 +338,7 @@ if TICOI_process != "load":
         )
         if smooth_res:
             cube_interp, result["interp"] = cube_interp
-        
+
 # Plot the mean velocity as an example
 if save_mean_velocity and cube_interp is not None:
     cube_interp.average_cube(return_format="geotiff", return_variable=["vv"], save=True, path_save=path_save)

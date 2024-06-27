@@ -342,16 +342,18 @@ if impose_frequency:
     # Parameters
     sine = sine_fconst(dates, *popt, freqs=several_freq)
     sine_year = sine_fconst(np.linspace(1, 365, 365), *popt, freqs=several_freq)
-    
+
     # Information about the periodicity of TICOI results
-    print(f"[ticoi_pixel_demo] Amplitude of the best matching sinus to TICOI results: {np.max(sine_year) - popt[-1]} m/y")
-    
+    print(
+        f"[ticoi_pixel_demo] Amplitude of the best matching sinus to TICOI results: {np.max(sine_year) - popt[-1]} m/y"
+    )
+
     first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + dataf_lp["date1"].min()
     max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
     print(f"                   Maximum at day {max_day.days}")
     print(f"                   Mean value of {round(np.mean(sine + np.mean(vv)), 1)} m/y")
     print(f"                   RMSE : {round(root_mean_squared_error(sine, vv_filt), 2)} m/y")
-    
+
     del sine_year
 
     if raw_seasonality:
@@ -370,14 +372,16 @@ if impose_frequency:
         sine_raw_year = sine_fconst(np.linspace(1, 365, 365), *popt_raw, freqs=several_freq)
 
         # Information about the periodicity of raw data
-        print(f"[ticoi_pixel_demo] Amplitude of the best matching sinus to raw data: {np.max(sine_raw_year) - popt_raw[-1]}")
-        
+        print(
+            f"[ticoi_pixel_demo] Amplitude of the best matching sinus to raw data: {np.max(sine_raw_year) - popt_raw[-1]}"
+        )
+
         first_max_day_raw = pd.Timedelta(np.argmax(sine_raw_year), "D") + dataf_lp["date1"].min()
         max_day_raw = first_max_day_raw - pd.Timestamp(year=first_max_day.year, month=1, day=1)
         print(f"                   Maximum at day {max_day_raw.days}")
         print(f'                   Mean value of {round(np.mean(sine_raw + dataff["vv"].mean()), 1)} m/y')
         print(f"                   RMSE : {round(root_mean_squared_error(sine_raw, raw_c), 2)} m/y")
-        
+
         del sine_raw_year
 
 # Frequency is to be found via a TF transform
@@ -445,7 +449,7 @@ else:
     max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
     print(f"                   Maximum at day {max_day.days}")
     print(f"                   RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y")
-    
+
     del sine_year
 
 ## ------------------------------ Plot the data  --------------------------- ##
@@ -456,7 +460,13 @@ plt.plot(dates_c, vv, "black", alpha=0.6, label="TICOI velocities")
 if filt is not None:
     plt.plot(dates_c, vv_filt + np.mean(vv), "red", alpha=0.6, label="Filtered TICOI velocities")
 if impose_frequency and raw_seasonality:
-    plt.plot(dataff.index, sine_raw + dataff["vv"].mean(), linewidth=3, color="forestgreen", label="Best matching sinus to raw data")
+    plt.plot(
+        dataff.index,
+        sine_raw + dataff["vv"].mean(),
+        linewidth=3,
+        color="forestgreen",
+        label="Best matching sinus to raw data",
+    )
 plt.plot(dates_c, sine + np.mean(vv), color="deepskyblue", linewidth=3, label="Best matching sinus to TICOI results")
 plt.vlines(
     pd.date_range(start=first_max_day, end=dataf_lp["date2"].max(), freq=f"{int(1/f)}D"),
