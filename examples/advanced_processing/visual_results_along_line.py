@@ -1,30 +1,20 @@
-#!/usr/bin/env python3
-r"""
-Visualization of the cube results from TICO (without interpolation), or TICOI (with interpolation).
-Additional visualisation functions related to the stufy of the seasonality of the data are available.
-   /!\ A TICOI cube must be processed and saved to a netCDF file before calling this script (it can be done in cube_ticoi_demo.py
-or cube_ticoi_demo_advanced.py)
-
-Author : Laurane Charrier, Lei Guo, Nathan Lioret
-Reference:
-    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
-    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
-    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
-    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+"""
+Visualization of the results along a given line (generally the flow line of the glacier), generating a heatmap and graphs for some pixels.
 """
 
 import os
 import time
 import warnings
 
+from pyproj import Transformer
+
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.pixel_class import pixel_class
+from ticoi.other_functions import points_of_shp_line, draw_heatmap
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
 # =========================================================================%% #
-
-warnings.filterwarnings("ignore")
 
 ## ------------------------------ Data selection --------------------------- ##
 # A TICOI cube must be processed before calling to this script
@@ -35,13 +25,22 @@ cube_name = {
     "invert": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_invert.nc',
     "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
 }
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "line"))}/'  # Path where to store the results
+name_save = 'Argentiere_flowline_heatmap'
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343686.3, 5091294.9  # Pixel coordinates
-
 ## ------------------------- Visualization parameters ---------------------- ##
+# Heatmap parameters
+shp_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "lines", "Argentiere_flowline_RGI"))}/Argentiere_flowline_RGI.shp'
+select_portion = [5.5, 8] # Select a portion of the line
+distance = 50 # Distance between the points of the heatmap
+nb_points = None # Number of points to compute along the line (None if you prefer to set a distance between points)
+heatmap_variables = ['vv', 'vx', 'vy'] # Heatmaps to be computed (put None if you don't want the heatmaps)
+
+# Graphs parameters
+distance_plots = 200
 save = True  # If True, save the figures to path_save
+show = False # If True, show the figures
 colors = ["orange", "blue"]
 cmap = "rainbow"
 log_scale = False
@@ -69,7 +68,6 @@ load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-    "buffer": [i, j, 250],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
@@ -143,8 +141,30 @@ print(f"[Data loading] Data loading took {round(stop[-1] - start[-1], 3)} s")
 
 
 # %%========================================================================= #
-#                                      TICOI                                  #
+#                                   HEATMAP                                   #
 # =========================================================================%% #
+
+# Extract the points from the line
+points_heatmap = points_of_shp_line(shp_file, proj=proj, distance=distance, nb_points=nb_points, select=select_portion)
+
+maplabels = {'vv': 'Mean of velocity magnitude [m/y]',
+             'vx': 'Mean of velocity x component [m/y]',
+             'vy': 'Mean of velocity y component [m/y]'}
+
+if isinstance(heatmap_variables, str):
+    line_df = cube_interp.compute_heatmap_moving(points_heatmap, variable=heatmap_variables)
+    draw_heatmap(line_df, savepath=path_save, name=name_save, maplabel=maplabels[heatmap_variables])
+        
+elif isinstance(heatmap_variables, list):
+    for variable in heatmap_variables:
+        line_df = cube_interp.compute_heatmap_moving(points_heatmap, variable=variable)
+        draw_heatmap(line_df, savepath=path_save, name=f'{name_save}_{variable}', maplabel=maplabels[variable])
+        
+# %%========================================================================= #
+#                             PLOTS AT POINTS                                 #
+# =========================================================================%% #
+        
+points_plots = points_of_shp_line(shp_file, proj=proj, distance=distance_plots, select=select_portion)
 
 dico_visual = {
     "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
@@ -187,42 +207,42 @@ dico_visual_seasonality = {
     "annual_curves": (lambda pix: pix.plot_annual_curves()),
 }
 
-# Interpolated data cube
-result = cube_interp.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
-
 # Filter and load raw data
-if filt_raw:
-    cube.filter_cube(delete_outliers=delete_outliers)
-data_raw = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
+# if filt_raw:
+#     cube.filter_cube(delete_outliers=delete_outliers)
+    
+for n, (i, j) in enumerate([(points_plots.loc[k, 'geometry'].x, points_plots.loc[k, 'geometry'].y) for k in range(points_plots.shape[0])]):
+    result = cube_interp.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
+    data_raw = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
+    
+    print(result.shape[0])
+    os.mkdir(f'{path_save}{n*distance_plots}/')
+    
+    pixel_object = pixel_class()
+    pixel_object.load(
+        [result, data_raw],
+        save=save,
+        show=show,
+        A=False,
+        path_save=f'{path_save}{n*distance_plots}/',
+        type_data=["interp", "obs_filt" if filt_raw else "obs"],
+    )
+    
+    for option in option_visual:
+        if option not in dico_visual.keys():
+            raise ValueError(f"'{option}' is not a valid visual option, please choose among {list(dico_visual.keys())}")
+        dico_visual[option](pixel_object)
 
-pixel_object = pixel_class()
-pixel_object.load(
-    [result, data_raw],
-    save=save,
-    show=True,
-    A=False,
-    path_save=path_save,
-    type_data=["interp", "obs_filt" if filt_raw else "obs"],
-)
+    for option in option_visual_interp:
+        if option not in dico_visual_interp.keys():
+            raise ValueError(
+                f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}"
+            )
+        dico_visual_interp[option](pixel_object)
 
-for option in option_visual:
-    if option not in dico_visual.keys():
-        raise ValueError(f"'{option}' is not a valid visual option, please choose among {list(dico_visual.keys())}")
-    dico_visual[option](pixel_object)
-
-for option in option_visual_interp:
-    if option not in dico_visual_interp.keys():
-        raise ValueError(
-            f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}"
-        )
-    dico_visual_interp[option](pixel_object)
-
-for option in option_visual_seasonality:
-    if option not in dico_visual_seasonality.keys():
-        raise ValueError(
-            f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}"
-        )
-    dico_visual_seasonality[option](pixel_object)
-
-stop.append(time.time())
-print(f"[Overall] Overall processing took {round(stop[-1] - start[0], 0)} s")
+    for option in option_visual_seasonality:
+        if option not in dico_visual_seasonality.keys():
+            raise ValueError(
+                f"'{option}' is not a valid visual option for interpolation results, please choose among {list(dico_visual_interp.keys())}"
+            )
+        dico_visual_seasonality[option](pixel_object)

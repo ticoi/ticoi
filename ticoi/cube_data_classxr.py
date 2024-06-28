@@ -1843,7 +1843,7 @@ class cube_data_class:
         date_range = pd.date_range(np.nanmin(date1), np.nanmax(date2), freq=freq)  # 'MS' for start of each month
         data = np.column_stack((date1, date2))  # Combine date1 and date2 into a single 2D array
         # Sort data according to the first date
-        data = np.ma.array(sorted(data, key=lambda date: date[0]))  # sort according to the first date
+        data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Sort according to the first date
 
         # Find the index of the dates that have to be averaged, to get the heatmap
         # Each value of the heatmap corresponds to an average of all the velocities which are overlapping a given period
@@ -1861,13 +1861,17 @@ class cube_data_class:
         del interval_output, date_range, data
 
         def data_temporalpoint(k: int, points_heatmap):
+            
             """Get the data at a given spatial point contained in points_heatmap"""
+            
             geopoint = points_heatmap["geometry"].iloc[
                 k
             ]  # Return a point at the specified distance along a linear geometric object. # True -> interpretate k/n as fraction and not meters
+            
             i, j = geopoint.x, geopoint.y
             if verbose:
                 print("i,j", i, j)
+                
             if variable == "vv":
                 v = np.sqrt(
                     self.ds["vx"].interp(x=i, y=j, method=method_interp).load() ** 2
@@ -1875,26 +1879,31 @@ class cube_data_class:
                 )
             elif variable == "vx" or variable == "vy":
                 v = self.ds[variable].interp(x=i, y=j, method=method_interp).load()
+                
             data = np.array([date1, date2, v.values], dtype=object).T
-            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # sort according to the first date
+            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Slort according to the first date
+            
             return data[:, 2]
 
         for k in range(len(points_heatmap)):
             if verbose:
                 print("k", k)
+                
             data = data_temporalpoint(k, points_heatmap)
             vvmasked = np.ma.masked_invalid(np.ma.array(data, dtype="float"))
+            
             if method == "mean":
                 vvmean = [np.ma.mean(vvmasked[lines]) for lines in save_line]
             elif method == "median":
                 vvmean = [np.ma.median(vvmasked[lines]) for lines in save_line]
 
             vvdf = pd.DataFrame(vvmean, index=dates_c, columns=[points_heatmap["distance"].iloc[k] / 1000])
-            line_df_vv = None
+               
             if k > 0:
                 line_df_vv = pd.concat([line_df_vv, vvdf], join="inner", axis=1)
             else:
                 line_df_vv = vvdf
+                
         return line_df_vv
 
     # @jit(nopython=True)
