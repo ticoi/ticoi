@@ -17,7 +17,6 @@ import ticoi.pixel_class
 #                           DATAFRAME_DATA OBJECT                             #
 # =========================================================================%% #
 
-
 class dataframe_data:
 
     """Object to define a pd.Dataframe storing velocity observations"""
@@ -335,6 +334,7 @@ class pixel_class:
             vv_filt, vv_c, dates_c, dates = filtered_results
         else:
             vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt)
+        vv_filt = np.array(vv_filt)
 
         N = len(dates)
         Ts = dates[1] - dates[0]
@@ -1375,7 +1375,7 @@ class pixel_class:
         :return ax, fig: Axis and Figure of the plot
         """
 
-        window, vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt=filt)
+        vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt=filt)
 
         if impose_frequency:
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=self.figsize)
@@ -1392,7 +1392,7 @@ class pixel_class:
         axe.legend(loc="lower left")
 
         if not impose_frequency:
-            ax[1].plot(dates_c, vv_filt * window, "blue", label="With Hanning windowing")
+            ax[1].plot(dates_c, vv_filt * signal.windows.hann(len(dates)), "blue", label="With Hanning windowing")
             ax[1].plot(dates_c, vv_filt, "black", label="Without windowing")
             ax[1].set_xlabel("Centered velocity [m/y]", fontsize=16)
             ax[1].set_ylabel("Central date", fontsize=16)
