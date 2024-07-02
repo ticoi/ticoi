@@ -52,7 +52,7 @@ interpolation = True
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False  # Print information throughout TICOI processing
-visual = False # Plot information along the way
+visual = False  # Plot information along the way
 save = True  # Save the results or not
 # Visualisation options
 option_visual = [
