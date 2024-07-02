@@ -34,7 +34,7 @@ path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ex
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343617.7, 5091275.0 # Pixel coordinates
+i, j = 343617.7, 5091275.0  # Pixel coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the folling part we advice the user to change only the following parameter, the other paramaters stored in a dictionary can be kept as it is for a first use

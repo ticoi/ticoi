@@ -13,6 +13,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
+import scipy.ndimage as ndi
 from scipy import interpolate
 
 from ticoi.pixel_class import pixel_class
@@ -146,11 +147,11 @@ def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd
 
     """
 
-    :param dataf_lp: interpolated results
-    :param first_date: list of first dates of the entire cube
-    :param second_date: list of second dates of the entire cube
+    :param dataf_lp: [pd dataframe] --- Interpolated results
+    :param first_date: [pd series] --- List of first dates of the entire cube
+    :param second_date: [pd series] --- List of second dates of the entire cube
 
-    :return: interpolated with row of name so when there is missing estimation in comparison with the entire cube
+    :return dataf_lp: [pd dataframe] --- Interpolated results with row of name so when there is missing estimation in comparison with the entire cube
     """
 
     nul_df = pd.DataFrame(
@@ -173,6 +174,29 @@ def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd
     return dataf_lp
 
 
+def smooth_results(result: np.ndarray, window_size: int = 3, filt: np.ndarray | None = None):
+
+    r"""
+    Spatially smooth the data by averaging (applying a convolution filter to) each pixel with its neighborhoud.
+    /!\ This method only works with cubes where both starting and ending dates exactly correspond for each pixel (ie TICOI results)
+
+    :param result: [np array] --- Results for a variable (pandas dataframe of TICOI results transformed, as in cube_data_class.write_result_ticoi)
+    :param window_size: [int] [default is 3] --- Size of the window for mean filtering
+    :param filt: [np array | None] [default is None] --- Customized filter to apply on the data (ex: Gaussian filter)
+
+    :return result: [np array] --- Smoothened result
+    """
+
+    if filt is None:  # Apply a mean filter
+        filt = np.full((window_size, window_size), 1 / window_size**2)
+
+    # Filter the data at each date
+    for t in range(result.shape[-1]):
+        result[:, :, t] = ndi.correlate(result[:, :, t], filt, mode="nearest")
+
+    return result
+
+
 def visualisation_interpolation(
     list_dataf: pd.DataFrame,
     option_visual: List = [
@@ -190,16 +214,15 @@ def visualisation_interpolation(
 ):
 
     """
+    Plot some relevant informations about TICOI results.
 
-    :param list_dataf:
-    :param option_visual:
-    :param save:
-    :param show:
-    :param path_save:
-    :param colors:
-    :param figsize:
-
-    :return:
+    :param list_dataf: [pd dataframe] --- Results after the interpolation in TICOI processing
+    :param option_visual: [list] [default] --- List of the plots to prepare (each plot shows a different information)
+    :param save: [bool] [default is False] --- If True, save the figures to path_save (if not None)
+    :param show: [bool] [default is True] --- If True, plot the figures
+    :param path_save: [str | None] [default is None] --- Path where the figures must be saved if save is True
+    :param colors: [List<str>] [default is ["blueviolet", "orange"]] --- Colors for the plot
+    :param figsize: [tuple] [default is (10, 6)] --- Size of the figures
     """
 
     pixel_object = pixel_class()
