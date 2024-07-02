@@ -13,12 +13,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import sklearn.metrics as sm
 import xarray as xr
-import seaborn as sns
-
-from pyproj import CRS
 from joblib import Parallel, delayed
+from pyproj import CRS
 from shapely.geometry import Point, Polygon
 
 from ticoi.core import interpolation_to_data, inversion_core
@@ -90,50 +89,71 @@ def find_granule_by_point(input_dict, input_point):  # [lon,lat]
 
     return target_granule_urls
 
-def points_of_shp_line(shp_file, proj='EPSG:4326', distance=50, nb_points=None, select=None):
+
+def points_of_shp_line(shp_file, proj="EPSG:4326", distance=50, nb_points=None, select=None):
     geolns = gpd.read_file(shp_file)
-    if geolns.geom_type.describe()['top'] != 'LineString':
+    if geolns.geom_type.describe()["top"] != "LineString":
         raise ValueError("The shp geometries must be a LineString.")
 
-    # The selection is given in kilometers -> convert it to meters
-    if select is not None and (select[0] < 2*distance if distance is not None else 100 or select[1] < 2*distance if distance is not None else 100):
+    # The selection is given in kilometers -> convert it to meters
+    if select is not None and (
+        select[0] < 2 * distance
+        if distance is not None
+        else 100 or select[1] < 2 * distance
+        if distance is not None
+        else 100
+    ):
         select[0] *= 1000
         select[1] *= 1000
- 
+
     if nb_points is not None:
         if isinstance(select, list) and len(select) == 2:
-            point_dist = np.linspace(max(0, select[0]), 
-                                     min(int(geolns.geometry.length.values), select[1]), nb_points)
+            point_dist = np.linspace(max(0, select[0]), min(int(geolns.geometry.length.values), select[1]), nb_points)
         else:
             point_dist = np.linspace(0, int(geolns.geometry.length.values), nb_points)
-            
+
     elif distance is not None:
         if isinstance(select, list) and len(select) == 2:
-            point_dist = np.arange(max(0, select[0]), 
-                                   min(int(geolns.geometry.length.values), select[1]+1), distance)
+            point_dist = np.arange(max(0, select[0]), min(int(geolns.geometry.length.values), select[1] + 1), distance)
         else:
             point_dist = np.arange(0, int(geolns.geometry.length.values), distance)
-            
+
     else:
         raise ValueError("One of 'distance' or 'nb_points' parameters must not be None.")
-    
+
     # Projection of the shapeline coordinates into the cube coordinates system
-    if proj != None and CRS(proj) != geolns.crs: 
+    if proj != None and CRS(proj) != geolns.crs:
         geolns = geolns.to_crs(CRS(proj))
-        
+
     # Retrieve the points from the line (interpolation)
-    geopnts = pd.DataFrame({'distance': point_dist,
-                            'geometry': [(geolns.geometry.interpolate(z, normalized=False)).iloc[0] for z in point_dist]})
-    
+    geopnts = pd.DataFrame(
+        {
+            "distance": point_dist,
+            "geometry": [(geolns.geometry.interpolate(z, normalized=False)).iloc[0] for z in point_dist],
+        }
+    )
+
     return geopnts
 
-def draw_heatmap(line_df, savepath=None, vminmax=[False, False], name='heatmap',
-                 legend='Distance along a longitudinal profile', maplabel='Mean of velocity magnitude [m/y]', title='',
-                 cmap='rainbow', figsize=(10, 8), centered=False, x_tick_frequency=10, y_tick_frequency=3):
-    
+
+def draw_heatmap(
+    line_df,
+    savepath=None,
+    vminmax=[False, False],
+    name="heatmap",
+    legend="Distance along a longitudinal profile",
+    maplabel="Mean of velocity magnitude [m/y]",
+    title="",
+    cmap="rainbow",
+    figsize=(10, 8),
+    centered=False,
+    x_tick_frequency=10,
+    y_tick_frequency=3,
+):
+
     """
     Draw an hovmoller diagram (heatmap).
-    
+
     :param line_df_vv: pd dataframe, heatmap values
     :param savepath: str or None, path where to save the figure. If None, the figure is not saved
     :param vminmax: [int, int] or [False, False] : min and max values used for the plot
@@ -152,26 +172,27 @@ def draw_heatmap(line_df, savepath=None, vminmax=[False, False], name='heatmap',
 
     fig, ax = plt.subplots(figsize=figsize)
     if vminmax == [False, False]:  # bound : mean-3std; mean+3 std
-        vminmax = [line_df.mean().mean() - 3 * line_df.std().std(),
-                   line_df.mean().mean() + 3 * line_df.std().std()]
+        vminmax = [line_df.mean().mean() - 3 * line_df.std().std(), line_df.mean().mean() + 3 * line_df.std().std()]
         vminmax = [line_df.min().min(), line_df.max().max()]
-        
+
     if centered:  # Center the colormap on 0
-        ax = sns.heatmap(data=line_df, vmin=vminmax[0], vmax=vminmax[1],
-                         cbar_kws={'label': f'\n {maplabel}'}, cmap=cmap, center=0)
+        ax = sns.heatmap(
+            data=line_df, vmin=vminmax[0], vmax=vminmax[1], cbar_kws={"label": f"\n {maplabel}"}, cmap=cmap, center=0
+        )
     else:
-        ax = sns.heatmap(data=line_df, vmin=vminmax[0], vmax=vminmax[1],
-                         cbar_kws={'label': f'\n {maplabel}'}, cmap=cmap)
-        
+        ax = sns.heatmap(
+            data=line_df, vmin=vminmax[0], vmax=vminmax[1], cbar_kws={"label": f"\n {maplabel}"}, cmap=cmap
+        )
+
     # Display x-ticks
     x_ticks = range(0, len(line_df.columns), x_tick_frequency)
-    x_tick_labels = [f'{line_df.columns[i]}' for i in x_ticks]
+    x_tick_labels = [f"{line_df.columns[i]}" for i in x_ticks]
     ax.set_xticks(x_ticks)
     ax.set_xticklabels(x_tick_labels, fontsize=14)
 
     # Display y-ticks
     y_ticks = range(0, len(line_df.index), y_tick_frequency)
-    y_tick_labels = [line_df.index[i].strftime('%Y-%m') for i in y_ticks]
+    y_tick_labels = [line_df.index[i].strftime("%Y-%m") for i in y_ticks]
     ax.set_yticks(y_ticks)
     ax.set_yticklabels(y_tick_labels, fontsize=14)
 
@@ -179,22 +200,24 @@ def draw_heatmap(line_df, savepath=None, vminmax=[False, False], name='heatmap',
     y_tick_frequency = 12
     y_ticks = range(0, len(line_df.index), y_tick_frequency)
     for year in y_ticks:
-        ax.axhline(year, color='k', linewidth=1)
+        ax.axhline(year, color="k", linewidth=1)
     colorbar = ax.collections[0].colorbar
     colorbar.ax.tick_params(labelsize=14)
 
     ax.figure.axes[-1].yaxis.label.set_size(16)
-    ax.set_title(f'{title}', pad=20, fontsize=16)
-    ax.set_xlabel(f'{legend}', labelpad=8, fontsize=16)
-    ax.set_ylabel('Central date', fontsize=16)
+    ax.set_title(f"{title}", pad=20, fontsize=16)
+    ax.set_xlabel(f"{legend}", labelpad=8, fontsize=16)
+    ax.set_ylabel("Central date", fontsize=16)
     if savepath is not None:
-        fig.savefig(f'{savepath}{name}.png')
-        
+        fig.savefig(f"{savepath}{name}.png")
+
     plt.show()
+
 
 # %%========================================================================= #
 #                           OPTIMIZATION FUNCTIONS                            #
 # =========================================================================%% #
+
 
 def RMSE_TICOI_GT(
     data: list,
@@ -251,7 +274,7 @@ def RMSE_TICOI_GT(
     del A, result, dataf
 
     # RMSE between TICOI result and ground truth data
-    RMSE = sm.root_mean_squared_error(dataf_lp[["vx", "vy"]], data_gt[["vx", "vy"]])
+    RMSE = np.sqrt(sm.mean_squared_error(dataf_lp[["vx", "vy"]], data_gt[["vx", "vy"]]))
 
     ##  Plot the interpolated velocity magnitudes along with GT velocity magnitudes
     if visual:

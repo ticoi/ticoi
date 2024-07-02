@@ -400,7 +400,7 @@ def median_magnitude_filt(obs_cpx: np.array, median_magnitude_thres: int = 3, ax
 
     :param obs_cpx: [np array] --- Cube data to filter (complex where the real part is vx and the imaginary part is vy)
     :param median_magnitude_thres: [int] [default is 3] --- Position of the threshold relatively to the mean velocity at pixel
-    :param axis: [int] [defualt is 2] --- Axis on which the threshold should be applied (default is the time axis)
+    :param axis: [int] [default is 2] --- Axis on which the threshold should be applied (default is the time axis)
 
     :return inlier_flag: [np array] --- Boolean mask of the size of vx (and vy)
     """

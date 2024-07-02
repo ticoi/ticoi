@@ -9,8 +9,8 @@ import warnings
 from pyproj import Transformer
 
 from ticoi.cube_data_classxr import cube_data_class
+from ticoi.other_functions import draw_heatmap, points_of_shp_line
 from ticoi.pixel_class import pixel_class
-from ticoi.other_functions import points_of_shp_line, draw_heatmap
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
@@ -26,21 +26,21 @@ cube_name = {
     "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
 }
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "line"))}/'  # Path where to store the results
-name_save = 'Argentiere_flowline_heatmap'
+name_save = "Argentiere_flowline_heatmap"
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 ## ------------------------- Visualization parameters ---------------------- ##
 # Heatmap parameters
 shp_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "lines", "Argentiere_flowline_RGI"))}/Argentiere_flowline_RGI.shp'
-select_portion = [5.5, 8] # Select a portion of the line
-distance = 50 # Distance between the points of the heatmap
-nb_points = None # Number of points to compute along the line (None if you prefer to set a distance between points)
-heatmap_variables = ['vv', 'vx', 'vy'] # Heatmaps to be computed (put None if you don't want the heatmaps)
+select_portion = [5.5, 8]  # Select a portion of the line
+distance = 50  # Distance between the points of the heatmap
+nb_points = None  # Number of points to compute along the line (None if you prefer to set a distance between points)
+heatmap_variables = ["vv", "vx", "vy"]  # Heatmaps to be computed (put None if you don't want the heatmaps)
 
 # Graphs parameters
 distance_plots = 200
 save = True  # If True, save the figures to path_save
-show = False # If True, show the figures
+show = False  # If True, show the figures
 colors = ["orange", "blue"]
 cmap = "rainbow"
 log_scale = False
@@ -102,7 +102,7 @@ filt = None
 # 'uniform_all' : median of the std of each data covering the dates, which are constantly distributed every redundancy days
 # 'residu' : standard deviation of the data previously subtracted by TICOI results (ground truth) = standard deviation of the "noise"
 local_var_method = "uniform_7d"
-verbose = True  # Plot informations throughout the seasonality plotting process
+verbose = True  # Plot information throughout the seasonality plotting process
 
 # Parameters for annual curves plotting
 normalize = True  # Normalize the annual velocities between 0 and 1
@@ -147,23 +147,25 @@ print(f"[Data loading] Data loading took {round(stop[-1] - start[-1], 3)} s")
 # Extract the points from the line
 points_heatmap = points_of_shp_line(shp_file, proj=proj, distance=distance, nb_points=nb_points, select=select_portion)
 
-maplabels = {'vv': 'Mean of velocity magnitude [m/y]',
-             'vx': 'Mean of velocity x component [m/y]',
-             'vy': 'Mean of velocity y component [m/y]'}
+maplabels = {
+    "vv": "Mean of velocity magnitude [m/y]",
+    "vx": "Mean of velocity x component [m/y]",
+    "vy": "Mean of velocity y component [m/y]",
+}
 
 if isinstance(heatmap_variables, str):
     line_df = cube_interp.compute_heatmap_moving(points_heatmap, variable=heatmap_variables)
     draw_heatmap(line_df, savepath=path_save, name=name_save, maplabel=maplabels[heatmap_variables])
-        
+
 elif isinstance(heatmap_variables, list):
     for variable in heatmap_variables:
         line_df = cube_interp.compute_heatmap_moving(points_heatmap, variable=variable)
-        draw_heatmap(line_df, savepath=path_save, name=f'{name_save}_{variable}', maplabel=maplabels[variable])
-        
+        draw_heatmap(line_df, savepath=path_save, name=f"{name_save}_{variable}", maplabel=maplabels[variable])
+
 # %%========================================================================= #
 #                             PLOTS AT POINTS                                 #
 # =========================================================================%% #
-        
+
 points_plots = points_of_shp_line(shp_file, proj=proj, distance=distance_plots, select=select_portion)
 
 dico_visual = {
@@ -210,24 +212,26 @@ dico_visual_seasonality = {
 # Filter and load raw data
 # if filt_raw:
 #     cube.filter_cube(delete_outliers=delete_outliers)
-    
-for n, (i, j) in enumerate([(points_plots.loc[k, 'geometry'].x, points_plots.loc[k, 'geometry'].y) for k in range(points_plots.shape[0])]):
+
+for n, (i, j) in enumerate(
+    [(points_plots.loc[k, "geometry"].x, points_plots.loc[k, "geometry"].y) for k in range(points_plots.shape[0])]
+):
     result = cube_interp.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
     data_raw = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
-    
+
     print(result.shape[0])
-    os.mkdir(f'{path_save}{n*distance_plots}/')
-    
+    os.mkdir(f"{path_save}{n*distance_plots}/")
+
     pixel_object = pixel_class()
     pixel_object.load(
         [result, data_raw],
         save=save,
         show=show,
         A=False,
-        path_save=f'{path_save}{n*distance_plots}/',
+        path_save=f"{path_save}{n*distance_plots}/",
         type_data=["interp", "obs_filt" if filt_raw else "obs"],
     )
-    
+
     for option in option_visual:
         if option not in dico_visual.keys():
             raise ValueError(f"'{option}' is not a valid visual option, please choose among {list(dico_visual.keys())}")

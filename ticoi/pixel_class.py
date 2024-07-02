@@ -9,13 +9,14 @@ import scipy.fft as fft
 import scipy.signal as signal
 import seaborn as sns
 from scipy.optimize import curve_fit
-from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import mean_squared_error
 
 import ticoi.pixel_class
 
 # %%========================================================================= #
 #                           DATAFRAME_DATA OBJECT                             #
 # =========================================================================%% #
+
 
 class dataframe_data:
 
@@ -417,7 +418,7 @@ class pixel_class:
             first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + self.datainterp.dataf["date1"].min()
             max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
             max_value = np.max(sine_year) - popt[-1]
-            RMSE = root_mean_squared_error(sine, vv_filt)
+            RMSE = np.sqrt(mean_squared_error(sine, vv_filt))
 
             del sine_year
 
@@ -446,7 +447,7 @@ class pixel_class:
                 first_max_day_raw = pd.Timedelta(np.argmax(sine_year_raw), "D") + self.datainterp.dataf["date1"].min()
                 max_day_raw = first_max_day_raw - pd.Timestamp(year=first_max_day_raw.year, month=1, day=1)
                 max_value_raw = np.max(sine_year_raw) - popt_raw[-1]
-                RMSE_raw = root_mean_squared_error(sine_raw, raw_c)
+                RMSE_raw = np.sqrt(mean_squared_error(sine_raw, raw_c))
 
                 stats_raw = [first_max_day_raw, max_day_raw, max_value_raw, RMSE_raw]
                 del sine_year_raw
@@ -484,7 +485,7 @@ class pixel_class:
             first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + self.datainterp.dataf["date1"].min()
             max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
             max_value = np.max(sine_year) - off
-            RMSE = root_mean_squared_error(sine, vv_filt)
+            RMSE = np.sqrt(mean_squared_error(mean_squared_error(sine, vv_filt)))
 
             del sine_year
 
@@ -519,7 +520,7 @@ class pixel_class:
 
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to observations, if 'invert', it corresponds to inverted velocity
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figures of the plot
         """
@@ -583,7 +584,7 @@ class pixel_class:
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param zoom_on_results: [bool] [default is False] --- Set the limits of the axis according to the results min and max
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figures of the plot
         """
@@ -655,7 +656,7 @@ class pixel_class:
 
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figure of the plot
         """
@@ -712,7 +713,7 @@ class pixel_class:
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param zoom_on_results: [bool] [default is False] --- Set the limites of the axis according to the results min and max
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figure of the plots
         """
@@ -771,7 +772,7 @@ class pixel_class:
 
         :param cmap: [str] [default is 'rainbow''] --- Color map used to mark the errors in the plots
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting
 
         :return ax, fig: Axis and Figure of the plots
         """
@@ -817,7 +818,7 @@ class pixel_class:
 
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figure of the plot
         """
@@ -856,7 +857,7 @@ class pixel_class:
 
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figure of the plot
         """
@@ -901,7 +902,7 @@ class pixel_class:
         Plot the obersvation contribution to the inversion on top of velocities x and y components.
 
         :param cmap: [str] [default is 'rainbow] --- Color map used to mark the xcount values in the plots.
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figure of the plot
         """
@@ -961,7 +962,7 @@ class pixel_class:
         Plot the observation contribution to the inversion on top of the velocity magnitude.
 
         :param cmap: [str] [default is 'rainbow''] --- Color map used in the plots
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax, fig: Axis and Figure of the plot
         """
@@ -1008,7 +1009,7 @@ class pixel_class:
         Plot initial and final weights used in the inversion.
 
         :param cmap: [str] [default is 'plasma_r'] --- Color map used in the plots
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return ax_f, fig_f, ax_l, fig_l: Axis and Figure of the plots (weights from f: the first inversion, l: the last inversion)
         """
@@ -1126,7 +1127,7 @@ class pixel_class:
             - and the quality indicators (residuals_quality.png).
 
         :param log_scale: [bool] [default is False] --- if True, plot the figure in a log scale
-        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disapears instantly after ploting.
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
         """
 
         assert (
@@ -1550,7 +1551,7 @@ class pixel_class:
     ):
 
         """
-        Plot the velocity curves of each year on top of ones anothers and compute some statistics about it ().
+        Plot the velocity curves of each year on top of ones another and compute some statistics about it ().
 
         :param normalize: [bool] [default is False] --- Normalize the curves to [0-1] before plotting
         :param statistics: [List[str]] [default is everything] --- List of the statistics to compute and return (in ['min_max', 'mean', 'median', 'std', 'amplitude', 'max_day', 'nb_peaks', 'relative_max'])
@@ -1560,7 +1561,7 @@ class pixel_class:
         :param verbose: [bool] [default is False] --- Print a recap of the year statistics for each year
 
         :return ax, fig: Axis and Figure of the plots
-        :return stats: [dict] --- Dictionnary of the statistics (each key is associated to a list with every year's value of the statistic related to the key)
+        :return stats: [dict] --- dictionary of the statistics (each key is associated to a list with every year's value of the statistic related to the key)
         """
 
         dates_c = (

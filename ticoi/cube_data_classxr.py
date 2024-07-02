@@ -24,13 +24,10 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
-import xarray as xr
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
-from osgeo import gdal, osr
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
-from rasterio.transform import from_origin
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -1586,13 +1583,13 @@ class cube_data_class:
     def split_cube(self, n_split: int = 2, dim: str | list = "x", savepath: str | None = None):
 
         """
-        Split the cube into smaller cubes (taking less memory to load) acording to the given dimensions.
+        Split the cube into smaller cubes (taking less memory to load) according to the given dimensions.
 
         :param n_split: [int] [default is 2] --- Number of split to compute along each dimensions in dim
-        :param dim: [str | list] [default is "x"] --- Dimension.s along which must be splitted the cube
+        :param dim: [str | list] [default is "x"] --- Dimension.s along which must be split the cube
         :param savepath: [str | None] [default is None] --- If not None, save the new cubes at this location
 
-        :return cubes: [dict] --- Dictionnary of the splitted cubes (keys describe the position of the cube)
+        :return cubes: [dict] --- Dictionary of the splitcubes (keys describe the position of the cube)
         """
 
         cubes = dict()
@@ -1606,7 +1603,7 @@ class cube_data_class:
                 )
                 if savepath is not None:
                     cube.ds.to_netcdf(f"{savepath}{dim}_{s}.nc")
-                    print(f"Splitted cube saved at {savepath}{dim}_{s}.nc")
+                    print(f"Split cube saved at {savepath}{dim}_{s}.nc")
                 cubes[f"{savepath.split('/')[-1]}{dim}_{s}"] = cube
             elif isinstance(dim, list):
                 cube = cube_data_class(
@@ -1624,7 +1621,7 @@ class cube_data_class:
                 else:
                     if savepath is not None:
                         cube.ds.to_netcdf(f"{savepath}{dim[0]}_{s}.nc")
-                        print(f"Splitted cube saved at {savepath}{dim[0]}_{s}.nc")
+                        print(f"Split cube saved at {savepath}{dim[0]}_{s}.nc")
                     cubes[f"{savepath.split('/')[-1]}{dim}_{s}"] = cube
 
         return cubes
@@ -1861,17 +1858,17 @@ class cube_data_class:
         del interval_output, date_range, data
 
         def data_temporalpoint(k: int, points_heatmap):
-            
+
             """Get the data at a given spatial point contained in points_heatmap"""
-            
+
             geopoint = points_heatmap["geometry"].iloc[
                 k
             ]  # Return a point at the specified distance along a linear geometric object. # True -> interpretate k/n as fraction and not meters
-            
+
             i, j = geopoint.x, geopoint.y
             if verbose:
                 print("i,j", i, j)
-                
+
             if variable == "vv":
                 v = np.sqrt(
                     self.ds["vx"].interp(x=i, y=j, method=method_interp).load() ** 2
@@ -1879,31 +1876,31 @@ class cube_data_class:
                 )
             elif variable == "vx" or variable == "vy":
                 v = self.ds[variable].interp(x=i, y=j, method=method_interp).load()
-                
+
             data = np.array([date1, date2, v.values], dtype=object).T
             data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Slort according to the first date
-            
+
             return data[:, 2]
 
         for k in range(len(points_heatmap)):
             if verbose:
                 print("k", k)
-                
+
             data = data_temporalpoint(k, points_heatmap)
             vvmasked = np.ma.masked_invalid(np.ma.array(data, dtype="float"))
-            
+
             if method == "mean":
                 vvmean = [np.ma.mean(vvmasked[lines]) for lines in save_line]
             elif method == "median":
                 vvmean = [np.ma.median(vvmasked[lines]) for lines in save_line]
 
             vvdf = pd.DataFrame(vvmean, index=dates_c, columns=[points_heatmap["distance"].iloc[k] / 1000])
-               
+
             if k > 0:
                 line_df_vv = pd.concat([line_df_vv, vvdf], join="inner", axis=1)
             else:
                 line_df_vv = vvdf
-                
+
         return line_df_vv
 
     # @jit(nopython=True)

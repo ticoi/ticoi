@@ -104,7 +104,7 @@ filt = None
 # 'uniform_all' : median of the std of each data covering the dates, which are constantly distributed every redundancy days
 # 'residu' : standard deviation of the data previously subtracted by TICOI results (ground truth) = standard deviation of the "noise"
 local_var_method = "uniform_7d"
-verbose = True  # Plot informations throughout the seasonality plotting process
+verbose = True  # Plot information throughout the seasonality plotting process
 
 # Parameters for annual curves plotting
 normalize = True  # Normalize the annual velocities between 0 and 1

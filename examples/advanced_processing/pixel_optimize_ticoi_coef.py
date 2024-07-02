@@ -36,7 +36,7 @@ path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "re
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 i, j = 342537.1, 5092253.3  # Point (pixel) where to carry on the computation
-i, j = 343309.23, 5091987.07
+# i, j = 343309.23, 5091987.07
 
 ## ------------------------- Main parameters --------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used
