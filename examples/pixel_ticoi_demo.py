@@ -29,7 +29,9 @@ from ticoi.interpolation_functions import (
 
 ###  Selection of data
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = (
+    f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+)
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
