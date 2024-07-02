@@ -177,7 +177,7 @@ def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd
 def smooth_results(result: np.ndarray, window_size: int = 3, filt: np.ndarray | None = None):
 
     r"""
-    Spatially smooth the data by averaging (applying a convolution filter to) each pixel with its neighborhoud.
+    Spatially smooth the data by averaging (applying a convolution filter to) each pixel with its neighborhood.
     /!\ This method only works with cubes where both starting and ending dates exactly correspond for each pixel (ie TICOI results)
 
     :param result: [np array] --- Results for a variable (pandas dataframe of TICOI results transformed, as in cube_data_class.write_result_ticoi)
@@ -214,7 +214,7 @@ def visualisation_interpolation(
 ):
 
     """
-    Plot some relevant informations about TICOI results.
+    Plot some relevant information about TICOI results.
 
     :param list_dataf: [pd dataframe] --- Results after the interpolation in TICOI processing
     :param option_visual: [list] [default] --- List of the plots to prepare (each plot shows a different information)

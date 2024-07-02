@@ -32,18 +32,14 @@ warnings.filterwarnings("ignore")
 #                                    PARAMETERS                               #
 # =========================================================================%% #
 
-cube_name = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc"
+# List of the paths where the data cubes are stored
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+# Path to the "ground truth" cube used to optimize the regularisation
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel", "optimize_coef"))}/'  # Path where to store the results
+proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-
-proj = "EPSG:32647"
 # catalog_cubeige = '/home/charriel/Documents/Bettik/Yukon/cube_grid.shp'
-
-# selection of data
-# i, j = 388767, 4257984 # centeral part of Gangnalou glacier
-# i, j = 395800, 4259037 # centeral part of upper surging glacier
-i, j = 396343, 4259420  # middle lower part of upper surging glacier
-# To select a specific period for the measurements, if you want to select all the dates put None, else give an interval of dates ['aaaa-mm-dd', 'aaaa-mm-dd'] ([min, max])
-path_save = f"/media/tristan/Data3/Hala_lake/Landsat7_refine/{i}-{j}/"  # Path where to store the results
+i, j = 342537.1, 5092253.3  # Point (pixel) where to carry on the computation
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used
@@ -56,7 +52,7 @@ interpolation = True
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False  # Print information throughout TICOI processing
-visual = True  # Plot information along the way
+visual = False # Plot information along the way
 save = True  # Save the results or not
 # Visualisation options
 option_visual = [
@@ -309,8 +305,6 @@ for param_value in list_parameter:
             result,
             path_save=save_path,
             data=dataf,
-            first_date_interpol=start_date_interpol,
-            last_date_interpol=last_date_interpol,
             **interpolation_kwargs,
         )
 
