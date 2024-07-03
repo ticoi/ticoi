@@ -791,7 +791,7 @@ def interpolation_core(
     if last_date_interpol is not None and dataf_lp["date2"].iloc[-1] < pd.Timestamp(last_date_interpol):
         first_date = np.arange(
             dataf_lp["date2"].iloc[-1] + np.timedelta64(redundancy, "D"),
-            last_date_interpol,
+            last_date_interpol+np.timedelta64(redundancy, "D"),
             np.timedelta64(redundancy, "D"),
         )
         nul_df = pd.DataFrame(
@@ -804,10 +804,9 @@ def interpolation_core(
         )
         dataf_lp = pd.concat([dataf_lp, nul_df], ignore_index=True)
 
-    ##  Visualisation
-    # if visual: visualisation_interpolation(dataf_lp, data, path_save, interval_output=interval_output, show_temp=show_temp,
-    #                                        unit='m/y' if unit == 365 else 'm/d', vmax=vmax, figsize=figsize,)
-
+    # print(dataf_lp.shape)
+    # if dataf_lp.shape[0]!= 567:
+    #     print('stop')
     return dataf_lp
 
 
@@ -957,14 +956,15 @@ def process(
         flag=flag,
     )
 
-    if "raw" in returned:
+    if "raw" in returned:#return the raw data
         returned_list.append(data)
 
     if "invert" in returned or "interp" in returned:
-        if flag is not None:
+        if flag is not None:#set regu and coef for every flags
             regu, coef = data[3], data[4]
 
         # Inversion
+        #TODO: to check that!
         if delete_outliers == "median_angle":
             conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
 
@@ -1006,16 +1006,12 @@ def process(
                 dataf_list = interpolation_core(
                     result[1],
                     interval_output,
-                    path_save,
                     option_interpol=option_interpol,
                     first_date_interpol=first_date_interpol,
                     last_date_interpol=last_date_interpol,
-                    visual=visual,
-                    data=data,
                     unit=unit,
                     redundancy=redundancy,
-                    result_quality=result_quality,
-                    verbose=verbose,
+                    result_quality=result_quality
                 )
 
                 if result_quality is not None and "Norm_residual" in result_quality:
