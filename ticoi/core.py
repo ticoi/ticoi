@@ -640,7 +640,8 @@ def interpolation_core(
     last_date_interpol: np.datetime64 | str | None = None,
     unit: int = 365,
     redundancy: int | None = None,
-    result_quality: list | None = None):
+    result_quality: list | None = None,
+):
 
     """
     Interpolate Irregular Leap Frog time series (result of an inversion) to Regular LF time series using Cumulative Displacement times series.
@@ -791,7 +792,7 @@ def interpolation_core(
     if last_date_interpol is not None and dataf_lp["date2"].iloc[-1] < pd.Timestamp(last_date_interpol):
         first_date = np.arange(
             dataf_lp["date2"].iloc[-1] + np.timedelta64(redundancy, "D"),
-            last_date_interpol+np.timedelta64(redundancy, "D"),
+            last_date_interpol + np.timedelta64(redundancy, "D"),
             np.timedelta64(redundancy, "D"),
         )
         nul_df = pd.DataFrame(
@@ -956,15 +957,15 @@ def process(
         flag=flag,
     )
 
-    if "raw" in returned:#return the raw data
+    if "raw" in returned:  # return the raw data
         returned_list.append(data)
 
     if "invert" in returned or "interp" in returned:
-        if flag is not None:#set regu and coef for every flags
+        if flag is not None:  # set regu and coef for every flags
             regu, coef = data[3], data[4]
 
         # Inversion
-        #TODO: to check that!
+        # TODO: to check that!
         if delete_outliers == "median_angle":
             conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
 
@@ -1011,7 +1012,7 @@ def process(
                     last_date_interpol=last_date_interpol,
                     unit=unit,
                     redundancy=redundancy,
-                    result_quality=result_quality
+                    result_quality=result_quality,
                 )
 
                 if result_quality is not None and "Norm_residual" in result_quality:

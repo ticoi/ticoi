@@ -34,7 +34,7 @@ def prepare_interpolation_date(
 
     # Prepare interpolation dates
     cube_date1 = cube.date1_().tolist()
-    cube_date1=cube_date1+ cube.date2_().tolist()
+    cube_date1 = cube_date1 + cube.date2_().tolist()
     cube_date1.remove(np.min(cube_date1))
     first_date_interpol = np.min(cube_date1)
     last_date_interpol = np.max(cube.date2_())
