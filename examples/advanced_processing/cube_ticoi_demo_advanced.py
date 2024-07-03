@@ -50,7 +50,7 @@ warnings.filterwarnings("ignore")
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (name can be
 # 'interp', 'invert' or 'raw' as for returned, path can be a single str or a list of str to merge cubes) in cube_name, or a single str to a TICOI cube
 
-TICOI_process = "direct_process"
+TICOI_process = "block_process"
 
 save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = True  # Save a .tiff file with the mean reulting velocities, as an example

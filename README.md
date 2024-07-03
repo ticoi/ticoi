@@ -65,6 +65,15 @@ TICOI's optimized loading to load the data.
 ### OUTPUTS
 * to understand to output of pixel_demo please check README_visualization_pixel_output.md
 
+### TO START
+
+## You have geotiff files
+You need to convert them into netcdf, for that have a look at advanced_processing/geotiff_to_xarray.py
+
+## You have netcdf files
+
+
+
 [packaging guide]: https://packaging.python.org
 
 [distribution tutorial]: https://packaging.python.org/tutorials/packaging-projects/

@@ -635,20 +635,12 @@ def inversion_core(
 def interpolation_core(
     result: pd.DataFrame,
     interval_output: int,
-    path_save: str,
     option_interpol: str = "spline",
     first_date_interpol: np.datetime64 | str | None = None,
     last_date_interpol: np.datetime64 | str | None = None,
     unit: int = 365,
     redundancy: int | None = None,
-    result_quality: list | None = None,
-    verbose=False,
-    visual: bool = False,
-    data: pd.DataFrame | None = None,
-    vmax=[False, False],
-    figsize=(12, 6),
-    show_temp: bool = True,
-):
+    result_quality: list | None = None):
 
     """
     Interpolate Irregular Leap Frog time series (result of an inversion) to Regular LF time series using Cumulative Displacement times series.
@@ -662,12 +654,6 @@ def interpolation_core(
     :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
     :param redundancy: [int | None] [default is None] --- If None there is no redundancy between two velocity in the interpolated time-series, else the overlap between two velocities is redundancy days
     :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :param verbose: [bool] [default is False] --- Print information along the way
-    :param visual: [bool] [default is True] --- Keep the weights for future plots
-    :param data: [pd dataframe | None] [default is None] --- Each line is (date1, date2, vx, vy, errorx, errory) for which a velocity is computed
-    :param vmax: [list] [default is [False, False]] --- [min,max] where min,max correspond to the ylim of the figures
-    :param figsize: [tuple] [default is (12, 6)] --- (width, height) where width and height are the size of the figures
-    :param show_temp: [bool] [default is True] --- If True, show the temporal baseline on the plot
 
     :return dataf_lp: [pd dataframe] --- Result of the temporal interpolation
     """
