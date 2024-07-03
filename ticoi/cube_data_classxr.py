@@ -1121,12 +1121,12 @@ class cube_data_class:
         """
 
         if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
-            if isinstance(delete_outliers, int):
+            if isinstance(delete_outliers, int): #filter according to the maximal error
                 inlier_mask = dask_filt_warpper(
                     self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
                 )
 
-            elif isinstance(delete_outliers, str):
+            elif isinstance(delete_outliers, str):#filter according to vcc_angle, zscore, median_angle
                 axis = self.ds["vx"].dims.index("mid_date")
                 inlier_mask = dask_filt_warpper(
                     self.ds["vx"],
