@@ -57,21 +57,22 @@ Then replace all conda commands by mamba.
 
 ##### More advanced examples:
 
-* **examples/advances_processing/ticoi_cube_demo_with_flag.py**: Demonstration of how to process one cube, by using different parameters for different areas (stable, surge)
+* **examples/advances_processing/ticoi_cube_demo_advanced.py**: Demonstration of how to process one cube, by using different parameters for different areas (stable, surge)
 * **examples/data_availability.py**: A few tools to evaluate the data availability on a set of data, its repartition throughout the period of measurement and its quality
 in some cases, in order to see whether it is relevant or not to study glacier velocities at a point (seaonality, surge...). It uses
 TICOI's optimized loading to load the data.
 
-### OUTPUTS
-* to understand to output of pixel_demo please check README_visualization_pixel_output.md
-
 ### TO START
 
-## You have geotiff files
+#### You have geotiff files
 You need to convert them into netcdf, for that have a look at advanced_processing/geotiff_to_xarray.py
 
-## You have netcdf files
+#### You have netcdf files
+If it is ITS_LIVE data, or Millan et al., 2019, you can directly use them!
+If not, we have to create your one dataloader.
 
+### OUTPUTS
+* to understand to output of pixel_demo please check README_visualization_pixel_output.md
 
 
 [packaging guide]: https://packaging.python.org
