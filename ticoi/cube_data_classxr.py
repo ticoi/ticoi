@@ -31,7 +31,7 @@ from rasterio.features import rasterize
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
-from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
+from ticoi.interpolation_functions import reconstruct_common_ref, reconstruct_common_ref_new, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
@@ -2258,7 +2258,13 @@ class cube_data_class:
             f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s"
         )
         del df_list
-
+        
+        
+        start = time.time()
+        unique_sorted_dates = [np.datetime64(date, "s") for date in sorted(set(date for df in result for date in df['date2']))]
+        df_list3 = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref_new)(df, result_quality, unique_sorted_dates) for df in result)
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+        
         # name of variable to store
         if result_quality is not None and "X_contribution" in result_quality:
             variables = ["dx", "dy", "xcount_x", "xcount_y"]

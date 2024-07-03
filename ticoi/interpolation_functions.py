@@ -92,6 +92,58 @@ def reconstruct_common_ref(
 
     return data
 
+def reconstruct_common_ref_new(
+    result: pd.DataFrame, result_quality: list | str | None = None, second_date_list: List[np.datetime64] | None = None, result_dz: pd.DataFrame | None = None
+) -> pd.DataFrame:
+
+    """
+    Build the Cumulative Displacements (CD) time series with a Common Reference (CR) from a Leap Frog time series
+
+    :param result: [np array] --- Leap frog displacement for x-component and y-component
+    :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+    :param result_dz: [pd dataframe | None] [default is None] --- Vertical displacement component
+
+    :return data: [pd dataframe] --- Cumulative displacement time series in x and y component, pandas dataframe
+    """
+
+    if result.empty:
+        return pd.DataFrame(
+            {
+                "Ref_date": [np.nan],
+                "Second_date": [np.nan],
+                "dx": [np.nan],
+                "dy": [np.nan],
+                "xcount_x": [np.nan],
+                "xcount_y": [np.nan],
+            }
+        )
+
+    # Common Reference
+    data = pd.DataFrame(
+        {
+            "Ref_date": np.full(result.shape[0], result["date1"][0]),
+            "Second_date": result["date2"],
+            "dx": np.cumsum(result["result_dx"]),
+            "dy": np.cumsum(result["result_dy"]),
+        }
+    )
+
+    if result_quality is not None and "X_contribution" in result_quality:
+        data["xcount_x"] = np.cumsum(result["xcount_x"])
+        data["xcount_y"] = np.cumsum(result["xcount_y"])
+
+    if result_quality is not None and "Error_propagation" in result_quality:
+        data["error_x"] = np.cumsum(result["error_x"])
+        data["error_y"] = np.cumsum(result["error_y"])
+
+    if result_dz is not None:
+        data["dz"] = np.cumsum(result["dz"])
+        if result_quality is not None and "X_contribution" in result_quality:
+            data["xcount_z"] = np.cumsum(result["xcount_z"])
+    if second_date_list is None:
+        data.index = data["Second_date"]
+        data.reindex(second_date_list)
+    return data
 
 def set_function_for_interpolation(
     option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None
