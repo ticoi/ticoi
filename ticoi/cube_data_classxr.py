@@ -272,8 +272,8 @@ class cube_data_class:
             minconfy = np.nanmin(self.ds["vy_error"].values[:])
             maxconfy = np.nanmax(self.ds["vy_error"].values[:])
 
-        date1 = np.array([np.datetime64(date_str, "ns") for date_str in self.ds["acquisition_date_img1"].values])
-        date2 = np.array([np.datetime64(date_str, "ns") for date_str in self.ds["acquisition_date_img2"].values])
+        date1 = np.array([np.datetime64(date_str, "D") for date_str in self.ds["acquisition_date_img1"].values])
+        date2 = np.array([np.datetime64(date_str, "D") for date_str in self.ds["acquisition_date_img2"].values])
 
         # np.char.strip is used to remove the null character ('�') from each element and np.core.defchararray.add to
         # concatenate array of different types

@@ -3,7 +3,7 @@ name: Generate requirements.yml
 on:
   push:
     paths:
-      - requirements.txt
+      - ../requirements.txt
 
 jobs:
   generate-yml:
