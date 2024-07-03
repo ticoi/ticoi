@@ -1,0 +1,33 @@
+name: Generate requirements.yml
+
+on:
+  push:
+    paths:
+      - requirements.txt
+
+jobs:
+  generate-yml:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install PyYAML
+      run: pip install pyyaml
+
+    - name: Run generate_yml.py script
+      run: python generate_yml.py
+
+    - name: Commit and push changes
+      run: |
+        git add requirements.yml
+        git commit -m "Auto-generate requirements.yml"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
