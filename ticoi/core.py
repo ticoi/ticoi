@@ -352,7 +352,7 @@ def inversion_core(
             temporal_decorrelation=weight_temporal_decorrelation,
         )
         del weight_temporal_decorrelation
-        if not visual:
+        if not visual and not apriori_weight_in_second_iteration:
             data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -435,7 +435,7 @@ def inversion_core(
         if iteration:
             if (
                 apriori_weight_in_second_iteration
-            ):  # use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
+            ) and apriori_weight:  # use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
                 Weightx2 = weight_for_inversion(
                     weight_origine=apriori_weight, conf=conf, data=data_values, pos=2, inside_Tukey=False
                 )
