@@ -2,7 +2,7 @@ aiohttp #to access data on the cloud
 dask
 geopandas>=0.10.0
 h5netcdf
-h5py
+h5py >= 3.11
 jdcal
 matplotlib==3.*
 netcdf4
