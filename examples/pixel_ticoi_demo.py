@@ -42,7 +42,10 @@ i, j = 343617.7, 5091275.0  # Pixel coordinates
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 200  # Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier =  'median_angle'  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+delete_outlier =  {
+        "median_magnitude": 3,
+        "median_angle": True,
+    }  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
 unit = 365  # 1 for m/d, 365 for m/y
