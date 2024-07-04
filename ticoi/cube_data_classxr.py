@@ -31,7 +31,11 @@ from rasterio.features import rasterize
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
-from ticoi.interpolation_functions import reconstruct_common_ref, reconstruct_common_ref_new, smooth_results
+from ticoi.interpolation_functions import (
+    reconstruct_common_ref,
+    reconstruct_common_ref_new,
+    smooth_results,
+)
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
@@ -2228,7 +2232,20 @@ class cube_data_class:
         start = time.time()
         from joblib import Parallel, delayed
 
-        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, result_quality) for df in result)
+        start = time.time()
+        second_date_list = [
+            np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
+        ]
+        
+        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref_new)(df, result_quality, second_date_list) for df in result)
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+        start = time.time()
+        from concurrent.futures import ProcessPoolExecutor
+        from functools import partial
+        
+        reconstruct_with_fixed_params = partial(reconstruct_common_ref_new, result_quality=result_quality, second_date_list=second_date_list)
+        with ProcessPoolExecutor() as executor:
+            processed_results = list(executor.map(reconstruct_with_fixed_params, result))
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
 
         # List of the reference date, i.e. the first date of the cumulative displacement time series
@@ -2251,20 +2268,27 @@ class cube_data_class:
         # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
         start = time.time()
         df_list2 = []
+        ref_date_arr = []
+    
         for i, df in enumerate(df_list):
+            df=reconstruct_common_ref(df, result_quality)
+            ref_date_arr.append(df["Ref_date"][0])
             df.index = df["Second_date"]
             df_list2.append(df.reindex(second_date_list))
         print(
             f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s"
         )
         del df_list
-        
-        
+
         start = time.time()
-        unique_sorted_dates = [np.datetime64(date, "s") for date in sorted(set(date for df in result for date in df['date2']))]
-        df_list3 = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref_new)(df, result_quality, unique_sorted_dates) for df in result)
+        unique_sorted_dates = [
+            np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
+        ]
+        df_list3 = Parallel(n_jobs=-1)(
+            delayed(reconstruct_common_ref_new)(df, result_quality, unique_sorted_dates) for df in result
+        )
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
-        
+
         # name of variable to store
         if result_quality is not None and "X_contribution" in result_quality:
             variables = ["dx", "dy", "xcount_x", "xcount_y"]
@@ -2318,6 +2342,162 @@ class cube_data_class:
 
         return cubenew
 
+    def write_result_tico_refine(
+        self,
+        result: list,
+        source: str,
+        sensor: str,
+        filename: str = "Time_series",
+        savepath: str | None = None,
+        result_quality: list | None = None,
+        verbose: bool = False,
+    ) -> Union["cube_data_class", str]:
+
+        """
+        Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
+        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
+        units has been changed to unit, since it was producing an error while wirtting the netcdf file
+
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
+        """
+
+        cubenew = cube_data_class()
+        cubenew.ds["x"] = self.ds["x"]
+        cubenew.ds["x"].attrs = {
+            "standard_name": "projection_x_coordinate",
+            "unit": "m",
+            "long_name": "x coordinate of projection",
+        }
+        cubenew.ds["y"] = self.ds["y"]
+        cubenew.ds["y"].attrs = {
+            "standard_name": "projection_y_coordinate",
+            "unit": "m",
+            "long_name": "y coordinate of projection",
+        }
+
+        long_name = [
+            "first date between which the velocity is estimated",
+            "second date between which the velocity is estimated",
+            "displacement in the East/West direction [m]",
+            "displacement in the North/South direction [m]",
+            "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction",
+            "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction",
+        ]
+        short_name = ["date1", "date2", "x_displacement", "y_displacement", "xcount_x", "xcount_y"]
+        unit = ["days", "days", "m", "m", "no unit", "no unit"]
+
+        start = time.time()
+        from joblib import Parallel, delayed
+
+        start = time.time()
+        second_date_list = [
+            np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
+        ]
+        
+        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, result_quality, second_date_list, drop_nan=False) for df in result)
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+
+        # List of the reference date, i.e. the first date of the cumulative displacement time series
+        result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
+        cubenew.ds["reference_date"] = xr.DataArray(
+            result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
+        )
+        cubenew.ds["reference_date"].attrs = {
+            "standard_name": "reference_date",
+            "unit": "days",
+            "description": "first date of the cumulative displacement time series",
+        }
+
+        second_date_list = (
+            pd.concat(df["Second_date"] for df in df_list if not np.isnan(df["dx"].iloc[0])).drop_duplicates().tolist()
+        )
+        second_date_list = [np.datetime64(date, "s") for date in second_date_list]
+        second_date_list.sort()
+
+        # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
+        start = time.time()
+        df_list2 = []
+        ref_date_arr = []
+    
+        for i, df in enumerate(df_list):
+            df=reconstruct_common_ref(df, result_quality)
+            ref_date_arr.append(df["Ref_date"][0])
+            df.index = df["Second_date"]
+            df_list2.append(df.reindex(second_date_list))
+        print(
+            f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s"
+        )
+        del df_list
+
+        start = time.time()
+        unique_sorted_dates = [
+            np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
+        ]
+        df_list3 = Parallel(n_jobs=-1)(
+            delayed(reconstruct_common_ref_new)(df, result_quality, unique_sorted_dates) for df in result
+        )
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+
+        # name of variable to store
+        if result_quality is not None and "X_contribution" in result_quality:
+            variables = ["dx", "dy", "xcount_x", "xcount_y"]
+        else:
+            variables = ["dx", "dy"]
+
+        warnings.filterwarnings(
+            "ignore", category=UserWarning
+        )  # to avoid the warning  UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.
+        # Store each variable
+        for i, var in enumerate(variables):
+            result_arr = np.array([df_list2[i][var] for i in range(len(df_list2))])
+            result_arr = result_arr.reshape((self.nx, self.ny, len(second_date_list)))
+            cubenew.ds[var] = xr.DataArray(
+                result_arr,
+                dims=["x", "y", "second_date"],
+                coords={"x": self.ds["x"], "y": self.ds["y"], "second_date": second_date_list},
+            )
+            cubenew.ds[var] = cubenew.ds[var].transpose("second_date", "y", "x")
+            cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": unit[i], "long_name": long_name[i]}
+
+        cubenew.ds["grid_mapping"] = self.ds.proj4
+        cubenew.ds.attrs = {
+            "Conventions": "CF-1.10",
+            "title": "Cumulative displacement time series",
+            "institution": "Université Grenoble Alpes",
+            "references": "Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing, 60, 1-10.\n Charrier, L., Yan, Y., Koeniguer, E. C., Trouve, E., Mouginot, J., & Millan, R. (2022, June). Fusion of multi-temporal and multi-sensor ice velocity observations. In International Annals of the Photogrammetry, Remote Sensing and Spatial Information Sciences.",
+            "source": source,
+            "sensor": sensor,
+            "proj4": self.ds.proj4,
+            "author": "L. Charrier",
+            "history": f"Created on the {date.today()}",
+        }
+        cubenew.nx = self.nx
+        cubenew.ny = self.ny
+        cubenew.nz = cubenew.ds.dims["second_date"]
+        cubenew.filename = filename
+
+        if savepath is not None:  # save the dataset to a netcdf file
+            encoding = {
+                "dx": {"zlib": True, "complevel": 5, "dtype": "float32"},
+                "dy": {"zlib": True, "complevel": 5, "dtype": "float32"},
+            }
+            if result_quality is not None and "X_contribution" in result_quality:
+                encoding["xcount_x"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
+                encoding["xcount_y"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
+            start = time.time()
+            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
+            if verbose:
+                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
+
+        return cubenew
+    
     def write_results_ticoi_or_tico(
         self,
         result: list,

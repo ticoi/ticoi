@@ -269,6 +269,7 @@ def inversion_core(
     apriori_weight_in_second_iteration: bool = False,
     visual: bool = True,
     verbose: bool = False,
+    date_range: np.ndarray | None = None,
 ) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
 
     """
@@ -624,6 +625,36 @@ def inversion_core(
             sigma = np.zeros(result.shape[0])
             sigma[:2] = np.hstack([sigma0_weightx, sigma0_weighty])
             result["sigma0"] = sigma
+    
+    if date_range is not None:
+        # assign the result to the same dimension of the original date range
+        # eg. assume no viod for the inverted pixel
+        # if only have observation for t1-t3, then the result_dx will be stored to t2-t3
+        result2 = pd.DataFrame(
+            {
+                "date1": date_range[:-1],
+                "date2": date_range[1:],
+                **{col: None for col in result.columns.difference(['date1', 'date2'])},
+                "covered": False,
+            }
+        )
+        result["covered"] = False
+        merged_result = pd.merge(result, result2[['date1', 'date2']], on=['date1', 'date2'], how='left', indicator=True)
+        merged_result2 = pd.merge(result, result2[['date1', 'date2']], on=['date1', 'date2'], how='right', indicator=True)
+        result1_cover = result[merged_result['_merge'] == 'left_only']
+        result2_cover = result2[merged_result2['_merge'] == 'right_only']
+        merged_result = merged_result[merged_result['_merge'] == 'both'].drop(columns=['_merge'])
+
+        for _, row1 in result1_cover.iterrows():
+            mask = (result2_cover['date1'] >= row1['date1']) & (result2_cover['date2'] <= row1['date2'])
+            columns_to_update = result2_cover.columns.difference(['date1', 'date2'])
+            if mask.any():
+                last_index = result2_cover.index[mask][-1]
+                result2_cover.loc[last_index, columns_to_update] = row1[columns_to_update]
+                result2_cover.loc[mask, "covered"] = True
+        merged_result["covered"] = False        
+        result = pd.concat([merged_result, result2_cover], ignore_index=True).sort_values(by='date1', ignore_index=True)
+    
     return A, result, dataf
 
 
@@ -923,6 +954,7 @@ def process(
     linear_operator: bool = False,
     visual: bool = False,
     verbose: bool = False,
+    date_range: np.ndarray | None = None,
 ):
 
     """
@@ -1002,6 +1034,7 @@ def process(
             nb_max_iteration=nb_max_iteration,
             visual=visual,
             verbose=verbose,
+            date_range=date_range,
         )
 
         if "invert" in returned:

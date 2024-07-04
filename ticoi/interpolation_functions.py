@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import scipy.ndimage as ndi
 from scipy import interpolate
-
+from numba import jit
 from ticoi.pixel_class import pixel_class
 
 
@@ -42,7 +42,7 @@ def prepare_interpolation_date(
 
 
 def reconstruct_common_ref(
-    result: pd.DataFrame, result_quality: list | str | None = None, result_dz: pd.DataFrame | None = None
+    result: pd.DataFrame, result_quality: list | str | None = None, drop_nan: bool = True, result_dz: pd.DataFrame | None = None
 ) -> pd.DataFrame:
 
     """
@@ -89,11 +89,18 @@ def reconstruct_common_ref(
         data["dz"] = np.cumsum(result["dz"])
         if result_quality is not None and "X_contribution" in result_quality:
             data["xcount_z"] = np.cumsum(result["xcount_z"])
+    
+    if drop_nan:
+        data = data[~data["dx"].isna()]
 
     return data
 
+
 def reconstruct_common_ref_new(
-    result: pd.DataFrame, result_quality: list | str | None = None, second_date_list: List[np.datetime64] | None = None, result_dz: pd.DataFrame | None = None
+    result: pd.DataFrame,
+    result_quality: list | str | None = None,
+    second_date_list: List[np.datetime64] | None = None,
+    result_dz: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
 
     """
@@ -144,6 +151,7 @@ def reconstruct_common_ref_new(
         data.index = data["Second_date"]
         data.reindex(second_date_list)
     return data
+
 
 def set_function_for_interpolation(
     option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None
