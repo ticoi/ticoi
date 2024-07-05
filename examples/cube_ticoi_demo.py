@@ -46,7 +46,7 @@ warnings.filterwarnings("ignore")
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 
-TICOI_process = "direct_process"
+TICOI_process = "block_process"
 
 save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
@@ -161,8 +161,6 @@ start.append(time.time())
 # The data cube is subdivided in smaller cubes computed one after the other in a synchronous manner (uses async)
 # TICOI computation is then parallelized among those cubes
 if TICOI_process == "block_process":
-    data_dates = cube.ds[["date1", "date2"]].to_array().values.T
-    date_range = construction_dates_range_np(data_dates)
     result = process_blocks_refine(
         cube,
         nb_cpu=nb_cpu,
@@ -175,8 +173,6 @@ if TICOI_process == "block_process":
 # Direct computation of the whole TICOI cube
 elif TICOI_process == "direct_process":
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    data_dates = cube.ds[["date1", "date2"]].to_array().values.T
-    date_range = construction_dates_range_np(data_dates)
     obs_filt, flag = cube.filter_cube(**preData_kwargs)
 
     # Progression bar

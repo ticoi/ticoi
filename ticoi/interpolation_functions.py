@@ -16,6 +16,7 @@ import pandas as pd
 import scipy.ndimage as ndi
 from scipy import interpolate
 from numba import jit
+from intervaltree import IntervalTree
 from ticoi.pixel_class import pixel_class
 
 
@@ -95,6 +96,33 @@ def reconstruct_common_ref(
 
     return data
 
+def optimize_result_assignment(result, date_range):
+    result2 = pd.DataFrame(
+        {
+            "date1": date_range[:-1],
+            "date2": date_range[1:],
+            **{col: None for col in result.columns.difference(['date1', 'date2'])},
+            "covered": False,
+        }
+    )
+    result["covered"] = False
+    merged_result = pd.merge(result, result2[['date1', 'date2']], on=['date1', 'date2'], how='left', indicator=True)
+    merged_result2 = pd.merge(result, result2[['date1', 'date2']], on=['date1', 'date2'], how='right', indicator=True)
+    result1_cover = result[merged_result['_merge'] == 'left_only']
+    result2_cover = result2[merged_result2['_merge'] == 'right_only']
+    merged_result = merged_result[merged_result['_merge'] == 'both'].drop(columns=['_merge'])
+
+    for _, row1 in result1_cover.iterrows():
+        mask = (result2_cover['date1'] >= row1['date1']) & (result2_cover['date2'] <= row1['date2'])
+        columns_to_update = result2_cover.columns.difference(['date1', 'date2'])
+        if mask.any():
+            last_index = result2_cover.index[mask][-1]
+            result2_cover.loc[last_index, columns_to_update] = row1[columns_to_update]
+            result2_cover.loc[mask, "covered"] = True
+    merged_result["covered"] = False        
+    result1 = pd.concat([merged_result, result2_cover], ignore_index=True).sort_values(by='date1', ignore_index=True)
+    
+    return result1
 
 def reconstruct_common_ref_new(
     result: pd.DataFrame,
@@ -114,44 +142,57 @@ def reconstruct_common_ref_new(
     """
 
     if result.empty:
-        return pd.DataFrame(
-            {
-                "Ref_date": [np.nan],
-                "Second_date": [np.nan],
-                "dx": [np.nan],
-                "dy": [np.nan],
-                "xcount_x": [np.nan],
-                "xcount_y": [np.nan],
-            }
-        )
+        length = 1 if second_date_list is None else len(second_date_list)
+        nan_list = np.full(length, np.nan)
+        second_dates = [np.nan] if second_date_list is None else second_date_list
+        return pd.DataFrame({
+            "Ref_date": nan_list,
+            "Second_date": second_dates,
+            "dx": nan_list,
+            "dy": nan_list,
+            "xcount_x": nan_list,
+            "xcount_y": nan_list,
+        })
 
     # Common Reference
     data = pd.DataFrame(
         {
-            "Ref_date": np.full(result.shape[0], result["date1"][0]),
+            "Ref_date": result["date1"][0],
             "Second_date": result["date2"],
-            "dx": np.cumsum(result["result_dx"]),
-            "dy": np.cumsum(result["result_dy"]),
         }
     )
+    
+    # # result_arr = {var: np.cumsum(result[var]) for var in result.columns.difference(["date1", "date2"])}
+    for var in result.columns.difference(["date1", "date2"]):
+        data[var] = result[var].values.cumsum()
+    data = data.rename(columns={"result_dx": "dx", "result_dy": "dy"})    
+    # if result_quality is not None:
+    #     if "X_contribution" in result_quality:
+    #         data["xcount_x"] = result["xcount_x"].values.cumsum()
+    #         data["xcount_y"] = result["xcount_y"].values.cumsum()
 
-    if result_quality is not None and "X_contribution" in result_quality:
-        data["xcount_x"] = np.cumsum(result["xcount_x"])
-        data["xcount_y"] = np.cumsum(result["xcount_y"])
+    #     if "Error_propagation" in result_quality:
+    #         data["error_x"] = result["error_x"].values.cumsum()
+    #         data["error_y"] = result["error_y"].values.cumsum()
 
-    if result_quality is not None and "Error_propagation" in result_quality:
-        data["error_x"] = np.cumsum(result["error_x"])
-        data["error_y"] = np.cumsum(result["error_y"])
+    # if result_dz is not None:
+    #     data["dz"] = result["dz"].cumsum()
+    #     if "X_contribution" in result_quality:
+    #         data["xcount_z"] = result["xcount_z"].values.cumsum()
+    if second_date_list is not None:
+        tmp = pd.DataFrame(
+                {
+                    "Ref_date": pd.NaT,
+                    "Second_date": second_date_list,
+                    **{var: np.nan for var in data.columns.difference(["Ref_date", "Second_date"])}
+                }
+            )
+        
+        positions = np.searchsorted(second_date_list, data["Second_date"].values)
+        tmp.iloc[positions] = data.values
 
-    if result_dz is not None:
-        data["dz"] = np.cumsum(result["dz"])
-        if result_quality is not None and "X_contribution" in result_quality:
-            data["xcount_z"] = np.cumsum(result["xcount_z"])
-    if second_date_list is None:
-        data.index = data["Second_date"]
-        data.reindex(second_date_list)
+        return tmp
     return data
-
 
 def set_function_for_interpolation(
     option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None
