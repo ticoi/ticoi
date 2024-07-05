@@ -2225,15 +2225,13 @@ class cube_data_class:
         }
 
         long_name = [
-            "first date between which the velocity is estimated",
-            "second date between which the velocity is estimated",
             "displacement in the East/West direction [m]",
             "displacement in the North/South direction [m]",
             "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction",
             "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction",
         ]
-        short_name = ["date1", "date2", "x_displacement", "y_displacement", "xcount_x", "xcount_y"]
-        unit = ["days", "days", "m", "m", "no unit", "no unit"]
+        short_name = ["x_displacement", "y_displacement", "xcount_x", "xcount_y"]
+        unit = ["m", "m", "no unit", "no unit"]
 
         start = time.time()
         from joblib import Parallel, delayed

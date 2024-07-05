@@ -27,7 +27,6 @@ from tqdm import tqdm
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import prepare_interpolation_date
-from ticoi.inversion_functions import construction_dates_range_np
 warnings.filterwarnings("ignore")
 
 # %%========================================================================= #
@@ -179,16 +178,11 @@ elif TICOI_process == "direct_process":
     xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)
     xy_values_tqdm = tqdm(xy_values, total=len(cube.ds["x"].values) * len(cube.ds["y"].values), mininterval=0.5)
 
-    # # Main processing of the data with TICOI algorithm, individually for each pixel
-    # result = Parallel(n_jobs=nb_cpu, verbose=0)(
-    #     delayed(process)(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
-    #     for i, j in xy_values_tqdm
-    # )
-    
-    result = []
-    for i, j in xy_values_tqdm:
-        result_px = process(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs, date_range=date_range)
-        result.append(result_px)
+    # Main processing of the data with TICOI algorithm, individually for each pixel
+    result = Parallel(n_jobs=nb_cpu, verbose=0)(
+        delayed(process)(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+        for i, j in xy_values_tqdm
+    )
 
     result = {"raw": [result[i][0] for i in range(len(result))], "interp": [result[i][1] for i in range(len(result))]}
 

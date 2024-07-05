@@ -16,7 +16,6 @@ import pandas as pd
 import scipy.ndimage as ndi
 from scipy import interpolate
 from numba import jit
-from intervaltree import IntervalTree
 from ticoi.pixel_class import pixel_class
 
 
@@ -51,8 +50,7 @@ def reconstruct_common_ref(
     Build the Cumulative Displacements (CD) time series with a Common Reference (CR) from a Leap Frog time series
 
     :param result: [np array] --- Leap frog displacement for x-component and y-component
-    :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :param result_dz: [pd dataframe | None] [default is None] --- Vertical displacement component
+    :param second_date_list: [list] --- List of dates in which the leap frog displacement will be reindexed
 
     :return data: [pd dataframe] --- Cumulative displacement time series in x and y component, pandas dataframe
     """
@@ -96,34 +94,6 @@ def reconstruct_common_ref(
 
         return tmp
     return data
-
-def optimize_result_assignment(result, date_range):
-    result2 = pd.DataFrame(
-        {
-            "date1": date_range[:-1],
-            "date2": date_range[1:],
-            **{col: None for col in result.columns.difference(['date1', 'date2'])},
-            "covered": False,
-        }
-    )
-    result["covered"] = False
-    merged_result = pd.merge(result, result2[['date1', 'date2']], on=['date1', 'date2'], how='left', indicator=True)
-    merged_result2 = pd.merge(result, result2[['date1', 'date2']], on=['date1', 'date2'], how='right', indicator=True)
-    result1_cover = result[merged_result['_merge'] == 'left_only']
-    result2_cover = result2[merged_result2['_merge'] == 'right_only']
-    merged_result = merged_result[merged_result['_merge'] == 'both'].drop(columns=['_merge'])
-
-    for _, row1 in result1_cover.iterrows():
-        mask = (result2_cover['date1'] >= row1['date1']) & (result2_cover['date2'] <= row1['date2'])
-        columns_to_update = result2_cover.columns.difference(['date1', 'date2'])
-        if mask.any():
-            last_index = result2_cover.index[mask][-1]
-            result2_cover.loc[last_index, columns_to_update] = row1[columns_to_update]
-            result2_cover.loc[mask, "covered"] = True
-    merged_result["covered"] = False        
-    result = pd.concat([merged_result, result2_cover], ignore_index=True).sort_values(by='date1', ignore_index=True)
-    
-    return result
 
 def set_function_for_interpolation(
     option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None
