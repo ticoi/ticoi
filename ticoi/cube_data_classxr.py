@@ -2263,20 +2263,9 @@ class cube_data_class:
             "ignore", category=UserWarning
         )  # to avoid the warning  UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.
         # Store each variable
-        
-        # for i, var in enumerate(variables):
-        #     result_arr = np.stack([df[var].values for df in df_list])
-        #     result_arr = result_arr.reshape((self.nx, self.ny, len(second_date_list)))
-        #     cubenew.ds[var] = xr.DataArray(
-        #         result_arr,
-        #         dims=["x", "y", "second_date"],
-        #         coords={"x": self.ds["x"], "y": self.ds["y"], "second_date": second_date_list},
-        #     )
-        #     cubenew.ds[var] = cubenew.ds[var].transpose("second_date", "y", "x")
-        #     cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": unit[i], "long_name": long_name[i]}
-
         big_df = pd.concat(df_list, keys=range(len(df_list)))
         del df_list
+        
         for i, var in enumerate(variables):
             result_arr = big_df[var].values.reshape((self.nx, self.ny, len(second_date_list)))
             
