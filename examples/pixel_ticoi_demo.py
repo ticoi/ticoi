@@ -42,7 +42,10 @@ i, j = 343617.7, 5091275.0  # Pixel coordinates
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 200  # Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outlier = None  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+delete_outlier = {
+    "median_angle": True,
+    "z_score": True,
+}  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
 unit = 365  # 1 for m/d, 365 for m/y
@@ -95,10 +98,7 @@ preData_kwargs = {
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": {
-        "median_magnitude": 3,
-        "vvc_angle": None,
-    },  # Delete the outliers from the data according to one (int or str) or several (dict) criteriums
+    "delete_outliers": delete_outlier,  # Delete the outliers from the data according to one (int or str) or several (dict) criteriums
     "flag": None,  # Divide the data in several areas where different methods should be used
     "dem_file": dem_file,  # Path to the DEM file for calculating the slope and aspect
     "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
@@ -112,7 +112,7 @@ preData_kwargs = {
 load_pixel_kwargs = {
     "regu": regu,  # Regularization method to be used
     "coef": coef,  # Regularization coefficient to be used
-    "solver": "LMSR_ini",  # Solver for the inversion
+    "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "visual": visual,  # Plot results along the way
@@ -144,9 +144,6 @@ interpolation_kwargs = {
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "visual": visual,  # Plot results along the way
-    "vmax": vmax,  # vmin and vmax of the legend
-    "verbose": verbose,  # Print information throughout TICOI processing
 }
 
 # Update of dictionary with common parameters
@@ -215,7 +212,8 @@ start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))
 
 # Proceed to interpolation
-dataf_lp = interpolation_core(result, path_save=path_save, data=dataf, **interpolation_kwargs)
+dataf_lp = interpolation_core(result, **interpolation_kwargs)
+
 
 stop.append(time.time())
 print(f"[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s")

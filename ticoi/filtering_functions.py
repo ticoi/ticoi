@@ -516,7 +516,7 @@ def dask_filt_warpper(
         )
     else:
         raise ValueError(
-            f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude' or 'error'."
+            f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
         )
 
     return inlier_mask.compute()

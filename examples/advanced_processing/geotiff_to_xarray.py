@@ -3,12 +3,9 @@ import glob
 import time
 from datetime import date, datetime
 
-import dask.array as da
-import geopandas as gpd
 import rioxarray
 import xarray as xr
 from pyproj import CRS
-from rasterio import features
 
 start = time.time()
 
@@ -73,7 +70,7 @@ ds_combined.y.attrs = {
     "axis": "Y",
 }
 ds_combined.mid_date.attrs = {
-    "description": "Mid date of the imape paier",
+    "description": "Mid date of the image pair",
     "axis": "Time",
 }
 ds_combined.date1.attrs = {

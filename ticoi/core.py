@@ -352,7 +352,7 @@ def inversion_core(
             temporal_decorrelation=weight_temporal_decorrelation,
         )
         del weight_temporal_decorrelation
-        if not visual:
+        if not visual and not apriori_weight_in_second_iteration:
             data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -435,7 +435,7 @@ def inversion_core(
         if iteration:
             if (
                 apriori_weight_in_second_iteration
-            ):  # use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
+            ) and apriori_weight:  # use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
                 Weightx2 = weight_for_inversion(
                     weight_origine=apriori_weight, conf=conf, data=data_values, pos=2, inside_Tukey=False
                 )
@@ -636,19 +636,12 @@ def inversion_core(
 def interpolation_core(
     result: pd.DataFrame,
     interval_output: int,
-    path_save: str,
     option_interpol: str = "spline",
     first_date_interpol: np.datetime64 | str | None = None,
     last_date_interpol: np.datetime64 | str | None = None,
     unit: int = 365,
     redundancy: int | None = None,
     result_quality: list | None = None,
-    verbose=False,
-    visual: bool = False,
-    data: pd.DataFrame | None = None,
-    vmax=[False, False],
-    figsize=(12, 6),
-    show_temp: bool = True,
 ):
 
     """
@@ -663,12 +656,6 @@ def interpolation_core(
     :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
     :param redundancy: [int | None] [default is None] --- If None there is no redundancy between two velocity in the interpolated time-series, else the overlap between two velocities is redundancy days
     :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :param verbose: [bool] [default is False] --- Print information along the way
-    :param visual: [bool] [default is True] --- Keep the weights for future plots
-    :param data: [pd dataframe | None] [default is None] --- Each line is (date1, date2, vx, vy, errorx, errory) for which a velocity is computed
-    :param vmax: [list] [default is [False, False]] --- [min,max] where min,max correspond to the ylim of the figures
-    :param figsize: [tuple] [default is (12, 6)] --- (width, height) where width and height are the size of the figures
-    :param show_temp: [bool] [default is True] --- If True, show the temporal baseline on the plot
 
     :return dataf_lp: [pd dataframe] --- Result of the temporal interpolation
     """
@@ -806,7 +793,7 @@ def interpolation_core(
     if last_date_interpol is not None and dataf_lp["date2"].iloc[-1] < pd.Timestamp(last_date_interpol):
         first_date = np.arange(
             dataf_lp["date2"].iloc[-1] + np.timedelta64(redundancy, "D"),
-            last_date_interpol,
+            last_date_interpol + np.timedelta64(redundancy, "D"),
             np.timedelta64(redundancy, "D"),
         )
         nul_df = pd.DataFrame(
@@ -819,10 +806,9 @@ def interpolation_core(
         )
         dataf_lp = pd.concat([dataf_lp, nul_df], ignore_index=True)
 
-    ##  Visualisation
-    # if visual: visualisation_interpolation(dataf_lp, data, path_save, interval_output=interval_output, show_temp=show_temp,
-    #                                        unit='m/y' if unit == 365 else 'm/d', vmax=vmax, figsize=figsize,)
-
+    # print(dataf_lp.shape)
+    # if dataf_lp.shape[0]!= 567:
+    #     print('stop')
     return dataf_lp
 
 
@@ -972,14 +958,15 @@ def process(
         flag=flag,
     )
 
-    if "raw" in returned:
+    if "raw" in returned:  # return the raw data
         returned_list.append(data)
 
     if "invert" in returned or "interp" in returned:
-        if flag is not None:
+        if flag is not None:  # set regu and coef for every flags
             regu, coef = data[3], data[4]
 
         # Inversion
+        # TODO: to check that!
         if delete_outliers == "median_angle":
             conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
 
@@ -1025,16 +1012,12 @@ def process(
                 dataf_list = interpolation_core(
                     result[1],
                     interval_output,
-                    path_save,
                     option_interpol=option_interpol,
                     first_date_interpol=first_date_interpol,
                     last_date_interpol=last_date_interpol,
-                    visual=visual,
-                    data=data,
                     unit=unit,
                     redundancy=redundancy,
                     result_quality=result_quality,
-                    verbose=verbose,
                 )
 
                 if result_quality is not None and "Norm_residual" in result_quality:
