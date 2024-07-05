@@ -674,7 +674,7 @@ def interpolation_core(
     """
 
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
-    dataf = reconstruct_common_ref(result, result_quality)  # Build cumulative displacement time series
+    dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     if first_date_interpol is None:
         start_date = dataf["Ref_date"][0]  # First date at the considered pixel
     else:

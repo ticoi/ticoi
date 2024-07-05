@@ -33,7 +33,6 @@ from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
-    reconstruct_common_ref_new,
     smooth_results,
 )
 from ticoi.inversion_functions import construction_dates_range_np
@@ -2237,7 +2236,7 @@ class cube_data_class:
             np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
         ]
 
-        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref_new)(df, result_quality, second_date_list) for df in result)
+        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, second_date_list) for df in result)
 
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
         start = time.time()
