@@ -31,7 +31,10 @@ from rasterio.features import rasterize
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
-from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
+from ticoi.interpolation_functions import (
+    reconstruct_common_ref,
+    smooth_results,
+)
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
@@ -2222,22 +2225,27 @@ class cube_data_class:
         }
 
         long_name = [
-            "first date between which the velocity is estimated",
-            "second date between which the velocity is estimated",
             "displacement in the East/West direction [m]",
             "displacement in the North/South direction [m]",
             "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction",
             "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction",
         ]
-        short_name = ["date1", "date2", "x_displacement", "y_displacement", "xcount_x", "xcount_y"]
-        unit = ["days", "days", "m", "m", "no unit", "no unit"]
+        short_name = ["x_displacement", "y_displacement", "xcount_x", "xcount_y"]
+        unit = ["m", "m", "no unit", "no unit"]
 
         start = time.time()
         from joblib import Parallel, delayed
 
-        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, result_quality) for df in result)
-        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+        start = time.time()
+        second_date_list = [
+            np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
+        ]
 
+        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, second_date_list) for df in result)
+
+        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
+        start = time.time()
+        
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
         cubenew.ds["reference_date"] = xr.DataArray(
@@ -2249,23 +2257,6 @@ class cube_data_class:
             "description": "first date of the cumulative displacement time series",
         }
 
-        second_date_list = (
-            pd.concat(df["Second_date"] for df in df_list if not np.isnan(df["dx"].iloc[0])).drop_duplicates().tolist()
-        )
-        second_date_list = [np.datetime64(date, "s") for date in second_date_list]
-        second_date_list.sort()
-
-        # reindex each dataframe according to the list of second date, so that each dataframe have the same temporal size
-        start = time.time()
-        df_list2 = []
-        for i, df in enumerate(df_list):
-            df.index = df["Second_date"]
-            df_list2.append(df.reindex(second_date_list))
-        print(
-            f"[Writing result] Reindexing each dataframe according to second date took: {round(time.time() - start, 3)} s"
-        )
-        del df_list
-
         # name of variable to store
         if result_quality is not None and "X_contribution" in result_quality:
             variables = ["dx", "dy", "xcount_x", "xcount_y"]
@@ -2276,16 +2267,23 @@ class cube_data_class:
             "ignore", category=UserWarning
         )  # to avoid the warning  UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.
         # Store each variable
+        big_df = pd.concat(df_list, keys=range(len(df_list)))
+        del df_list
+        
         for i, var in enumerate(variables):
-            result_arr = np.array([df_list2[i][var] for i in range(len(df_list2))])
-            result_arr = result_arr.reshape((self.nx, self.ny, len(second_date_list)))
+            result_arr = big_df[var].values.reshape((self.nx, self.ny, len(second_date_list)))
+            
             cubenew.ds[var] = xr.DataArray(
                 result_arr,
                 dims=["x", "y", "second_date"],
-                coords={"x": self.ds["x"], "y": self.ds["y"], "second_date": second_date_list},
-            )
-            cubenew.ds[var] = cubenew.ds[var].transpose("second_date", "y", "x")
-            cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": unit[i], "long_name": long_name[i]}
+                coords=cubenew.ds.coords
+            ).transpose("second_date", "y", "x")
+            
+            cubenew.ds[var].attrs = {
+                "standard_name": short_name[i],
+                "unit": unit[i],
+                "long_name": long_name[i]
+            }
 
         cubenew.ds["grid_mapping"] = self.ds.proj4
         cubenew.ds.attrs = {
@@ -2318,7 +2316,7 @@ class cube_data_class:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
         return cubenew
-
+    
     def write_results_ticoi_or_tico(
         self,
         result: list,

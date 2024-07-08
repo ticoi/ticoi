@@ -30,10 +30,10 @@ import xarray as xr
 from joblib import Parallel, delayed
 from scipy import stats
 from tqdm import tqdm
-
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
+    optimize_result_assignment,
     set_function_for_interpolation,
 )
 from ticoi.inversion_functions import (
@@ -624,6 +624,7 @@ def inversion_core(
             sigma = np.zeros(result.shape[0])
             sigma[:2] = np.hstack([sigma0_weightx, sigma0_weighty])
             result["sigma0"] = sigma
+    
     return A, result, dataf
 
 
@@ -660,7 +661,7 @@ def interpolation_core(
     """
 
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
-    dataf = reconstruct_common_ref(result, result_quality)  # Build cumulative displacement time series
+    dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     if first_date_interpol is None:
         start_date = dataf["Ref_date"][0]  # First date at the considered pixel
     else:
@@ -995,9 +996,13 @@ def process(
             if result[1] is not None:
                 returned_list.append(result[1])
             else:
+                if result_quality is not None and "X_contribution" in result_quality:
+                    variables = ["result_dx", "result_dy", "xcount_x", "xcount_y"]
+                else:
+                    variables = ["result_dx", "result_dy"]
                 returned_list.append(
                     pd.DataFrame(
-                        {"date1": [], "date2": [], "result_dx": [], "result_dy": [], "xcount_x": [], "xcount_y": []}
+                        {"date1": [], "date2": [], **{col: [] for col in variables}}
                     )
                 )
 
@@ -1193,7 +1198,7 @@ def process_blocks_refine(
                 flag = cube.create_flag(flag)
         else:
             flag = None
-
+        
         blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
 
         dataf_list = [None] * (cube.nx * cube.ny)
