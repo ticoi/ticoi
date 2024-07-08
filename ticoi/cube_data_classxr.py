@@ -31,10 +31,7 @@ from rasterio.features import rasterize
 
 from ticoi.filtering_functions import *
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
-from ticoi.interpolation_functions import (
-    reconstruct_common_ref,
-    smooth_results,
-)
+from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
@@ -795,15 +792,15 @@ class cube_data_class:
                     )
                     self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-                elif filepath.split(".")[-1] == "zarr":
-                    if chunks == {}:
-                        chunks = "auto"  # Change the default value to auto
-                    self.ds = xr.open_dataset(
-                        filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks
-                    )
-                    self.is_TICO = False
-                    time_dim = "mid_date"
-                    var_name = "vx"
+            elif filepath.split(".")[-1] == "zarr":
+                if chunks == {}:
+                    chunks = "auto"  # Change the default value to auto
+                self.ds = xr.open_dataset(
+                    filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks
+                )
+                self.is_TICO = False
+                time_dim = "mid_date"
+                var_name = "vx"
 
             if verbose:
                 print("[Data loading] File open")
@@ -2018,8 +2015,8 @@ class cube_data_class:
             "velocity in the North/South direction [m/y]",
             "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction",
             "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction",
-            "Error propagated for the displacement in the direction Est/West",
-            "Error propagated for  the displacement in the direction North/South [m]",
+            "Error propagated for the displacement in the direction Est/West [m/y]",
+            "Error propagated for  the displacement in the direction North/South [m/y]",
         ]
         short_name = ["x_velocity", "y_velocity", "xcount_x", "xcount_y", "error_x", "error_y"]
 
@@ -2245,7 +2242,7 @@ class cube_data_class:
 
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
         start = time.time()
-        
+
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
         cubenew.ds["reference_date"] = xr.DataArray(
@@ -2269,21 +2266,15 @@ class cube_data_class:
         # Store each variable
         big_df = pd.concat(df_list, keys=range(len(df_list)))
         del df_list
-        
+
         for i, var in enumerate(variables):
             result_arr = big_df[var].values.reshape((self.nx, self.ny, len(second_date_list)))
-            
+
             cubenew.ds[var] = xr.DataArray(
-                result_arr,
-                dims=["x", "y", "second_date"],
-                coords=cubenew.ds.coords
+                result_arr, dims=["x", "y", "second_date"], coords=cubenew.ds.coords
             ).transpose("second_date", "y", "x")
-            
-            cubenew.ds[var].attrs = {
-                "standard_name": short_name[i],
-                "unit": unit[i],
-                "long_name": long_name[i]
-            }
+
+            cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": unit[i], "long_name": long_name[i]}
 
         cubenew.ds["grid_mapping"] = self.ds.proj4
         cubenew.ds.attrs = {
@@ -2316,7 +2307,7 @@ class cube_data_class:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
         return cubenew
-    
+
     def write_results_ticoi_or_tico(
         self,
         result: list,
