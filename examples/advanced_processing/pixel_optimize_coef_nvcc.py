@@ -52,7 +52,7 @@ interpolation = True
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False  # Print information throughout TICOI processing
-visual = False  # Plot information along the way
+visual = True  # Plot information along the way
 save = True  # Save the results or not
 # Visualisation options
 option_visual = [
@@ -136,14 +136,11 @@ interpolation_kwargs = {
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "visual": visual,  # Plot results along the way
-    "vmax": vmax,  # vmin and vmax of the legend
-    "verbose": verbose,
 }  # Print information throughout TICOI processing
 
 # Create a subfolder if it does not exist
 if not os.path.exists(path_save):
-    os.mkdir(path_save)
+    os.makedirs(path_save)
 
 if type(cube_name) == str:
     cube_name = [cube_name]
@@ -303,8 +300,6 @@ for param_value in list_parameter:
         # Proceed to interpolation
         dataf_lp = interpolation_core(
             result,
-            path_save=save_path,
-            data=dataf,
             **interpolation_kwargs,
         )
 
@@ -328,37 +323,17 @@ for param_value in list_parameter:
     # # cube2 = cube_list[0][0].deepcopy()  # for comparison with original data
     # # cube2.pick_offset(interval_output - 1, interval_output + 1)
 
-    if zone_stable:  # RMSE over stable areas
+    vv_after_inv = np.array([np.sqrt(el) for el in (dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2)])
+    Normalized_Coh_vector_after = (
+        np.sqrt(np.nansum(dataf_lp["vx"] / vv_after_inv) ** 2 + np.nansum(dataf_lp["vy"] / vv_after_inv) ** 2)
+        / dataf_lp.shape[0]
+    )
+    list_NCoh_vector_after.append(Normalized_Coh_vector_after)
 
-        RMSE_before = m.sqrt(np.nansum(vv_befor_inv**2) / len(cube2.vy_()[:, j, i].data))
-        RMSE_after = m.sqrt(np.nansum(vv_after_inv**2) / len(result_vx[:, 2]))
-        list_RMSE_before.append(RMSE_before)
-        list_RMSE_after.append(RMSE_after)
-
-        std_before = np.std(vv_befor_inv)
-        std_after = np.std(vv_after_inv)
-        list_std_after.append(std_after)
-        list_std_before.append(std_before)
-
-        f.write(f"\n A shape {A.shape}")
-        f.write(f"\n RMSE before inversion  {RMSE_before}")
-        f.write(f"\n RMSE after inversion {RMSE_after}")
-        f.write(f"\n std before inversion  {std_before}")
-        f.write(f"\n std after inversion {std_after}")
-
-    else:  # Velocity Vector Coherence
-
-        vv_after_inv = np.array([np.sqrt(el) for el in (dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2)])
-        Normalized_Coh_vector_after = (
-            np.sqrt(np.nansum(dataf_lp["vx"] / vv_after_inv) ** 2 + np.nansum(dataf_lp["vy"] / vv_after_inv) ** 2)
-            / dataf_lp.shape[0]
-        )
-        list_NCoh_vector_after.append(Normalized_Coh_vector_after)
-
-        f.write(f"\n A shape {A.shape}")
-        # f.write(f'\n Coh_vector before inversion  {Coh_vector_before}')
-        # f.write(f'\n Normalized Coh_vector before inversion {Normalized_Coh_vector_before}')
-        f.write(f"\n Normalized Coh_vector after inversion {Normalized_Coh_vector_after}")
+    # f.write(f"\n A shape {A.shape}")
+    # f.write(f'\n Coh_vector before inversion  {Coh_vector_before}')
+    # f.write(f'\n Normalized Coh_vector before inversion {Normalized_Coh_vector_before}')
+    f.write(f"\n Normalized Coh_vector after inversion {Normalized_Coh_vector_after}")
         # if interpolation: f.write(
         #     f'\n Normalized Coh_vector after inversion and interpolation {Normalized_Coh_vector_after_interpol}')
 

@@ -33,7 +33,6 @@ from tqdm import tqdm
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
-    optimize_result_assignment,
     set_function_for_interpolation,
 )
 from ticoi.inversion_functions import (
