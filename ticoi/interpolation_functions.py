@@ -14,8 +14,9 @@ from typing import List, Optional, Union
 import numpy as np
 import pandas as pd
 import scipy.ndimage as ndi
-from scipy import interpolate
 from numba import jit
+from scipy import interpolate
+
 from ticoi.pixel_class import pixel_class
 
 
@@ -41,6 +42,7 @@ def prepare_interpolation_date(
 
     return first_date_interpol, last_date_interpol
 
+
 def reconstruct_common_ref(
     result: pd.DataFrame,
     second_date_list: List[np.datetime64] | None = None,
@@ -59,14 +61,16 @@ def reconstruct_common_ref(
         length = 1 if second_date_list is None else len(second_date_list)
         nan_list = np.full(length, np.nan)
         second_dates = [np.nan] if second_date_list is None else second_date_list
-        return pd.DataFrame({
-            "Ref_date": nan_list,
-            "Second_date": second_dates,
-            "dx": nan_list,
-            "dy": nan_list,
-            "xcount_x": nan_list,
-            "xcount_y": nan_list,
-        })
+        return pd.DataFrame(
+            {
+                "Ref_date": nan_list,
+                "Second_date": second_dates,
+                "dx": nan_list,
+                "dy": nan_list,
+                "xcount_x": nan_list,
+                "xcount_y": nan_list,
+            }
+        )
 
     # Common Reference
     data = pd.DataFrame(
@@ -75,25 +79,26 @@ def reconstruct_common_ref(
             "Second_date": result["date2"],
         }
     )
-    
+
     for var in result.columns.difference(["date1", "date2"]):
         data[var] = result[var].values.cumsum()
-    data = data.rename(columns={"result_dx": "dx", "result_dy": "dy"})    
+    data = data.rename(columns={"result_dx": "dx", "result_dy": "dy"})
 
     if second_date_list is not None:
         tmp = pd.DataFrame(
-                {
-                    "Ref_date": pd.NaT,
-                    "Second_date": second_date_list,
-                    **{var: np.nan for var in data.columns.difference(["Ref_date", "Second_date"])}
-                }
-            )
-        
+            {
+                "Ref_date": pd.NaT,
+                "Second_date": second_date_list,
+                **{var: np.nan for var in data.columns.difference(["Ref_date", "Second_date"])},
+            }
+        )
+
         positions = np.searchsorted(second_date_list, data["Second_date"].values)
         tmp.iloc[positions] = data.values
 
         return tmp
     return data
+
 
 def set_function_for_interpolation(
     option_interpol: str, x: np.ndarray, dataf: pd.DataFrame, result_quality: list | None
