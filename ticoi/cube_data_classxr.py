@@ -9,6 +9,7 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
+import contextlib
 import itertools
 import os
 import time
@@ -34,7 +35,7 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-import contextlib
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -1233,7 +1234,7 @@ class cube_data_class:
                 .astype("float32")
             )
 
-    def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray,xr.DataArray):
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5) -> (xr.DataArray, xr.DataArray):
         """
 
         :param dem_file: [str] --- path of the DEM
@@ -1243,10 +1244,10 @@ class cube_data_class:
 
         """
 
-        #decorator to define a generator-based context manager. This allows the user to use the with statement with a generator function, here to remove every printed messages
+        # decorator to define a generator-based context manager. This allows the user to use the with statement with a generator function, here to remove every printed messages
         @contextlib.contextmanager
         def suppress_stdout_stderr():
-            with open(os.devnull, 'w') as devnull:
+            with open(os.devnull, "w") as devnull:
                 old_stdout = os.dup(1)
                 old_stderr = os.dup(2)
                 os.dup2(devnull.fileno(), 1)
@@ -1286,9 +1287,9 @@ class cube_data_class:
         # Set no_data value if src.nodata is None
         no_data = src.nodata if src.nodata is not None else -9999
 
-
-        dem_warped = median_filter(dem_warped,
-                                   size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
+        dem_warped = median_filter(
+            dem_warped, size=blur_size
+        )  # Blur the DEM, should be done first before computing slope and aspect
         # Create richdem array with suppressed output, richDEM is library to quickly process even very large DEMs.
         with suppress_stdout_stderr():
             dem_rd = rd.rdarray(dem_warped, no_data=no_data)
@@ -1467,8 +1468,8 @@ class cube_data_class:
                 while len(idx[0]) < 3 * len(
                     date_out
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
-                    t_thres += 30
-                    idx = np.where(baseline < t_thres)
+                    select_baseline += 30
+                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 

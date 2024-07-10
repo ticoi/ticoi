@@ -384,7 +384,7 @@ def topo_angle_filt(
 
     aspect_filter = aspect_diff < angle_thres
 
-    #combine a filter based on the aspect and a filter based on the zscore only if the slope is lower than 3
+    # combine a filter based on the aspect and a filter based on the zscore only if the slope is lower than 3
     slope_cond = slope > 3
     slope_filter = np.where(slope_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
 
