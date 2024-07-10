@@ -20,10 +20,6 @@ unit = "m/y"  # if obs_mode is 'velocity', need to specify the unit of the veloc
 files = glob.glob(f"{file_path}*filt.tif")
 files.sort()
 
-assign_flag = False
-flag_shp = "~/data/HMA_surging_glacier_inventory/HMA_surging_glacier_inventory_gamdam_v2_all.gpkg"
-dst_flag_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_lake_displacement_LS7_flags.nc"
-
 datasets = []
 
 for file in files:
@@ -89,7 +85,6 @@ ds_combined.vy.attrs = {
     "units": "m/y",
     "axis": "Y",
 }
-
 
 proj4 = CRS(ds.spatial_ref.projected_crs_name).to_proj4()
 source = "L. Charrier, L. Guo"

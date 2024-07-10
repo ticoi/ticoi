@@ -448,7 +448,7 @@ def dask_filt_warpper(
     da_vy: xr.DataArray,
     filt_method: str = "median_angle",
     vvc_thres: float = 0.3,
-    angle_thres: int = 30,
+    angle_thres: int = 45,
     z_thres: int = 2,
     magnitude_thres: int = 1000,
     median_magnitude_thres=3,

@@ -24,6 +24,7 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import contextlib
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
@@ -34,7 +35,6 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-import contextlib
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -1289,7 +1289,7 @@ class cube_data_class:
 
         dem_warped = median_filter(dem_warped,
                                    size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
-        # Create richdem array with suppressed output, richDEM is library to quickly process even very large DEMs.
+        # Create richdem array with suppressed output, richDEM is very quick for even very large DEMs.
         with suppress_stdout_stderr():
             dem_rd = rd.rdarray(dem_warped, no_data=no_data)
 
@@ -1383,12 +1383,6 @@ class cube_data_class:
             else:
                 raise ValueError("flag file must be .nc or .shp")
 
-        elif isinstance(flag, xr.Dataset):
-            pass
-
-        else:
-            raise ValueError("flag must be a str or xr.Dataset!")
-
         if "flags" in list(flag.variables):
             flag = flag.rename({"flags": "flag"})
 
@@ -1440,7 +1434,7 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray):  # type: ignore
+        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = None) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1458,7 +1452,6 @@ class cube_data_class:
 
             if verbose:
                 start = time.time()
-
             if select_baseline is not None:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(
@@ -1467,8 +1460,8 @@ class cube_data_class:
                 while len(idx[0]) < 3 * len(
                     date_out
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
-                    t_thres += 30
-                    idx = np.where(baseline < t_thres)
+                    select_baseline += 30
+                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -1579,7 +1572,7 @@ class cube_data_class:
             if verbose:
                 start = time.time()
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"])
+            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"])
 
             # The time dimension of the smoothed velocity observations is different from the original,
