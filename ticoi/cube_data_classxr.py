@@ -1265,17 +1265,6 @@ class cube_data_class:
         slope[slope == slope.no_data] = np.nan
         aspect[aspect == aspect.no_data] = np.nan
 
-        # slope = median_filter(slope, size=blur_size)
-        # aspect = median_filter(aspect, size=blur_size)
-
-        # grad_y, grad_x = np.gradient(dem_warped)
-        # slope = np.arctan(np.sqrt(grad_x**2 + grad_y**2))
-        # aspect = np.rad2deg(np.arctan2(grad_y, -grad_x))
-        # aspect = np.where(aspect < 0, 90.0 - aspect, np.where(aspect > 90.0, 360.0 - aspect + 90.0, 90.0 - aspect))
-        # slope = np.where(np.isfinite(slope), slope, np.nan)
-        # slope = np.rad2deg(slope)
-        # aspect = np.where(np.isfinite(aspect), aspect, np.nan)
-
         slope = xr.Dataset(
             data_vars=dict(
                 slope=(["y", "x"], np.array(slope)),
