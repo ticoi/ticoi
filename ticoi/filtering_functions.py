@@ -294,7 +294,7 @@ def dask_smooth_wrapper(
 def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
     """
-
+    Remove the observations if it is 3 time the standard deviation from the average of observations over this pixel
     :param obs: cube data to filter
     :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation
@@ -364,6 +364,7 @@ def topo_angle_filt(
 
     """
     Remove the observations if it is angle_thres away from the topographic gradient
+    Combine this filter based on the aspect with a filter based on the zscore only if the slope is lower than 3
     :param obs_cpx: cube data to filter
     :param slope: slope data
     :param aspect: aspect data
@@ -382,8 +383,8 @@ def topo_angle_filt(
     aspect_diff = np.abs((flow_direction - aspect + 180) % 360 - 180)
 
     aspect_filter = aspect_diff < angle_thres
-    # aspect_filter = np.where(aspect_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
 
+    #combine a filter based on the aspect and a filter based on the zscore only if the slope is lower than 3
     slope_cond = slope > 3
     slope_filter = np.where(slope_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
 
@@ -463,7 +464,7 @@ def dask_filt_warpper(
     :param filt_method: filtering method
     :param vvc_thres: threshold to combine zscore and median_angle filter
     :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
-    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 2)
     :param magnitude_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 1000)
     :param error_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 100)
     :param axis: axis on which to perform the zscore computation (default is 2)
