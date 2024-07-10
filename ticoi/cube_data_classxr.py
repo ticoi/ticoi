@@ -24,6 +24,7 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import contextlib
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
@@ -1233,16 +1234,42 @@ class cube_data_class:
                 .astype("float32")
             )
 
-    def compute_slo_asp(self, dem_file: str, blur_size: int = 5):
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray,xr.DataArray):
+        """
 
+        :param dem_file: [str] --- path of the DEM
+        :param blur_size: [int] --- spatial smoothing to apply to the DEM
+        :return: slope [xr.DataArray] --- slope of the smoothed DEM
+        :return: aspect [xr.DataArray] --- aspect of the smoothed D DEM
+
+        """
+
+        #decorator to define a generator-based context manager. This allows the user to use the with statement with a generator function, here to remove every printed messages
+        @contextlib.contextmanager
+        def suppress_stdout_stderr():
+            with open(os.devnull, 'w') as devnull:
+                old_stdout = os.dup(1)
+                old_stderr = os.dup(2)
+                os.dup2(devnull.fileno(), 1)
+                os.dup2(devnull.fileno(), 2)
+                try:
+                    yield
+                finally:
+                    os.dup2(old_stdout, 1)
+                    os.dup2(old_stderr, 2)
+
+        # Open the DEM file
         with rio.open(dem_file) as src:
             dem = src.read(1)
 
+        # Prepare an empty array for the warped DEM
         dem_warped = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
 
+        # Check if the CRS is in meters, if not raise an error
         if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
             raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
 
+        # Reproject the DEM to the desired CRS
         dem_warped, _ = rio.warp.reproject(
             source=dem,
             destination=dem_warped,
@@ -1253,18 +1280,32 @@ class cube_data_class:
             dst_shape=self.ds.rio.shape,
             resampling=rio.warp.Resampling.bilinear,
         )
+
+        # Replace no_data values with NaN
         dem_warped[dem_warped == src.nodata] = np.nan
-        dem_warped = median_filter(dem_warped, size=blur_size) # Blur the DEM, should be done first before computing slope and aspect
-         
-        dem_rd = rd.rdarray(dem_warped, no_data=src.nodata)
+
+        # Set no_data value if src.nodata is None
+        no_data = src.nodata if src.nodata is not None else -9999
+
+
+        dem_warped = median_filter(dem_warped,
+                                   size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
+        # Create richdem array with suppressed output, richDEM is library to quickly process even very large DEMs.
+        with suppress_stdout_stderr():
+            dem_rd = rd.rdarray(dem_warped, no_data=no_data)
+
         dem_rd.geotransform = self.ds.rio.transform().to_gdal()
 
-        slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
-        aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
+        # Calculate slope and aspect with suppressed output message
+        with suppress_stdout_stderr():
+            slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
+            aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
 
+        # Replace no_data values in slope and aspect with NaN
         slope[slope == slope.no_data] = np.nan
         aspect[aspect == aspect.no_data] = np.nan
 
+        # Convert slope and aspect to xarray Datasets
         slope = xr.Dataset(
             data_vars=dict(
                 slope=(["y", "x"], np.array(slope)),
