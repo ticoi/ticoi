@@ -69,7 +69,7 @@ You need to convert them into netcdf, for that have a look at advanced_processin
 
 #### You have netcdf files
 If it is ITS_LIVE data, or Millan et al., 2019, you can directly use them!
-If not, we have to create your one dataloader.
+If not, you have to create your own dataloader, within which the dimension should be ("mid_date", "y", "x"), and the variables should be "vx", "vy", and should contain the projection information in the ds.proj4 attribute.
 
 ### OUTPUTS
 * to understand to output of pixel_demo please check README_visualization_pixel_output.md
