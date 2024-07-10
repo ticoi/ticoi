@@ -35,7 +35,6 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-import contextlib
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -1290,7 +1289,7 @@ class cube_data_class:
 
         dem_warped = median_filter(dem_warped,
                                    size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
-        # Create richdem array with suppressed output, richDEM is library to quickly process even very large DEMs.
+        # Create richdem array with suppressed output, richDEM is very quick for even very large DEMs.
         with suppress_stdout_stderr():
             dem_rd = rd.rdarray(dem_warped, no_data=no_data)
 
@@ -1383,12 +1382,6 @@ class cube_data_class:
 
             else:
                 raise ValueError("flag file must be .nc or .shp")
-
-        elif isinstance(flag, xr.Dataset):
-            pass
-
-        else:
-            raise ValueError("flag must be a str or xr.Dataset!")
 
         if "flags" in list(flag.variables):
             flag = flag.rename({"flags": "flag"})
