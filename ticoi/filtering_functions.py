@@ -418,12 +418,9 @@ def flow_angle_filt(
     direction_diff = np.abs((flow_direction - direction + 180) % 360 - 180)
     
     angle_filter = direction_diff < angle_thres
-    
-    vx_mean = np.nanmedian(vx, axis=axis, keepdims=True)
-    vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
 
     # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
-    valid_and_greater_than_10 = (~np.isnan(velo_magnitude.values)) & (velo_magnitude.values > 5)
+    valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
     bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2) 
     bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
 
