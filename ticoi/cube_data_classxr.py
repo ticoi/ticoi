@@ -62,6 +62,7 @@ class cube_data_class:
             self.ds = xr.Dataset({})
             self.resolution = 50
             self.is_TICO = False
+
         else:
             self.filedir = cube.filedir
             self.filename = cube.filename
@@ -1441,13 +1442,13 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, t_thres: int = 200) -> (np.ndarray, np.ndarray):  # type: ignore
+        def loop_rolling(da_arr: xr.Dataset, select_baseline: int = None) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
             :param da_arr: [xr dataset] --- Original data
-            :param t_thres: [int] [default is 200] --- Threshold over the baselines
+            :param select_baseline: [int] [default is 200] --- Threshold over the temporal baselines
 
             :return spatial_mean: [np array] --- Exponential smoothed velocity
             :return date_out: [np array] --- Observed dates
@@ -1580,8 +1581,8 @@ class cube_data_class:
             if verbose:
                 start = time.time()
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"])
-            vy_filtered, dates_uniq = loop_rolling(self.ds["vy"])
+            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"],select_baseline=select_baseline)
+            vy_filtered, dates_uniq = loop_rolling(self.ds["vy"],select_baseline=select_baseline)
 
             # The time dimension of the smoothed velocity observations is different from the original,
             # which is because of the possible duplicate mid_date of different image pairs...
@@ -1590,7 +1591,7 @@ class cube_data_class:
                     vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
                 ),
                 coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
-                attrs=dict(description="Smoothed velocity observations", units="m/y", projection=self.ds.proj4),
+                attrs=dict(description="Smoothed velocity observations", units="m/y", proj4=self.ds.proj4),
             )
             del vx_filtered, vy_filtered
 

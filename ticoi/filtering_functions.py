@@ -12,6 +12,7 @@ import numpy as np
 import xarray as xr
 from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
 from scipy.signal import savgol_filter
+from scipy.stats import median_abs_deviation
 
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
@@ -309,6 +310,25 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
     return inlier_flag
 
+def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
+
+    """
+    Remove the observations if it is 3 time the MAD from the median of observations over this pixel
+    :param obs: cube data to filter
+    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
+
+    med = np.nanmedian(obs, axis=axis, keepdims=True)
+    mad = np.nanmedian(abs(obs-med), axis=axis, keepdims=True)
+
+    # mad = median_abs_deviation(obs, axis=axis)
+
+    z_scores = 0.6745*(obs - med) / mad
+    inlier_flag = np.abs(z_scores) < z_thres
+
+    return inlier_flag
 
 def NVVC_angle_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
@@ -449,7 +469,7 @@ def dask_filt_warpper(
     filt_method: str = "median_angle",
     vvc_thres: float = 0.3,
     angle_thres: int = 30,
-    z_thres: int = 2,
+    z_thres: int = 2,mz_thres=3.5,
     magnitude_thres: int = 1000,
     median_magnitude_thres=3,
     error_thres: int = 100,
@@ -465,6 +485,7 @@ def dask_filt_warpper(
     :param vvc_thres: threshold to combine zscore and median_angle filter
     :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
     :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 2)
+    :param mz_thres: threshold to remove observations, if the absolute mzscore is higher than this threshold (default is 3.5)
     :param magnitude_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 1000)
     :param error_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 100)
     :param axis: axis on which to perform the zscore computation (default is 2)
@@ -485,6 +506,12 @@ def dask_filt_warpper(
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "mz_score":  # threshold according to the zscore
+        inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
+        inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
 
     elif filt_method == "magnitude":  # delete according to a threshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)
