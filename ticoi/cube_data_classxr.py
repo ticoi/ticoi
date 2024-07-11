@@ -1285,7 +1285,7 @@ class cube_data_class:
             
         direction = xr.Dataset(
             data_vars=dict(
-                direction=(["y", "x"], np.array(direction)),
+                direction=(["y", "x"], np.array(direction.T)),
             ),
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )

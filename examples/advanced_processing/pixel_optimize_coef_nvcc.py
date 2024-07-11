@@ -9,10 +9,8 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import json
 import os
 import time
-import urllib
 import warnings
 
 import matplotlib.pyplot as plt
@@ -33,30 +31,31 @@ warnings.filterwarnings("ignore")
 # =========================================================================%% #
 
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
-# Path to the "ground truth" cube used to optimize the regularisation
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel", "optimize_coef"))}/'  # Path where to store the results
+cube_name = (
+    f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+)
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
+dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-# catalog_cubeige = '/home/charriel/Documents/Bettik/Yukon/cube_grid.shp'
-i, j = 343617.7, 5091275.0  # Point (pixel) where to carry on the computation
+i, j = 343617.7, 5091275.0  # Pixel coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
-regu = "1accelnotnull"  # Regularization method to be used
-solver = "LSMR_ini"  # Solver for the inversion
-result_quality = (
-    "X_contribution"  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-)
-interpolation = True
+# For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
+regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+coef = 200  # Regularization coefficient.s to be used (for each flag if flags is not None)
+delete_outlier = "flow_angle"  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+apriori_weight = True  # Use the error as apriori
+interval_output = 30  # temporal sampling of the output results
+unit = 365  # 1 for m/d, 365 for m/y
+result_quality = [
+    "X_contribution"
+]  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
 
-
-delete_outlier = {
-    "median_angle": True,
-    "z_score": True,
-}  # delete outliers, based on the angle between the median vector and the observations, recommended:: vvc_angle or None
+interpolation = True  # Interpolate the results
 
 ## ----------------------- Visualization parameters ------------------------ ##
-verbose = False  # Print information throughout TICOI processing
+verbose = True  # Print information throughout TICOI processing
 visual = True  # Plot information along the way
 save = True  # Save the results or not
 # Visualisation options
@@ -70,24 +69,27 @@ option_visual = [
     "xcount_xy",
     "xcount_vv",
     "invert_weight",
+    "interp_xy_overlaid",
+    "interp_xy_overlaid_zoom",
+    "invertvv_overlaid",
+    "invertvv_overlaid_zoom",
+    "direction_overlaid",
 ]  # see README_visualization_pixel_output.md
-vmax = [False, False]  # Vertical limits for the plots
 
 parameter = "coef"
-threshold_vcc = 0.01
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
+    "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": [i, j, 100],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": None,  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "verbose": verbose,
-}  # Print information throughout the loading process
-
+    "verbose": verbose,  # Print information throughout the loading process
+}
 ## ----------------------- Data preparation parameters --------------------- ##
 preData_kwargs = {
     "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
@@ -97,18 +99,20 @@ preData_kwargs = {
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "flag": None,
     "regu": regu,  # Regularization method to be used
-    "solver": solver,  # Solver for the inversion
+    "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
-    "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+    "velo_or_disp": "disp",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+    "select_baseline": 120,
     "verbose": verbose,
 }  # Print information throughout the filtering process
 
 ## ---------------- Parameters for the pixel loading part ------------------ ##
 load_pixel_kwargs = {
     "regu": regu,  # Regularization method to be used
-    "coef": 100,
-    "solver": solver,  # Solver for the inversion
+    "coef": coef,
+    "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "visual": visual,  # Plot results along the way
@@ -117,10 +121,10 @@ load_pixel_kwargs = {
 ## --------------------------- Inversion parameters ------------------------ ##
 inversion_kwargs = {
     "regu": regu,  # Regularization method to be used
-    "coef": 100,  # Regularization coefficient to be used
-    "solver": solver,  # Solver for the inversion
+    "coef": coef,  # Regularization coefficient to be used
+    "solver": "LSMR_ini",  # Solver for the inversion
     "conf": False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
-    "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
+    "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
     "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
     "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
@@ -135,8 +139,8 @@ inversion_kwargs = {
 
 ## ----------------------- Interpolation parameters ------------------------ ##
 interpolation_kwargs = {
-    "interval_output": 30,  # Temporal baseline of the time series resulting from TICOI (after interpolation)
-    "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
+    "interval_output": interval_output,  # Temporal baseline of the time series resulting from TICOI (after interpolation)
+    "redundancy": 30,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
@@ -149,7 +153,7 @@ if not os.path.exists(path_save):
 if type(cube_name) == str:
     cube_name = [cube_name]
 
-# list_parameter = [150]
+# list_parameter = [200]
 list_parameter = [
     50,
     70,
@@ -210,25 +214,18 @@ if "L_curve" in option_visual:
 cube = cube_data_class()
 cube.load(cube_name[0], **load_kwargs)
 
-# Several cubes have to be merged together
-if len(cube_name) > 1:
-    for n in range(1, len(cube_name)):
-        cube2 = cube_data_class()
-        cube2.load(cube_name[n], **load_kwargs)
-        cube2 = cube.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method="nearest")
-        cube.merge_cube(cube2)
+# Prepare interpolation dates
+first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
+
+
 stop = [time.time()]
 print(f"[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s")
 print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ")
 
-cube2_date1 = cube.date1_().tolist()
-cube2_date1.remove(np.min(cube2_date1))
-start_date_interpol = np.min(cube2_date1)
-last_date_interpol = np.max(cube.date2_())
-
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
 start.append(time.time())
-obs_filt, _ = cube.filter_cube(**preData_kwargs)
+obs_filt, flag = cube.filter_cube(**preData_kwargs)
 stop.append(time.time())
 print(f"[Data filtering] Loading the pixel took {round((stop[1] - start[1]), 4)} s")
 
@@ -251,15 +248,15 @@ for param_value in list_parameter:
         # print(f'Cube of dimesion (nz,nx,ny): ({cube.nz},{cube.nx},{cube.ny} ')
         print(f"Inversion for pixel {i, j}")
 
-    # %% Inversion
+# %% ======================================================================== #
+#                                Inversion                                    #
+# =========================================================================%% #
 
     # Load pixel data
     start.append(time.time())
     data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
-    # Prepare interpolation dates
-    first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
-    interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
+
     stop.append(time.time())
     print(f"[Data loading] Loading the pixel took {round((stop[2] - start[2]), 4)} s")
 
@@ -273,24 +270,14 @@ for param_value in list_parameter:
         save_path = f"{path_save}/{parameter}_{param_value}/"
     if not os.path.exists(save_path):  # cree un sous dossier
         os.mkdir(save_path)
-    if visual:
-        visualization_core(
-            [dataf, result],
-            option_visual=option_visual,
-            save=True,
-            show=True,
-            path_save=save_path,
-            A=A,
-            log_scale=False,
-            cmap="rainbow",
-            colors=["orange", "blue"],
-        )
 
     # Save the results
     if save:
         result.to_csv(f"{save_path}/ILF_result.csv")
 
-    # interpolation
+# %% ======================================================================== #
+#                              INTERPOLATION                                  #
+# =========================================================================%% #
     start.append(time.time())
 
     if interpolation_kwargs["interval_output"] == False:
@@ -305,14 +292,37 @@ for param_value in list_parameter:
 
     if save:
         dataf_lp.to_csv(f"{save_path}/RLF_result.csv")
-
-    if visual:
-        visualisation_interpolation(
-            [dataf, dataf_lp], save=True, show=True, path_save=save_path, colors=["orange", "blue"]
-        )
-
+    
     stop.append(time.time())
     print(f"[Interpolation] Interpolation took {round((stop[4] - start[4]), 4)} s")
+
+# %% ======================================================================== #
+#                              Visualization                                  #
+# =========================================================================%% #
+    if visual:
+        visualization_core(
+            [dataf, result],
+            option_visual=option_visual,
+            save=True,
+            show=True,
+            path_save=save_path,
+            A=A,
+            log_scale=False,
+            cmap="rainbow",
+            colors=["orange", "blue"],
+        )
+        visualisation_interpolation(
+            [dataf, dataf_lp],
+            option_visual=option_visual,
+            save=True,
+            show=True,
+            path_save=save_path,
+            colors=["orange", "blue"],
+        )
+
+# %% ======================================================================== #
+#                                Update vvc                                   #
+# =========================================================================%% #
 
     if "L_curve" in option_visual:
         Residux.append(dataf["NormR"][0])
@@ -330,12 +340,12 @@ for param_value in list_parameter:
     f.write(f"\n A shape {A.shape}")
     f.write(f"\n Normalized Coh_vector after inversion {Normalized_Coh_vector_after}")
 
-
 end = time.time()
 print(f"{end - start[0]} ms")
 
-
-# VVC visualization
+# %% ======================================================================== #
+#                            VVC visualization                                #
+# =========================================================================%% #
 dataf = pd.DataFrame({"param": list_parameter, "VCC": list_NCoh_vector_after})
 dataf.sort_values(by="param", inplace=True)
 VCC_max99 = dataf["VCC"].max() * 0.99
