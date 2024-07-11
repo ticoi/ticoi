@@ -1608,12 +1608,13 @@ class cube_data_class:
             obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
             obs_filt.attrs["description"] = "Averaged velocity over the period"
             obs_filt.attrs["units"] = "m/y"
+        else: obs_filt = None
 
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        obs_filt.load()
+        if obs_filt!= None: obs_filt.load()
         self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
