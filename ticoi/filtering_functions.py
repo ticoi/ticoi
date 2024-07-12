@@ -372,7 +372,7 @@ def topo_angle_filt(
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
-
+    
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
     velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
 
@@ -389,6 +389,46 @@ def topo_angle_filt(
     slope_filter = np.where(slope_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
 
     inlier_flag = np.logical_and(slope_filter, aspect_filter.data)
+
+    return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
+
+def flow_angle_filt(
+    obs_cpx: xr.DataArray,
+    direction: xr.DataArray,
+    angle_thres: int = 45,
+    z_thres: int = 3,
+    axis: int = 2,
+) -> da.array:
+    """
+    Remove the observations if it is angle_thres away from the given flow direction
+    Combine this filter based on the aspect with a filter based on the zscore only if the 4/5 of the observations slower than 5 m/y
+    :param obs_cpx: cube data to filter
+    :param direction: given flow direction
+    :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
+    vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
+    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
+
+    angle_rad = np.arctan2(vx, vy)
+
+    flow_direction = (np.rad2deg(angle_rad) + 360) % 360
+    
+    direction_diff = np.abs((flow_direction - direction + 180) % 360 - 180)
+    
+    angle_filter = direction_diff < angle_thres
+    
+    # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
+    # valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
+    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2) 
+    # bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
+
+    # mag_filter = np.where(bis_cond , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    # angle_filter[np.expand_dims(np.isnan(direction), axis=2)] = True
+    angle_filter = angle_filter.where(~np.isnan(direction), True) # change the stable area to true incase of all invalid data
+    mag_filter = np.where(~np.isnan(direction) , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    inlier_flag = np.logical_and(mag_filter, angle_filter.data)
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
 
@@ -455,6 +495,7 @@ def dask_filt_warpper(
     error_thres: int = 100,
     slope: xr.Dataset = None,
     aspect: xr.Dataset = None,
+    direction: xr.Dataset = None,
     axis: int = 2,
 ):
     """
@@ -479,7 +520,7 @@ def dask_filt_warpper(
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(
             NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
-        )
+        )        
 
     elif filt_method == "z_score":  # threshold according to the zscore
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
@@ -512,6 +553,17 @@ def dask_filt_warpper(
             topo_angle_filt,
             obs_arr,
             args=(slope_expanded, aspect_expanded),
+            template=obs_arr,
+            kwargs={"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis},
+        )
+    elif filt_method == "flow_angle":
+        obs_arr = da_vx + 1j * da_vy
+        _, direction_expanded = xr.broadcast(obs_arr, direction["direction"])
+        direction_expanded = direction_expanded.chunk(obs_arr.chunks)
+        inlier_mask = xr.map_blocks(
+            flow_angle_filt,
+            obs_arr,
+            args=(direction_expanded,),
             template=obs_arr,
             kwargs={"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis},
         )
