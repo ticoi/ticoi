@@ -81,7 +81,8 @@ def reconstruct_common_ref(
     )
 
     for var in result.columns.difference(["date1", "date2"]):
-        data[var] = result[var].values.cumsum()
+        if var in ["result_dx", "result_dy", "xcount_x", "xcount_y", "error_x", "error_y", "xcount_z"]:
+            data[var] = result[var].values.cumsum()
     data = data.rename(columns={"result_dx": "dx", "result_dy": "dy"})
 
     if second_date_list is not None:

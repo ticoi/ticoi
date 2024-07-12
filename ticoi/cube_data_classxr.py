@@ -25,6 +25,7 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import contextlib
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
@@ -1114,6 +1115,7 @@ class cube_data_class:
         flag: xr.Dataset | None = None,
         slope: xr.Dataset | None = None,
         aspect: xr.Dataset | None = None,
+        direction: xr.Dataset | None = None,
         **kwargs,
     ):
 
@@ -1138,6 +1140,7 @@ class cube_data_class:
                     filt_method=delete_outliers,
                     slope=slope,
                     aspect=aspect,
+                    direction=direction,
                     axis=axis,
                     **kwargs,
                 )
@@ -1193,6 +1196,8 @@ class cube_data_class:
                         self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
                 elif method == "topo_angle":
                     self.delete_outliers("topo_angle", flag, slope=slope, aspect=aspect)
+                elif method == "flow_angle":
+                    self.delete_outliers("flow_angle", flag, direction=direction)
                 else:
                     raise ValueError(
                         f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
@@ -1236,8 +1241,67 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
                 .astype("float32")
             )
-
-    def compute_slo_asp(self, dem_file: str, blur_size: int = 5) -> (xr.DataArray, xr.DataArray):
+    def reproject_geotiff_to_cube(self, file_path):
+        
+        """
+        Reproject the geotiff file to the same geometry of the cube
+        :param: file_path: [str] --- path of the geotifffile to be wrapped
+        :return: warpped data [np.ndarray] --- warped data with same shape and resolution as the cube
+        """
+        if file_path.split(".")[-1] == "tif":
+            with rio.open(file_path) as src:
+                src_data = src.read(1)
+            
+            dst_data = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
+            dst_data, _ = rio.warp.reproject(
+                source=src_data,
+                destination=dst_data,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_crs=CRS.from_proj4(self.ds.proj4),
+                dst_transform=self.ds.rio.transform(),
+                dst_shape=self.ds.rio.shape,
+                resampling=rio.warp.Resampling.bilinear,
+            )
+            dst_data[dst_data == src.nodata] = np.nan
+        return dst_data
+    
+    def compute_flow_direction(self, vx_file: str | None = None, vy_file: str | None = None) -> xr.DataArray:
+        
+        """
+        Compute the avaerage flow direction from the input vx and vy files or just from the observations
+        :param: vx_file | vy_file: [str] --- path of the flow velocity file, should be geotiff format
+        :return: direction: [xr.DataArray] --- computed average flow direction at each pixel
+        """
+        if vx_file is not None and vy_file is not None:
+            vx = self.reproject_eotiff_to_cube(vx_file)
+            vy = self.reproject_geotiff_to_cube(vy_file)
+        else:
+            vx = self.ds["vx"].values
+            vy = self.ds["vy"].values
+            
+        temporal_baseline = self.ds["temporal_baseline"].values
+        temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
+        vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+        vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+        
+        v_mean_weighted = np.sqrt(vx_weighted ** 2 + vy_weighted ** 2)
+        
+        direction = np.arctan2(vx_weighted, vy_weighted)
+        direction = (np.rad2deg(direction) + 360) % 360
+        
+        direction = np.where(v_mean_weighted < 1, np.nan, direction)
+        
+        direction = xr.Dataset(
+            data_vars=dict(
+                direction=(["y", "x"], np.array(direction.T)),
+            ),
+            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
+        )
+        
+        return direction
+            
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray,xr.DataArray):
         """
 
         :param dem_file: [str] --- path of the DEM
@@ -1260,42 +1324,21 @@ class cube_data_class:
                 finally:
                     os.dup2(old_stdout, 1)
                     os.dup2(old_stderr, 2)
-
-        # Open the DEM file
-        with rio.open(dem_file) as src:
-            dem = src.read(1)
-
-        # Prepare an empty array for the warped DEM
-        dem_warped = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
-
-        # Check if the CRS is in meters, if not raise an error
+                    
         if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
             raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
-
-        # Reproject the DEM to the desired CRS
-        dem_warped, _ = rio.warp.reproject(
-            source=dem,
-            destination=dem_warped,
-            src_transform=src.transform,
-            src_crs=src.crs,
-            dst_crs=CRS.from_proj4(self.ds.proj4),
-            dst_transform=self.ds.rio.transform(),
-            dst_shape=self.ds.rio.shape,
-            resampling=rio.warp.Resampling.bilinear,
-        )
-
-        # Replace no_data values with NaN
-        dem_warped[dem_warped == src.nodata] = np.nan
+        # Open the DEM file
+        dem = self.reproject_to_cube(dem_file)
 
         # Set no_data value if src.nodata is None
-        no_data = src.nodata if src.nodata is not None else -9999
+        with rio.open(dem_file) as src:
+            no_data = src.nodata if src.nodata is not None else -9999
 
-        dem_warped = median_filter(
-            dem_warped, size=blur_size
-        )  # Blur the DEM, should be done first before computing slope and aspect
-        # Create richdem array with suppressed output, richDEM is library to quickly process even very large DEMs.
+        dem = median_filter(dem,
+                                   size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
+        # Create richdem array with suppressed output, richDEM is very quick for even very large DEMs.
         with suppress_stdout_stderr():
-            dem_rd = rd.rdarray(dem_warped, no_data=no_data)
+            dem_rd = rd.rdarray(dem, no_data=no_data)
 
         dem_rd.geotransform = self.ds.rio.transform().to_gdal()
 
@@ -1387,12 +1430,6 @@ class cube_data_class:
             else:
                 raise ValueError("flag file must be .nc or .shp")
 
-        elif isinstance(flag, xr.Dataset):
-            pass
-
-        else:
-            raise ValueError("flag must be a str or xr.Dataset!")
-
         if "flags" in list(flag.variables):
             flag = flag.rename({"flags": "flag"})
 
@@ -1444,7 +1481,8 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, select_baseline: int = None) -> (np.ndarray, np.ndarray):  # type: ignore
+
+        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = None) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
@@ -1462,7 +1500,6 @@ class cube_data_class:
 
             if verbose:
                 start = time.time()
-
             if select_baseline is not None:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(
@@ -1555,7 +1592,7 @@ class cube_data_class:
         start = time.time()
 
         if delete_outliers is not None:
-            slope, aspect = None, None
+            slope, aspect, direction = None, None, None
             if (isinstance(delete_outliers, str) and delete_outliers == "topo_angle") or (
                 isinstance(delete_outliers, dict) and "topo_angle" in delete_outliers.keys()
             ):
@@ -1563,8 +1600,12 @@ class cube_data_class:
                     slope, aspect = self.compute_slo_asp(dem_file=dem_file)
                 else:
                     raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
-
-            self.delete_outliers(delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect)
+                
+            elif (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
+                isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
+            ):
+                direction = self.compute_flow_direction(vx_file=None, vy_file=None)
+            self.delete_outliers(delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect, direction=direction)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
@@ -1583,8 +1624,9 @@ class cube_data_class:
             if verbose:
                 start = time.time()
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"],select_baseline=select_baseline)
-            vy_filtered, dates_uniq = loop_rolling(self.ds["vy"],select_baseline=select_baseline)
+
+            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)
+            vy_filtered, dates_uniq = loop_rolling(self.ds["vy"], select_baseline=select_baseline)
 
             # The time dimension of the smoothed velocity observations is different from the original,
             # which is because of the possible duplicate mid_date of different image pairs...
