@@ -86,7 +86,9 @@ class cube_data_class:
         self.nx = self.ds["x"].sizes["x"]
         self.ny = self.ds["y"].sizes["y"]
         self.nz = self.ds[time_dim].sizes[time_dim]
-        self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
+        if len(self.ds["x"]) !=0 and len(self.ds["y"]) !=0:
+            self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
+        else: raise ValueError('Your cube is empty, please check the subset or buffer coordinates you provided  ')
 
     def subset(self, proj: str, subset: list):
 
