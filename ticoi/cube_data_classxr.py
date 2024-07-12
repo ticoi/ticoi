@@ -1280,9 +1280,13 @@ class cube_data_class:
         vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
         vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
         
+        v_mean_weighted = np.sqrt(vx_weighted ** 2 + vy_weighted ** 2)
+        
         direction = np.arctan2(vx_weighted, vy_weighted)
         direction = (np.rad2deg(direction) + 360) % 360
-            
+        
+        direction = np.where(v_mean_weighted < 1, np.nan, direction)
+        
         direction = xr.Dataset(
             data_vars=dict(
                 direction=(["y", "x"], np.array(direction.T)),

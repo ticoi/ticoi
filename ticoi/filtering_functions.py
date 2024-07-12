@@ -418,14 +418,16 @@ def flow_angle_filt(
     direction_diff = np.abs((flow_direction - direction + 180) % 360 - 180)
     
     angle_filter = direction_diff < angle_thres
-
-    # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
-    valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
-    bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2) 
-    bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
-
-    mag_filter = np.where(bis_cond , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     
+    # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
+    # valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
+    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2) 
+    # bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
+
+    # mag_filter = np.where(bis_cond , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    # angle_filter[np.expand_dims(np.isnan(direction), axis=2)] = True
+    angle_filter = angle_filter.where(~np.isnan(direction), True) # change the stable area to true incase of all invalid data
+    mag_filter = np.where(~np.isnan(direction) , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     inlier_flag = np.logical_and(mag_filter, angle_filter.data)
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
