@@ -9,6 +9,7 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
+import contextlib
 import itertools
 import os
 import time
@@ -35,6 +36,7 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -61,6 +63,7 @@ class cube_data_class:
             self.ds = xr.Dataset({})
             self.resolution = 50
             self.is_TICO = False
+
         else:
             self.filedir = cube.filedir
             self.filename = cube.filename
@@ -84,7 +87,9 @@ class cube_data_class:
         self.nx = self.ds["x"].sizes["x"]
         self.ny = self.ds["y"].sizes["y"]
         self.nz = self.ds[time_dim].sizes[time_dim]
-        self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
+        if len(self.ds["x"]) !=0 and len(self.ds["y"]) !=0:
+            self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
+        else: raise ValueError('Your cube is empty, please check the subset or buffer coordinates you provided  ')
 
     def subset(self, proj: str, subset: list):
 
@@ -1268,7 +1273,6 @@ class cube_data_class:
         :param: vx_file | vy_file: [str] --- path of the flow velocity file, should be geotiff format
         :return: direction: [xr.DataArray] --- computed average flow direction at each pixel
         """
-
         if vx_file is not None and vy_file is not None:
             vx = self.reproject_eotiff_to_cube(vx_file)
             vy = self.reproject_geotiff_to_cube(vy_file)
@@ -1307,10 +1311,10 @@ class cube_data_class:
 
         """
 
-        #decorator to define a generator-based context manager. This allows the user to use the with statement with a generator function, here to remove every printed messages
+        # decorator to define a generator-based context manager. This allows the user to use the with statement with a generator function, here to remove every printed messages
         @contextlib.contextmanager
         def suppress_stdout_stderr():
-            with open(os.devnull, 'w') as devnull:
+            with open(os.devnull, "w") as devnull:
                 old_stdout = os.dup(1)
                 old_stderr = os.dup(2)
                 os.dup2(devnull.fileno(), 1)
@@ -1477,13 +1481,14 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
+
         def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = None) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
             A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
 
             :param da_arr: [xr dataset] --- Original data
-            :param t_thres: [int] [default is 200] --- Threshold over the baselines
+            :param select_baseline: [int] [default is 200] --- Threshold over the temporal baselines
 
             :return spatial_mean: [np array] --- Exponential smoothed velocity
             :return date_out: [np array] --- Observed dates
@@ -1619,6 +1624,7 @@ class cube_data_class:
             if verbose:
                 start = time.time()
 
+
             vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"], select_baseline=select_baseline)
 
@@ -1646,12 +1652,13 @@ class cube_data_class:
             obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
             obs_filt.attrs["description"] = "Averaged velocity over the period"
             obs_filt.attrs["units"] = "m/y"
+        else: obs_filt = None
 
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        obs_filt.load()
+        if obs_filt!= None: obs_filt.load()
         self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 

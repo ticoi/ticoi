@@ -509,7 +509,7 @@ def inversion_core(
                 weight_ix = weight_2x
 
             del result_dx, result_dy
-            if not visual and not 'Error_propagation' in result_quality:
+            if not visual and not "Error_propagation" in result_quality:
                 del data_values, data_dates
 
         else:  # If not iteration

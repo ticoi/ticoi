@@ -143,7 +143,6 @@ interpolation_kwargs = {
     "redundancy": 30,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
 }  # Print information throughout TICOI processing
 
 # Create a subfolder if it does not exist
@@ -153,7 +152,6 @@ if not os.path.exists(path_save):
 if type(cube_name) == str:
     cube_name = [cube_name]
 
-# list_parameter = [200]
 list_parameter = [
     50,
     70,
