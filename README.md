@@ -56,11 +56,12 @@ Then replace all conda commands by mamba.
 * **examples/results/pixel**: Expected results for the demo pixel
 
 ##### More advanced examples:
-
+* **cube_ticoi_demo_its_live.py**: Demonstration of how to process one ITS_LIVE cube directly from the cloud
 * **examples/advances_processing/ticoi_cube_demo_advanced.py**: Demonstration of how to process one cube, by using different parameters for different areas (stable, surge)
 * **examples/data_availability.py**: A few tools to evaluate the data availability on a set of data, its repartition throughout the period of measurement and its quality
 in some cases, in order to see whether it is relevant or not to study glacier velocities at a point (seaonality, surge...). It uses
 TICOI's optimized loading to load the data.
+* **examples/pixel_optimize_coef_nvcc.py**: Demonstration of how to choose the regularisation parameter according to the Vector Velocity Coherence
 
 ### TO START
 

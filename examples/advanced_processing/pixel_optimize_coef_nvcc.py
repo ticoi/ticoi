@@ -135,10 +135,6 @@ interpolation_kwargs = {
     "redundancy": 30,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "visual": visual,  # Plot results along the way
-    "vmax": vmax,  # vmin and vmax of the legend
-    "verbose": verbose,
 }  # Print information throughout TICOI processing
 
 # Create a subfolder if it does not exist
@@ -148,7 +144,6 @@ if not os.path.exists(path_save):
 if type(cube_name) == str:
     cube_name = [cube_name]
 
-# list_parameter = [150]
 list_parameter = [
     50,
     70,
@@ -303,8 +298,6 @@ for param_value in list_parameter:
         # Proceed to interpolation
         dataf_lp = interpolation_core(
             result,
-            path_save=save_path,
-            data=dataf,
             **interpolation_kwargs,
         )
 
@@ -324,9 +317,6 @@ for param_value in list_parameter:
         Residuy.append(dataf["NormR"][2])
         Regux.append(dataf["NormR"][1])
         Reguy.append(dataf["NormR"][3])
-
-    # # cube2 = cube_list[0][0].deepcopy()  # for comparison with original data
-    # # cube2.pick_offset(interval_output - 1, interval_output + 1)
 
     if zone_stable:  # RMSE over stable areas
 
@@ -355,23 +345,8 @@ for param_value in list_parameter:
         )
         list_NCoh_vector_after.append(Normalized_Coh_vector_after)
 
-        f.write(f"\n A shape {A.shape}")
-        # f.write(f'\n Coh_vector before inversion  {Coh_vector_before}')
-        # f.write(f'\n Normalized Coh_vector before inversion {Normalized_Coh_vector_before}')
         f.write(f"\n Normalized Coh_vector after inversion {Normalized_Coh_vector_after}")
-        # if interpolation: f.write(
-        #     f'\n Normalized Coh_vector after inversion and interpolation {Normalized_Coh_vector_after_interpol}')
 
-# vv_beforinv = np.sqrt(cube.vx_()[:, j, i].data ** 2 + cube.vy_()[:, j, i].data** 2)
-# vv_afterinv = np.array([np.sqrt(el) for el in result_vx[:,2]**2+result_vy[:,2]**2])
-# print('Vv RMSE (pour zone stable) avant inversion',m.sqrt(np.nansum(vv_beforinv**2) / cube.vx_()[:, j, i].data.shape[0]))
-# print('Vv RMSE (pour zone stable) apres inversion',m.sqrt(np.nansum(vv_afterinv**2)/result_vx.shape[0]))
-#
-# print('Vy RMSE before inversion', m.sqrt(np.nansum(cube.vy_()[:, j, i].data ** 2) / cube.vx_()[:, j, i].data.shape[0]))
-# print('Vy RMSE after inversion', m.sqrt(np.nansum(result_vy[:, 2] ** 2) / result_vy[:, 2].shape[0]))
-#
-# print('Vx RMSE before inversion',m.sqrt(np.nansum(cube.vx_()[:, j, i].data ** 2) / cube.vx_()[:, j, i].data.shape[0]))
-# print('Vx RMSE after inversion', m.sqrt(np.nansum(result_vx[:,2] ** 2) / result_vx[:,2].shape[0]))
 
 end = time.time()
 print(f"{end - start[0]} ms")
