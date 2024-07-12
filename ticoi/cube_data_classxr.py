@@ -1236,10 +1236,11 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
                 .astype("float32")
             )
-    def reproject_to_cube(self, file_path):
+    def reproject_geotiff_to_cube(self, file_path):
         
         """
-        :param: file_path: [str] --- path of the file to be wrapped
+        Reproject the geotiff file to the same geometry of the cube
+        :param: file_path: [str] --- path of the geotifffile to be wrapped
         :return: warpped data [np.ndarray] --- warped data with same shape and resolution as the cube
         """
         if file_path.split(".")[-1] == "tif":
@@ -1269,8 +1270,8 @@ class cube_data_class:
         """
 
         if vx_file is not None and vy_file is not None:
-            vx = self.reproject_to_cube(vx_file)
-            vy = self.reproject_to_cube(vy_file)
+            vx = self.reproject_eotiff_to_cube(vx_file)
+            vy = self.reproject_geotiff_to_cube(vy_file)
         else:
             vx = self.ds["vx"].values
             vy = self.ds["vy"].values
