@@ -9,8 +9,10 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
+import json
 import os
 import time
+import urllib
 import warnings
 
 import matplotlib.pyplot as plt

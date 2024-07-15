@@ -25,7 +25,6 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
-import contextlib
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
@@ -1242,7 +1241,7 @@ class cube_data_class:
                 .astype("float32")
             )
     def reproject_geotiff_to_cube(self, file_path):
-        
+
         """
         Reproject the geotiff file to the same geometry of the cube
         :param: file_path: [str] --- path of the geotifffile to be wrapped
@@ -1251,7 +1250,7 @@ class cube_data_class:
         if file_path.split(".")[-1] == "tif":
             with rio.open(file_path) as src:
                 src_data = src.read(1)
-            
+
             dst_data = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
             dst_data, _ = rio.warp.reproject(
                 source=src_data,
@@ -1265,9 +1264,9 @@ class cube_data_class:
             )
             dst_data[dst_data == src.nodata] = np.nan
         return dst_data
-    
+
     def compute_flow_direction(self, vx_file: str | None = None, vy_file: str | None = None) -> xr.DataArray:
-        
+
         """
         Compute the avaerage flow direction from the input vx and vy files or just from the observations
         :param: vx_file | vy_file: [str] --- path of the flow velocity file, should be geotiff format
@@ -1279,28 +1278,28 @@ class cube_data_class:
         else:
             vx = self.ds["vx"].values
             vy = self.ds["vy"].values
-            
+
         temporal_baseline = self.ds["temporal_baseline"].values
         temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
         vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
         vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
-        
+
         v_mean_weighted = np.sqrt(vx_weighted ** 2 + vy_weighted ** 2)
-        
+
         direction = np.arctan2(vx_weighted, vy_weighted)
         direction = (np.rad2deg(direction) + 360) % 360
-        
+
         direction = np.where(v_mean_weighted < 1, np.nan, direction)
-        
+
         direction = xr.Dataset(
             data_vars=dict(
                 direction=(["y", "x"], np.array(direction.T)),
             ),
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )
-        
+
         return direction
-            
+
     def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray,xr.DataArray):
         """
 
@@ -1324,7 +1323,7 @@ class cube_data_class:
                 finally:
                     os.dup2(old_stdout, 1)
                     os.dup2(old_stderr, 2)
-                    
+
         if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
             raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
         # Open the DEM file
@@ -1600,7 +1599,7 @@ class cube_data_class:
                     slope, aspect = self.compute_slo_asp(dem_file=dem_file)
                 else:
                     raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
-                
+
             elif (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
@@ -2169,8 +2168,8 @@ class cube_data_class:
                 }
 
         if result_quality is not None and "Error_propagation" in result_quality:
-            long_name = ["Sigma0 Est/West", "Sigma0 North/South [m]"]
-            short_name = ["sigma0_x", "sigma0_y"]
+            long_name = ["Sigma0 Est/West", "Sigma0 North/South [m]","T value Est/West", "T value North/South"]
+            short_name = ["sigma0_x", "sigma0_y",'t_valuex','t_valuey']
             for k, var in enumerate(short_name):
 
                 result_arr = np.array(

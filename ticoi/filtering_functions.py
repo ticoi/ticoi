@@ -12,7 +12,6 @@ import numpy as np
 import xarray as xr
 from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
 from scipy.signal import savgol_filter
-from scipy.stats import median_abs_deviation
 
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
@@ -507,9 +506,7 @@ def dask_filt_warpper(
     da_vx: xr.DataArray,
     da_vy: xr.DataArray,
     filt_method: str = "median_angle",
-    vvc_thres: float = 0.3,
-    angle_thres: int = 45,
-    z_thres: int = 2,mz_thres=3.5,
+    vvc_thres: float = 0.3,mz_thres=3.5,
     angle_thres: int = 45,
     z_thres: int = 2,
     magnitude_thres: int = 1000,
@@ -551,8 +548,8 @@ def dask_filt_warpper(
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "mz_score":  # threshold according to the zscore
-        inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
-        inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, z_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
+        inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, z_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
 
