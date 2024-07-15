@@ -115,7 +115,7 @@ load_pixel_kwargs = {
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
-    "visual": show|save,   # If the observations data need to be returned
+    "visual": show | save,  # If the observations data need to be returned
 }
 
 ## --------------------------- Inversion parameters ------------------------ ##
@@ -133,7 +133,7 @@ inversion_kwargs = {
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "visual": show|save,  # If the observations data need to be returned
+    "visual": show | save,  # If the observations data need to be returned
     "verbose": verbose,  # Print information throughout TICOI processing
 }
 
@@ -220,7 +220,7 @@ print(f"[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s")
 
 if save:
     dataf_lp.to_csv(f"{path_save}/RLF_result.csv")
-if show or save:#plot some figures
+if show or save:  # plot some figures
     visualization_core(
         [dataf, result],
         option_visual=option_visual,

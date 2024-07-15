@@ -248,14 +248,13 @@ for param_value in list_parameter:
         # print(f'Cube of dimesion (nz,nx,ny): ({cube.nz},{cube.nx},{cube.ny} ')
         print(f"Inversion for pixel {i, j}")
 
-# %% ======================================================================== #
-#                                Inversion                                    #
-# =========================================================================%% #
+    # %% ======================================================================== #
+    #                                Inversion                                    #
+    # =========================================================================%% #
 
     # Load pixel data
     start.append(time.time())
     data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
-
 
     stop.append(time.time())
     print(f"[Data loading] Loading the pixel took {round((stop[2] - start[2]), 4)} s")
@@ -275,9 +274,9 @@ for param_value in list_parameter:
     if save:
         result.to_csv(f"{save_path}/ILF_result.csv")
 
-# %% ======================================================================== #
-#                              INTERPOLATION                                  #
-# =========================================================================%% #
+    # %% ======================================================================== #
+    #                              INTERPOLATION                                  #
+    # =========================================================================%% #
     start.append(time.time())
 
     if interpolation_kwargs["interval_output"] == False:
@@ -292,13 +291,13 @@ for param_value in list_parameter:
 
     if save:
         dataf_lp.to_csv(f"{save_path}/RLF_result.csv")
-    
+
     stop.append(time.time())
     print(f"[Interpolation] Interpolation took {round((stop[4] - start[4]), 4)} s")
 
-# %% ======================================================================== #
-#                              Visualization                                  #
-# =========================================================================%% #
+    # %% ======================================================================== #
+    #                              Visualization                                  #
+    # =========================================================================%% #
     if visual:
         visualization_core(
             [dataf, result],
@@ -320,9 +319,9 @@ for param_value in list_parameter:
             colors=["orange", "blue"],
         )
 
-# %% ======================================================================== #
-#                                Update vvc                                   #
-# =========================================================================%% #
+    # %% ======================================================================== #
+    #                                Update vvc                                   #
+    # =========================================================================%% #
 
     if "L_curve" in option_visual:
         Residux.append(dataf["NormR"][0])

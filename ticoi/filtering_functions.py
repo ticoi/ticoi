@@ -309,6 +309,7 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
     return inlier_flag
 
+
 def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
 
     """
@@ -320,14 +321,15 @@ def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
     """
 
     med = np.nanmedian(obs, axis=axis, keepdims=True)
-    mad = np.nanmedian(abs(obs-med), axis=axis, keepdims=True)
+    mad = np.nanmedian(abs(obs - med), axis=axis, keepdims=True)
 
     # mad = median_abs_deviation(obs, axis=axis)
 
-    z_scores = 0.6745*(obs - med) / mad
+    z_scores = 0.6745 * (obs - med) / mad
     inlier_flag = np.abs(z_scores) < z_thres
 
     return inlier_flag
+
 
 def NVVC_angle_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
@@ -391,7 +393,7 @@ def topo_angle_filt(
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
-    
+
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
     velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
 
@@ -410,6 +412,7 @@ def topo_angle_filt(
     inlier_flag = np.logical_and(slope_filter, aspect_filter.data)
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
+
 
 def flow_angle_filt(
     obs_cpx: xr.DataArray,
@@ -433,20 +436,22 @@ def flow_angle_filt(
     angle_rad = np.arctan2(vx, vy)
 
     flow_direction = (np.rad2deg(angle_rad) + 360) % 360
-    
+
     direction_diff = np.abs((flow_direction - direction + 180) % 360 - 180)
-    
+
     angle_filter = direction_diff < angle_thres
-    
+
     # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
     # valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
-    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2) 
+    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2)
     # bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
 
     # mag_filter = np.where(bis_cond , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     # angle_filter[np.expand_dims(np.isnan(direction), axis=2)] = True
-    angle_filter = angle_filter.where(~np.isnan(direction), True) # change the stable area to true incase of all invalid data
-    mag_filter = np.where(~np.isnan(direction) , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    angle_filter = angle_filter.where(
+        ~np.isnan(direction), True
+    )  # change the stable area to true in case of all invalid data
+    mag_filter = np.where(~np.isnan(direction), True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     inlier_flag = np.logical_and(mag_filter, angle_filter.data)
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
@@ -506,7 +511,8 @@ def dask_filt_warpper(
     da_vx: xr.DataArray,
     da_vy: xr.DataArray,
     filt_method: str = "median_angle",
-    vvc_thres: float = 0.3,mz_thres=3.5,
+    vvc_thres: float = 0.3,
+    mz_thres=3.5,
     angle_thres: int = 45,
     z_thres: int = 2,
     magnitude_thres: int = 1000,
@@ -540,7 +546,7 @@ def dask_filt_warpper(
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(
             NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
-        )        
+        )
 
     elif filt_method == "z_score":  # threshold according to the zscore
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
@@ -551,7 +557,6 @@ def dask_filt_warpper(
         inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, z_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, z_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
-
 
     elif filt_method == "magnitude":  # delete according to a threshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)

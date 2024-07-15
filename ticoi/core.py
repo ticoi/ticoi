@@ -546,10 +546,9 @@ def inversion_core(
             # if not 'GCV' in result_quality:
             F = sp.csc_matrix(A, dtype="float32")
             Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
-            prop_wieght_diagx, sigma0_weightx,t_valuex = Prop_weight(weight_ix, Residux)
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux)
             Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty,t_valuey = Prop_weight(weight_iy, Residuy)
-
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy)
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:
@@ -616,7 +615,7 @@ def inversion_core(
             result["error_x"] = prop_wieght_diagx
             result["error_y"] = prop_wieght_diagy
             sigma = np.zeros(result.shape[0])
-            sigma[:4] = np.hstack([sigma0_weightx, sigma0_weighty,t_valuex,t_valuey])
+            sigma[:4] = np.hstack([sigma0_weightx, sigma0_weighty, t_valuex, t_valuey])
             result["sigma0"] = sigma
 
     return A, result, dataf
