@@ -1277,20 +1277,21 @@ class cube_data_class:
             vx = self.reproject_eotiff_to_cube(vx_file)
             vy = self.reproject_geotiff_to_cube(vy_file)
         else:
-            vx = self.ds["vx"].values
-            vy = self.ds["vy"].values
+            vx = self.ds["vx"]
+            vy = self.ds["vy"]
             
         temporal_baseline = self.ds["temporal_baseline"].values
         temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
-        vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
-        vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+
+        vx_weighted = np.nansum(vx.values * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+        vy_weighted = np.nansum(vy.values * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
         
         v_mean_weighted = np.sqrt(vx_weighted ** 2 + vy_weighted ** 2)
         
         direction = np.arctan2(vx_weighted, vy_weighted)
         direction = (np.rad2deg(direction) + 360) % 360
         
-        direction = np.where(v_mean_weighted < 1, np.nan, direction)
+        direction = np.where(v_mean_weighted < 1.5, np.nan, direction)
         
         direction = xr.Dataset(
             data_vars=dict(
@@ -1505,9 +1506,7 @@ class cube_data_class:
                 idx = np.where(
                     baseline < select_baseline
                 )  # Take only the temporal baseline lower than the threshold selecr_baseline
-                while len(idx[0]) < 3 * len(
-                    date_out
-                ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
+                while len(idx[0]) < 3 * len(date_out) and select_baseline < 200:  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
                     idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])

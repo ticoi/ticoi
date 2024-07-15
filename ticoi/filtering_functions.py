@@ -406,7 +406,7 @@ def topo_angle_filt(
 
     # combine a filter based on the aspect and a filter based on the zscore only if the slope is lower than 3
     slope_cond = slope > 3
-    slope_filter = np.where(slope_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    slope_filter = np.where(slope_cond, True, mz_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
 
     inlier_flag = np.logical_and(slope_filter, aspect_filter.data)
 
@@ -508,8 +508,6 @@ def dask_filt_warpper(
     da_vy: xr.DataArray,
     filt_method: str = "median_angle",
     vvc_thres: float = 0.3,
-    angle_thres: int = 45,
-    z_thres: int = 2,mz_thres=3.5,
     angle_thres: int = 45,
     z_thres: int = 2,
     magnitude_thres: int = 1000,
