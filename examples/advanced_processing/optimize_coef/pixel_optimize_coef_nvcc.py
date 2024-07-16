@@ -35,13 +35,14 @@ warnings.filterwarnings("ignore")
 # List of the paths where the data cubes are stored
 
 cube_name = (
-    f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+    f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
 )
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
-i, j = 343617.7, 5091275.0  # Pixel coordinates
+# i, j = 343617.7, 5091275.0  # Pixel coordinates
+i,j = 138.28962881999922274,60.25934205396930565
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
@@ -90,7 +91,7 @@ load_kwargs = {
     "pick_date": None,  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
-    "proj": proj,  # EPSG system of the given coordinates
+    "proj": "EPSG:4326",  # EPSG system of the given coordinates
     "verbose": verbose,  # Print information throughout the loading process
 }
 ## ----------------------- Data preparation parameters --------------------- ##

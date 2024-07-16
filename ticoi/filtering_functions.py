@@ -310,12 +310,12 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
     return inlier_flag
 
 
-def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
+def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
 
     """
     Remove the observations if it is 3 time the MAD from the median of observations over this pixel
     :param obs: cube data to filter
-    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param mz_thres: threshold to remove observations, if the absolute mzscore is higher than this threshold (default is 3.5)
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
@@ -326,7 +326,7 @@ def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
     # mad = median_abs_deviation(obs, axis=axis)
 
     z_scores = 0.6745 * (obs - med) / mad
-    inlier_flag = np.abs(z_scores) < z_thres
+    inlier_flag = np.abs(z_scores) < mz_thres
 
     return inlier_flag
 

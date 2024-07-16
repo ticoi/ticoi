@@ -296,10 +296,10 @@ class cube_data_class:
             errorx = 1 - (self.ds["vx_error"].values - minconfx) / (maxconfx - minconfx)
             errory = 1 - (self.ds["vy_error"].values - minconfy) / (maxconfy - minconfy)
         else:
-            # errorx = self.ds["vx_stable_shift"].values
-            # errory = self.ds["vy_stable_shift"].values
-            errorx = xr.apply_ufunc(np.sign, self.ds['vx_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vx_error']
-            errory = xr.apply_ufunc(np.sign, self.ds['vy_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vy_error']
+            errorx = self.ds["vx_error"].values
+            errory = self.ds["vy_error"].values
+            # errorx = xr.apply_ufunc(np.sign, self.ds['vx_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vx_error']
+            # errory = xr.apply_ufunc(np.sign, self.ds['vy_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vy_error']
 
 
         # Drop variables not in the specified list
