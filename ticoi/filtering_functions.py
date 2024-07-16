@@ -374,6 +374,47 @@ def NVVC_angle_filt(
     return inlier_flag
 
 
+def NVVC_angle_mzscore_filt(
+    obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, mz_thres: int = 3.5, axis: int = 2
+) -> (np.array):
+
+    """
+    Combine angle filter and zscore
+    If the VVC is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
+    i.e. pixels are filtered out if the angle with the observation is angle_thres away from the median vector
+    :param obs_cpx: cube data to filter
+    :param vvc_thres: threshold to combine zscore and median_angle filter
+    :param angle_thres:  threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
+
+    vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
+    vx_mean = np.nanmedian(vx, axis=axis, keepdims=True)
+    vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
+    mean_magnitude = np.hypot(vx_mean, vy_mean)  # compute the averaged norm of the observations
+
+    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
+    x_component = np.nansum(vx / velo_magnitude, axis=axis)
+    y_component = np.nansum(vy / velo_magnitude, axis=axis)
+
+    nz = velo_magnitude.shape[axis]
+    VVC = (
+        np.hypot(x_component, y_component) / nz
+    )  # velocity coherence as defined in   Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    # ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+    VVC = np.expand_dims(VVC, axis=axis)
+
+    vvc_cond = VVC > vvc_thres
+
+    dot_product = vx_mean * vx + vy_mean * vy
+
+    angle_filter = dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
+
+    inlier_flag = np.where(vvc_cond, angle_filter, mz_score_filt(velo_magnitude, mz_thres=mz_thres, axis=axis))
+
+    return inlier_flag
 def topo_angle_filt(
     obs_cpx: xr.DataArray,
     slope: xr.DataArray,
@@ -546,6 +587,18 @@ def dask_filt_warpper(
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(
             NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
+        )
+
+    elif filt_method == "vvc_angle":  # combination between z_score and median_angle
+        obs_arr = da_vx.data + 1j * da_vy.data
+        inlier_mask = obs_arr.map_blocks(
+            NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres,z_thres=z_thres, axis=axis, dtype=obs_arr.dtype
+        )
+
+    elif filt_method == "vvc_angle_mzscore":  # combination between z_score and median_angle
+        obs_arr = da_vx.data + 1j * da_vy.data
+        inlier_mask = obs_arr.map_blocks(
+            NVVC_angle_mzscore_filt, vvc_thres=vvc_thres, angle_thres=angle_thres,mz_thres=mz_thres, axis=axis, dtype=obs_arr.dtype
         )
 
     elif filt_method == "z_score":  # threshold according to the zscore

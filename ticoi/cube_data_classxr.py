@@ -296,8 +296,11 @@ class cube_data_class:
             errorx = 1 - (self.ds["vx_error"].values - minconfx) / (maxconfx - minconfx)
             errory = 1 - (self.ds["vy_error"].values - minconfy) / (maxconfy - minconfy)
         else:
-            errorx = self.ds["vx_error"].values
-            errory = self.ds["vy_error"].values
+            # errorx = self.ds["vx_stable_shift"].values
+            # errory = self.ds["vy_stable_shift"].values
+            errorx = xr.apply_ufunc(np.sign, self.ds['vx_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vx_error']
+            errory = xr.apply_ufunc(np.sign, self.ds['vy_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vy_error']
+
 
         # Drop variables not in the specified list
         variables_to_keep = ["vx", "vy", "mid_date", "x", "y"]
@@ -1275,7 +1278,7 @@ class cube_data_class:
         :return: direction: [xr.DataArray] --- computed average flow direction at each pixel
         """
         if vx_file is not None and vy_file is not None:
-            vx = self.reproject_eotiff_to_cube(vx_file)
+            vx = self.reproject_geotiff_to_cube(vx_file)
             vy = self.reproject_geotiff_to_cube(vy_file)
         else:
             vx = self.ds["vx"].values
@@ -1329,7 +1332,7 @@ class cube_data_class:
         if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
             raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
         # Open the DEM file
-        dem = self.reproject_to_cube(dem_file)
+        dem = self.reproject_geotiff_to_cube(dem_file)
 
         # Set no_data value if src.nodata is None
         with rio.open(dem_file) as src:
