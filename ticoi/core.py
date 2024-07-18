@@ -352,7 +352,7 @@ def inversion_core(
             temporal_decorrelation=weight_temporal_decorrelation,
         )
         del weight_temporal_decorrelation
-        if not visual and not apriori_weight_in_second_iteration and not 'Error_propagation' in result_quality:
+        if not visual and not apriori_weight_in_second_iteration and not "Error_propagation" in result_quality:
             data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -530,7 +530,7 @@ def inversion_core(
         # TODO terminate propgation of errors
         if result_quality is not None and "Error_propagation" in result_quality:
 
-            def Prop_weight(weight, Residu,error):
+            def Prop_weight(weight, Residu, error):
                 W = np.diag(weight_ix.astype("float32"))
                 FTWF = F.T * W @ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
@@ -546,9 +546,9 @@ def inversion_core(
             # if not 'GCV' in result_quality:
             F = sp.csc_matrix(A, dtype="float32")
             Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux,np.diag(data_values[:, 3]))
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag(data_values[:, 3]))
             Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy,np.diag(data_values[:, 4]))
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(data_values[:, 4]))
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:
