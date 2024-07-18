@@ -14,7 +14,6 @@ from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
 from scipy.signal import savgol_filter
 from scipy.stats import median_abs_deviation
 import pwlf
-from ticoi.ALPS_Functions import Outlier
 from scipy import interpolate
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
@@ -369,30 +368,6 @@ def bspline_smooth(
         return series_smooth
     except:
         return np.zeros(len(t_out))
-
-def alps_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
-    
-    t_obs = t_obs[~np.isnan(series)]
-    series = series[~np.isnan(series)]
-    try:
-        data, out = Outlier(np.column_stack((series, t_obs)), thresh1=3, thresh2=1.5)
-        series_smooth, t_obs_smooth = data[:,0], data[:,1]
-        series_interp = np.interp(t_interp, t_obs_smooth, series_smooth)
-        series_smooth = savgol_filter(series_interp, window_length=90, polyorder=order, axis=-1)
-
-        return series_smooth[t_out]
-    except:
-        return np.zeros(len(t_out))
-
-
 
 def smoothing_cubic_spline_smooth(
     series: np.ndarray,
