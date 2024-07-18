@@ -298,9 +298,6 @@ class cube_data_class:
         else:
             errorx = self.ds["vx_error"].values
             errory = self.ds["vy_error"].values
-            # errorx = xr.apply_ufunc(np.sign, self.ds['vx_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vx_error']
-            # errory = xr.apply_ufunc(np.sign, self.ds['vy_stable_shift'], dask='parallelized', output_dtypes=[float])*self.ds['vy_error']
-
 
         # Drop variables not in the specified list
         variables_to_keep = ["vx", "vy", "mid_date", "x", "y"]
@@ -1507,12 +1504,12 @@ class cube_data_class:
                 idx = np.where(
                     baseline < select_baseline
                 )  # Take only the temporal baseline lower than the threshold selecr_baseline
-                # while (len(idx[0]) < 3 * len(
-                #     date_out) & (select_baseline<200)
-                # ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
-                while (len(idx[0]) < 3 * len(
-                            date_out)):
-                    select_baseline += 30
+                while len(idx[0]) < 3 * len(date_out) & (
+                    select_baseline < 200
+                ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
+                    # while (len(idx[0]) < 3 * len(
+                    #             date_out)):
+                    #     select_baseline += 30
                     idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])

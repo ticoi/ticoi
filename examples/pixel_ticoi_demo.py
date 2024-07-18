@@ -57,6 +57,7 @@ result_quality = [
 verbose = False  # Print information throughout TICOI processing
 save = True  # Save the results and figures
 show = True  # Plot some figures
+
 # Visualisation options
 option_visual = [
     "obs_xy",
