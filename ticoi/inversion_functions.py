@@ -151,7 +151,7 @@ def weight_for_inversion(
         if conf:  # Based on data quality given in confidence indicator, i.e. between 0 and 1 (1 is highest quality)
             Weight = data[:, pos]
         else:  # The data quality corresponds to errors in m/y or m/d
-            # Normalization of the residual
+            # Normalization of the errors
             try:
                 Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
             except ZeroDivisionError:

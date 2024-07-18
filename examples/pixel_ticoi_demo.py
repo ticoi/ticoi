@@ -56,7 +56,8 @@ result_quality = [
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False  # Print information throughout TICOI processing
 save = True  # Save the results and figures
-visual = True  # Plot some figures
+show = True  # Plot some figures
+
 # Visualisation options
 option_visual = [
     "obs_xy",
@@ -115,7 +116,7 @@ load_pixel_kwargs = {
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
-    "visual": visual,  # Plot results along the way
+    "visual": show | save,  # If the observations data need to be returned
 }
 
 ## --------------------------- Inversion parameters ------------------------ ##
@@ -133,7 +134,7 @@ inversion_kwargs = {
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "visual": visual,  # Plot results along the way
+    "visual": show | save,  # If the observations data need to be returned
     "verbose": verbose,  # Print information throughout TICOI processing
 }
 
@@ -220,12 +221,12 @@ print(f"[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s")
 
 if save:
     dataf_lp.to_csv(f"{path_save}/RLF_result.csv")
-if visual:
+if show or save:  # plot some figures
     visualization_core(
         [dataf, result],
         option_visual=option_visual,
-        save=True,
-        show=True,
+        save=save,
+        show=show,
         path_save=path_save,
         A=A,
         log_scale=False,
@@ -235,8 +236,8 @@ if visual:
     visualisation_interpolation(
         [dataf, dataf_lp],
         option_visual=option_visual,
-        save=True,
-        show=True,
+        save=save,
+        show=show,
         path_save=path_save,
         colors=["orange", "blue"],
     )
