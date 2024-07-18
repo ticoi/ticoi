@@ -85,7 +85,7 @@ delete_outlier = "vvc_angle"
 apriori_weight = True
 
 preData_kwargs = {
-    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+    "smooth_method": "savgol",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
     "s_win": 3,  # Size of the spatial window
     "t_win": 90,  # Time window size for 'ewma' smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
