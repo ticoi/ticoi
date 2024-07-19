@@ -54,7 +54,8 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2"))}/c_x01470_y03675_all_filt-multi.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
 
@@ -70,7 +71,7 @@ load_kwargs = {
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_date": None,  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
@@ -81,7 +82,7 @@ load_kwargs = {
 # For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
-delete_outlier = "vvc_angle"
+delete_outlier = None
 apriori_weight = True
 
 preData_kwargs = {
@@ -142,6 +143,17 @@ start = [time.time()]
 # Load the first cube
 cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
+
+
+import numpy as np
+
+print(np.min(cube.ds['date1'].values))
+print(np.max(cube.ds['date2'].values))
+print(len(cube.ds['date1'].values))
+
+print(np.min(cube.ds['date1'].dropna(dim='mid_date').values))
+print(np.max(cube.ds['date2'].dropna(dim='mid_date').values))
+print(len(cube.ds['date1'].dropna(dim='mid_date').values))
 
 # Prepare interpolation dates
 first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)

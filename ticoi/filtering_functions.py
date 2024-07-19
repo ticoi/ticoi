@@ -510,8 +510,6 @@ def dask_filt_warpper(
     vvc_thres: float = 0.3,
     angle_thres: int = 45,
     z_thres: int = 2,mz_thres=3.5,
-    angle_thres: int = 45,
-    z_thres: int = 2,
     magnitude_thres: int = 1000,
     median_magnitude_thres=3,
     error_thres: int = 100,
@@ -545,12 +543,12 @@ def dask_filt_warpper(
             NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
         )        
 
-    elif filt_method == "z_score":  # threshold according to the zscore
+    elif filt_method == "z_score":  # threshold according to the Zscore
         inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
-    elif filt_method == "mz_score":  # threshold according to the zscore
+    elif filt_method == "mz_score":  # threshold according to the MZscore
         inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)

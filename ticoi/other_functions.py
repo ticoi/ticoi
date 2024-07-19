@@ -533,6 +533,9 @@ def optimize_coef(
         ]
 
     if stats:
+        dataf['vx'] = dataf['vx'] * 365 / dataf['temporal_baseline']
+        dataf['vy'] = dataf['vy'] * 365/ dataf['temporal_baseline']
+        
         # Average temporal baseline
         temporal_baseline = (dataf["temporal_baseline"].mean(), data_gt["temporal_baseline"].mean())
         # Mean of similar data (same acquisition dates) of raw and GT data
@@ -567,6 +570,7 @@ def optimize_coef(
                 "regu": inversion_kwargs["regu"] if flag is None else regu,
                 "nb_data": (dataf.shape[0], data_gt.shape[0]),
                 "mean_temporal_baseline": temporal_baseline,
+                "mean_v": (dataf['vx'].mean(), dataf['vy'].mean(), data_gt['vx'].mean(), data_gt['vy'].mean()),
                 "mean_v_similar_data": (mean_raw["vx"], mean_raw["vy"], mean_gt["vx"], mean_gt["vy"]),
                 "std_v_similar_data": (std_raw["vx"], std_raw["vy"], std_gt["vx"], std_gt["vy"]),
                 "std_raw_data": (std_raw_all["vx"], std_raw_all["vy"], std_gt_all["vx"], std_gt_all["vy"]),

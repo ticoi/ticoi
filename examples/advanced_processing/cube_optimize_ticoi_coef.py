@@ -34,30 +34,25 @@ warnings.filterwarnings("ignore")
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Sentinel_2_2022_2023"))}/c_x01470_y03675.nc'
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Sentinel_2_2022_2023"))}/c_x01470_y03675.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2_2022_2023"))}/c_x01225_y03675.nc'
 # Path to the "ground truth" cube used to optimize the regularisation
 # cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
-cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Pleiades"))}/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
+cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "..", "nathan", "Donnees", "Cubes_de_donnees"))}/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'
+# cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Pleiades"))}/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'
+flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data"))}/Alpes_RGI7.shp'  # Path to flags file
 mask_file = None  # Path where the mask file is stored
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "optimize_coef"))}/'  # Path where to store the results
 
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # Divide the data in several areas where different methods should be used
-assign_flag = False
-flag = None  # Do not put it in load_kwargs and/or preData_kwargs but pass it to optimize_coef directly
-if assign_flag:
-    flag = xr.open_dataset(flag_file)
-    flag.load()
-    if "flags" in list(flag.variables):
-        flag = flag.rename({"flags": "flag"})
-
+assign_flag = True
 flag_name = {0: "stable ground", 1: "glacier"}
 
 ## --------------------------- Main parameters ----------------------------- ##
-regu = "1accelnotnull"  # Regularization method to be used (don't put it in inversion_kwargs)
-# regu = {0: 1, 1: "1accelnotnull"}
+# regu = "1accelnotnull"  # Regularization method to be used (don't put it in inversion_kwargs)
+regu = {0: 1, 1: "1accelnotnull"}
 solver = "LSMR_ini"  # Solver for the inversion
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = (
@@ -75,7 +70,7 @@ result_quality = (
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.optimization_process = 'direct_process'
-optimization_process = "block_process"
+optimization_process = "direct_process"
 # Specify the coefficients you want to test
 coefs = [
     20,
@@ -122,7 +117,7 @@ coef_min = 10  # If coefs=None, start point of the range of coefs to be tested
 coef_max = 1000  # If coefs=None, stop point of the range of coefs to be tested
 step = 10  # If coefs=None, step for the range of coefs to be tested
 stats = False  # Compute some statistics on raw data and GT data
-# Visualisation options
+# Visualisation options 
 save = True
 plot_them_all = True
 coef_maps = ["best", "good"]
@@ -131,19 +126,14 @@ coef_maps = ["best", "good"]
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": [
-        338703.2,
-        339258.9,
-        5081177.4,
-        5081947.2,
-    ],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "subset": [332702.29,332996.061,5081350.809,5082100.17],  # Subset to be loaded
     "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "mask": mask_file,
-    "verbose": False,
-}  # Print information throughout the loading process
+    "mask": mask_file, # Mask part of the data
+    "verbose": False, # Print information throughout the loading process
+}
 
 ## ------------------- Data preparation parameters --------------------- ##
 preData_kwargs = {
@@ -153,13 +143,15 @@ preData_kwargs = {
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "delete_outliers": {
+        "median_angle": 45,
+        "mz_score": 3},  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "regu": regu,  # Regularization method to be used
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-    "verbose": False,
-}  # Print information throughout the filtering process
+    "verbose": False, # Print information throughout the filtering process
+}
 
 ## -------------- Parameters for the pixel loading part ---------------- ##
 load_pixel_kwargs = {
@@ -213,20 +205,18 @@ start = [time.time()]
 cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
+flag = None
+if assign_flag:
+    flag = cube.create_flag(flag_file)
+    
 # Then we load the "ground truth"
 cube_gt = cube_data_class()
 cube_gt.load(cube_gt_name, **load_kwargs)
 
-# Mask some of the data
-if mask_file is not None:
-    cube.mask_cube(mask_file)
-    cube_gt.mask_cube(mask_file)
-
 stop = [time.time()]
 print(f"[Data loading] Loading the data cube.s took {round((stop[-1] - start[-1]), 4)} s")
-print(f"[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ")
+print(f"[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ({cube.nx * cube.ny} pixels) ")
 print(f"[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})")
-
 
 # %% ======================================================================== #
 #                         COEFFICIENT OPTIMIZATION                            #
@@ -245,7 +235,6 @@ async def process_block(
     cmax=1000,
     step=10,
     coefs=None,
-    stats=False,
     nb_cpu=8,
 ):
 
@@ -274,7 +263,7 @@ async def process_block(
             cmax=cmax,
             step=step,
             coefs=coefs,
-            stats=stats,
+            stats=True,
             parallel=False,
             visual=False,
         )
@@ -296,7 +285,6 @@ async def process_blocks_main(
     cmax=1000,
     step=10,
     coefs=None,
-    stats=False,
     nb_cpu=8,
     block_size=0.5,
     verbose=False,
@@ -317,8 +305,7 @@ async def process_blocks_main(
             x_start, x_end, y_start, y_end = blocks[0]
             future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
 
-        block, duration = await future
-        print(f"[Block process] Block {n+1} loaded in {duration:.2f} s")
+        block, block_flag, duration = await future
         if verbose:
             print(f"[Block process] Block {n+1} loaded in {duration:.2f} s")
 
@@ -339,7 +326,6 @@ async def process_blocks_main(
             cmax=cmax,
             step=step,
             coefs=coefs,
-            stats=stats,
             nb_cpu=nb_cpu,
         )
 
@@ -375,7 +361,6 @@ if optimization_process == "block_process":
             cmax=coef_max,
             step=step,
             coefs=coefs,
-            stats=stats,
             nb_cpu=nb_cpu,
             block_size=block_size,
             verbose=False,
@@ -383,7 +368,7 @@ if optimization_process == "block_process":
     )
 
 elif optimization_process == "direct_process":
-    obs_filt = cube.filter_cube(**preData_kwargs, flag=flag)
+    obs_filt, flag = cube.filter_cube(**preData_kwargs, flag=flag)
 
     # Progression bar
     xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)
@@ -405,7 +390,7 @@ elif optimization_process == "direct_process":
             cmax=coef_max,
             step=step,
             coefs=coefs,
-            stats=stats,
+            stats=True,
             visual=False,
         )
         for i, j in xy_values_tqdm
@@ -508,6 +493,7 @@ start.append(time.time())
 
 nb_res = len(result)
 nb_data = np.array([result[i].nb_data if result[i] is not None else 0 for i in range(nb_res)])
+mean_v = np.array([result[i].mean_v if result[i] is not None else np.nan for i in range(nb_res)])
 RMSEs_result = np.array(
     [result[i].values if result[i] is not None else [np.nan for _ in range(len(coefs))] for i in range(nb_res)]
 )
@@ -517,9 +503,19 @@ if flag is None:
     regu = {0: regu}
 for key in regu.keys():
     mask_regu = [result[i].regu == regu[key] for i in range(nb_res)]
-    if any(mask_regu) is True:
+    if any(mask_regu):
         nb_data_regu = nb_data[mask_regu]
+        mean_v_regu = mean_v[mask_regu]
         RMSEs_result_regu = RMSEs_result[mask_regu]
+
+        print(f"Area {flag_name[key]} :")
+        print(f"{len(nb_data_regu)} pixels in the area")
+
+        print(f"Nb data median S2 : {np.median(nb_data_regu[:, 0])}")
+        print(f"Nb data median Pleiades : {np.median(nb_data_regu[:, 1])}")
+        
+        print(f"Mean velocity S2 : {np.nanmean(np.sqrt(mean_v_regu[:, 0] ** 2 + mean_v_regu[:, 1] ** 2))}")
+        print(f"Mean velocity Pleiades : {np.nanmean(np.sqrt(mean_v_regu[:, 2] ** 2 + mean_v_regu[:, 3] ** 2))}")
 
         # Average RMSE on the area
         RMSEs = np.array(
@@ -538,7 +534,6 @@ for key in regu.keys():
 
         best_coef = coefs[np.argmin(RMSEs)]
         best_RMSE = np.min(RMSEs)
-        # good_RMSE = max(1.05 * best_RMSE, best_RMSE + mean_std_p)
         good_RMSE = 1.05 * best_RMSE
 
         # Plot result
@@ -565,9 +560,11 @@ for key in regu.keys():
         ax.set_ylabel("Average RMSE between TICOI results and GT data [m/y]", fontsize=14)
         fig.suptitle(
             f'RMSE-coef average curve for the {flag_name[key] if type(flag_name) == dict else ""} area with regu={regu[key]}\n'
-            + f"Best for coef = {best_coef} (RMSE = {best_RMSE})",
+            + f"Best for coef = {best_coef} (RMSE = {best_RMSE})\n"
+            + f"Good for coef = {np.min(coefs[RMSEs < good_RMSE])}",
             fontsize=16,
         )
+        plt.subplots_adjust(top=0.85)
 
         if save and flag is None:
             fig.savefig(f"{path_save}RMSE_coef_{regu[key]}.png")
@@ -587,7 +584,7 @@ for key in regu.keys():
             Q1 = np.percentile(nb_data[:, 1][nb_data[:, 1] > 0], 25)
             median = np.median(nb_data[:, 1][nb_data[:, 1] > 0])
             Q3 = np.percentile(nb_data[:, 1][nb_data[:, 1] > 0], 75)
-            for r in range(len(result)):
+            for r in range(len(RMSEs_result)):
                 if nb_data[:, 1][r] > 0:
                     if nb_data[:, 1][r] > Q3:
                         color = "green"
@@ -623,7 +620,7 @@ for key in regu.keys():
 
             if save and flag is None:
                 fig.savefig(f"{path_save}RMSE_coef_{regu[key]}_allplots.png")
-            elif flag is not None:
+            elif save:
                 fig.savefig(f"{path_save}RMSE_coef_{flag_name[key]}_{regu[key]}_allplots.png")
 
         plt.show()

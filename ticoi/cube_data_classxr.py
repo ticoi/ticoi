@@ -14,9 +14,6 @@ import itertools
 import os
 import time
 import warnings
-from datetime import date
-from typing import List, Optional, Union
-
 import dask
 import geopandas
 import numpy as np
@@ -26,13 +23,17 @@ import rasterio.enums
 import rasterio.warp
 import richdem as rd
 import contextlib
+import xarray as xr
+import dask.array as da
+
+from datetime import date
+from typing import List, Optional, Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 
-from ticoi.filtering_functions import *
-from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
+from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper, median_filter
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
@@ -89,7 +90,8 @@ class cube_data_class:
         self.nz = self.ds[time_dim].sizes[time_dim]
         if len(self.ds["x"]) !=0 and len(self.ds["y"]) !=0:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
-        else: raise ValueError('Your cube is empty, please check the subset or buffer coordinates you provided  ')
+        else: 
+            raise ValueError('Your cube is empty, please check the subset or buffer coordinates you provided  ')
 
     def subset(self, proj: str, subset: list):
 
@@ -1183,6 +1185,12 @@ class cube_data_class:
                     else:
                         self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
 
+                elif method == "mz_score":
+                    if delete_outliers["mz_score"] is None:
+                        self.delete_outliers("mz_score", flag)
+                    else:
+                        self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
+
                 elif method == "median_angle":
                     if delete_outliers["median_angle"] is None:
                         self.delete_outliers("median_angle", flag)
@@ -1200,7 +1208,7 @@ class cube_data_class:
                     self.delete_outliers("flow_angle", flag, direction=direction)
                 else:
                     raise ValueError(
-                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
+                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
@@ -1301,7 +1309,7 @@ class cube_data_class:
         
         return direction
             
-    def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray,xr.DataArray):
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray, xr.DataArray):
         """
 
         :param dem_file: [str] --- path of the DEM
@@ -1427,7 +1435,7 @@ class cube_data_class:
                     ),
                 )
 
-            else:
+            elif not isinstance(flag, xr.Dataset):
                 raise ValueError("flag file must be .nc or .shp")
 
         if "flags" in list(flag.variables):
