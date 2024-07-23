@@ -14,9 +14,6 @@ import itertools
 import os
 import time
 import warnings
-from datetime import date
-from typing import List, Optional, Union
-
 import dask
 import geopandas
 import numpy as np
@@ -25,13 +22,18 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import contextlib
+import xarray as xr
+import dask.array as da
+
+from datetime import date
+from typing import List, Optional, Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 
-from ticoi.filtering_functions import *
-from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
+from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper, median_filter
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
@@ -89,7 +91,7 @@ class cube_data_class:
         if len(self.ds["x"]) != 0 and len(self.ds["y"]) != 0:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
         else:
-            raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided  ")
+            raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
 
     def subset(self, proj: str, subset: list):
 
@@ -1150,7 +1152,9 @@ class cube_data_class:
                         flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
                         flag_condition = flag == 0
                         flag_condition = np.expand_dims(flag_condition, axis=axis)
+                        print(inlier_mask)
                         inlier_mask = np.logical_or(inlier_mask, flag_condition)
+                        print(inlier_mask)
 
             inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
             for var in ["vx", "vy"]:
@@ -1183,6 +1187,12 @@ class cube_data_class:
                     else:
                         self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
 
+                elif method == "mz_score":
+                    if delete_outliers["mz_score"] is None:
+                        self.delete_outliers("mz_score", flag)
+                    else:
+                        self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
+
                 elif method == "median_angle":
                     if delete_outliers["median_angle"] is None:
                         self.delete_outliers("median_angle", flag)
@@ -1200,7 +1210,7 @@ class cube_data_class:
                     self.delete_outliers("flow_angle", flag, direction=direction)
                 else:
                     raise ValueError(
-                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
+                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
@@ -1427,7 +1437,7 @@ class cube_data_class:
                     ),
                 )
 
-            else:
+            elif not isinstance(flag, xr.Dataset):
                 raise ValueError("flag file must be .nc or .shp")
 
         if "flags" in list(flag.variables):
@@ -1606,9 +1616,7 @@ class cube_data_class:
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(
-                delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect, direction=direction
-            )
+            self.delete_outliers(delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 

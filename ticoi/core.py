@@ -825,7 +825,7 @@ def interpolation_to_data(
     """
 
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
-    dataf = reconstruct_common_ref(result, result_quality)  # Build cumulative displacement time series
+    dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     start_date = dataf["Ref_date"][0]  # First date at the considered pixel
     x = np.array(
         (dataf["Second_date"] - np.datetime64(start_date)).dt.days
