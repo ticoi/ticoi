@@ -38,7 +38,9 @@ dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 i, j = 338988.8,5081488.4 # Pixel coordinates
-i, j = 344977.5,5089533.5
+i, j = 330594.7,5076626.1 # Bionassay Italien
+i, j = 343422.55,5093003.94
+i, j = 343658.7,5091307.2
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
@@ -46,7 +48,12 @@ regu = '1accelnotnull'  # Regularization method.s to be used (for each flag if f
 coef = 1000  # Regularization coefficient.s to be used (for each flag if flags is not None)
 delete_outliers = {
     "median_angle": 45,
-    "z_score": 3}
+    "mz_score": 3
+    }
+# delete_outliers = {
+#     "median_angle": 45
+#     }
+# delete_outliers=None
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
 unit = 365  # 1 for m/d, 365 for m/y
@@ -64,7 +71,6 @@ option_visual = [
     "obs_magnitude",
     "obs_vxvy_quality",
     "invertxy_overlaid",
-    "invertvv_overlaid",
     "residuals",
     "xcount_xy",
     "xcount_vv",
@@ -75,7 +81,7 @@ option_visual = [
     "invertvv_overlaid_zoom",
     "direction_overlaid",
 ]  # see README_visualization_pixel_output.md
-option_visual = ['obs_magnitude', "obs_vxvy_quality"]
+option_visual = ['obs_magnitude']
 
 vmax = [False, False]  # vmin and vmax of the legend
 
@@ -85,7 +91,7 @@ load_kwargs = {
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": [i, j, 250],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_date": ["2020-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates

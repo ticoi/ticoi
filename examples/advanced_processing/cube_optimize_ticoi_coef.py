@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore")
 # List of the paths where the data cubes are stored
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "test_data", "cubes_Sentinel_2_2022_2023"))}/c_x01470_y03675.nc'
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2_2022_2023"))}/c_x01225_y03675.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2_2022_2023"))}/c_x01225_y03920.nc'
 # Path to the "ground truth" cube used to optimize the regularisation
 # cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
 cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "..", "nathan", "Donnees", "Cubes_de_donnees"))}/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'
@@ -52,7 +52,7 @@ flag_name = {0: "stable ground", 1: "glacier"}
 
 ## --------------------------- Main parameters ----------------------------- ##
 # regu = "1accelnotnull"  # Regularization method to be used (don't put it in inversion_kwargs)
-regu = {0: 1, 1: "1accelnotnull"}
+regu = {0: "1accelnotnull", 1: "1accelnotnull"}
 solver = "LSMR_ini"  # Solver for the inversion
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = (
@@ -66,11 +66,13 @@ result_quality = (
 # than the 'direct_process' method
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal,
 # there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it
-# in a raw terminal instead of the default console (which leads to a RuntimeError)
+# in a raw terminal instead of the default console (whic h leads to a RuntimeError)
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.optimization_process = 'direct_process'
 optimization_process = "direct_process"
+# Optimize to zero velocity ? (optimization to stable ground)
+optimize_stable_ground = True
 # Specify the coefficients you want to test
 coefs = [
     20,
@@ -113,6 +115,46 @@ coefs = [
     9000,
     10000,
 ]
+coefs = [
+    20,
+    50,
+    100,
+    150,
+    200,
+    250,
+    300,
+    350,
+    400,
+    450,
+    500,
+    550,
+    600,
+    700,
+    800,
+    900,
+    1000,
+    1200,
+    1400,
+    1600,
+    1800,
+    2000,
+    2500,
+    3000,
+    3500,
+    4000,
+    4500,
+    5000,
+    6000,
+    7000,
+    8000,
+    9000,
+    10000,
+    12000,
+    14000,
+    17000,
+    20000,
+]
+
 coef_min = 10  # If coefs=None, start point of the range of coefs to be tested
 coef_max = 1000  # If coefs=None, stop point of the range of coefs to be tested
 step = 10  # If coefs=None, step for the range of coefs to be tested
@@ -121,12 +163,13 @@ stats = False  # Compute some statistics on raw data and GT data
 save = True
 plot_them_all = True
 coef_maps = ["best", "good"]
+margin_good_RMSE = 15
 
 ## ------------------------ Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": [332702.29,332996.061,5081350.809,5082100.17],  # Subset to be loaded
+    "subset": [326450.86,327348.20,5072746.89,5073749.57],  # Subset to be loaded
     "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
@@ -181,11 +224,20 @@ inversion_kwargs = {
 }  # Print information throughout TICOI processing
 
 ## --------------------- Interpolation parameters ---------------------- ##
-interpolation_kwargs = {
-    "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
-    "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "unit": unit,
-}  # 365 if the unit is m/y, 1 if the unit is m/d
+if not optimize_stable_ground: # The results of the inversion are interpolated to GT dates
+    interpolation_kwargs = {
+        "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+        "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+        "unit": unit, # 365 if the unit is m/y, 1 if the unit is m/d
+    }  
+else: # The results of the inversion are interpolated as usual
+    interpolation_kwargs = {
+        "interval_output": 30,  # Temporal baseline of the time series resulting from TICOI (after interpolation)
+        "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
+        "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
+        "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+        "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
+    }
 
 ## ----------------------- Parallelization parameters ---------------------- ##
 nb_cpu = 8  # Number of CPU to be used for parallelization
@@ -208,15 +260,18 @@ cube.load(cube_name, **load_kwargs)
 flag = None
 if assign_flag:
     flag = cube.create_flag(flag_file)
-    
-# Then we load the "ground truth"
-cube_gt = cube_data_class()
-cube_gt.load(cube_gt_name, **load_kwargs)
+
+cube_gt = None
+if not optimize_stable_ground:
+    # Then we load the "ground truth"
+    cube_gt = cube_data_class()
+    cube_gt.load(cube_gt_name, **load_kwargs)
 
 stop = [time.time()]
 print(f"[Data loading] Loading the data cube.s took {round((stop[-1] - start[-1]), 4)} s")
 print(f"[Data loading] Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ({cube.nx * cube.ny} pixels) ")
-print(f"[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})")
+if not optimize_stable_ground:
+    print(f"[Data loading] Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})")
 
 # %% ======================================================================== #
 #                         COEFFICIENT OPTIMIZATION                            #
@@ -370,9 +425,14 @@ if optimization_process == "block_process":
 elif optimization_process == "direct_process":
     obs_filt, flag = cube.filter_cube(**preData_kwargs, flag=flag)
 
+    if optimize_stable_ground: # We only compute stable ground pixels
+        xy_values = list(filter(bool, [(x, y) if flag.sel(x=x, y=y)['flag'].values == 0 else False 
+                            for x in flag['x'].values for y in flag['y'].values]))
+    else: 
+        xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)  
+    
     # Progression bar
-    xy_values = itertools.product(cube.ds["x"].values, cube.ds["y"].values)
-    xy_values_tqdm = tqdm(xy_values, total=len(cube.ds["x"].values) * len(cube.ds["y"].values), mininterval=0.5)
+    xy_values_tqdm = tqdm(xy_values, total=len(xy_values), mininterval=0.5)
 
     result = Parallel(n_jobs=nb_cpu, verbose=0)(
         delayed(optimize_coef)(
@@ -420,6 +480,7 @@ srs.ImportFromEPSG(int(proj.split(":")[1]))
 empty = list(filter(bool, [d if result[d] is not None else False for d in range(len(result))]))
 positions = np.array(list(itertools.product(cube.ds["x"].values, cube.ds["y"].values)))[empty, :]
 result = [result[i] for i in empty]
+xy_values = [xy_values[i] for i in empty]
 
 # Coordinates information
 resolution = int(cube.ds["x"].values[1] - cube.ds["x"].values[0])
@@ -494,6 +555,7 @@ start.append(time.time())
 nb_res = len(result)
 nb_data = np.array([result[i].nb_data if result[i] is not None else 0 for i in range(nb_res)])
 mean_v = np.array([result[i].mean_v if result[i] is not None else np.nan for i in range(nb_res)])
+std_v = np.array([result[i].std_raw_data if result[i] is not None else np.nan for i in range(nb_res)])
 RMSEs_result = np.array(
     [result[i].values if result[i] is not None else [np.nan for _ in range(len(coefs))] for i in range(nb_res)]
 )
@@ -502,21 +564,31 @@ RMSEs_result = np.array(
 if flag is None:
     regu = {0: regu}
 for key in regu.keys():
-    mask_regu = [result[i].regu == regu[key] for i in range(nb_res)]
+    if flag is not None:
+        # mask_regu = [result[i].regu == regu[key] for i in range(nb_res)]
+        mask_regu = list(filter(bool, [flag.sel(x=x, y=y)['flag'].values == key 
+                            for (x, y) in xy_values]))
+    else:
+        mask_regu = [True for i in range(nb_res)]
+        
     if any(mask_regu):
         nb_data_regu = nb_data[mask_regu]
         mean_v_regu = mean_v[mask_regu]
+        std_v_regu = std_v[mask_regu]
         RMSEs_result_regu = RMSEs_result[mask_regu]
 
         print(f"Area {flag_name[key]} :")
         print(f"{len(nb_data_regu)} pixels in the area")
 
         print(f"Nb data median S2 : {np.median(nb_data_regu[:, 0])}")
-        print(f"Nb data median Pleiades : {np.median(nb_data_regu[:, 1])}")
+        if not optimize_stable_ground:
+            print(f"Nb data median Pleiades : {np.median(nb_data_regu[:, 1])}")
         
-        print(f"Mean velocity S2 : {np.nanmean(np.sqrt(mean_v_regu[:, 0] ** 2 + mean_v_regu[:, 1] ** 2))}")
-        print(f"Mean velocity Pleiades : {np.nanmean(np.sqrt(mean_v_regu[:, 2] ** 2 + mean_v_regu[:, 3] ** 2))}")
-
+        print(f"Mean velocity S2 : {np.nanmean(np.sqrt(mean_v_regu[:, 0] ** 2 + mean_v_regu[:, 1] ** 2))} m/y")
+        print(f"Mean std dev S2 : {np.nanmean(np.sqrt(std_v_regu[:, 0] ** 2 + std_v_regu[:, 1] ** 2))} m/y")
+        if not optimize_stable_ground:
+            print(f"Mean velocity Pleiades : {np.nanmean(np.sqrt(mean_v_regu[:, 2] ** 2 + mean_v_regu[:, 3] ** 2))}")
+        
         # Average RMSE on the area
         RMSEs = np.array(
             [
@@ -531,10 +603,10 @@ for key in regu.keys():
                 for i in range(len(coefs))
             ]
         )
-
+            
         best_coef = coefs[np.argmin(RMSEs)]
         best_RMSE = np.min(RMSEs)
-        good_RMSE = 1.05 * best_RMSE
+        good_RMSE = (1 + margin_good_RMSE/100) * best_RMSE
 
         # Plot result
         fig, ax = plt.subplots(figsize=(12, 6))

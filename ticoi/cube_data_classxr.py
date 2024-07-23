@@ -1152,7 +1152,9 @@ class cube_data_class:
                         flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
                         flag_condition = flag == 0
                         flag_condition = np.expand_dims(flag_condition, axis=axis)
+                        print(inlier_mask)
                         inlier_mask = np.logical_or(inlier_mask, flag_condition)
+                        print(inlier_mask)
 
             inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
             for var in ["vx", "vy"]:
@@ -1613,7 +1615,7 @@ class cube_data_class:
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect, direction=direction)
+            self.delete_outliers(delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
