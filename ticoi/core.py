@@ -352,7 +352,7 @@ def inversion_core(
             temporal_decorrelation=weight_temporal_decorrelation,
         )
         del weight_temporal_decorrelation
-        if not visual and not apriori_weight_in_second_iteration:
+        if not visual and not apriori_weight_in_second_iteration and not 'Error_propagation' in result_quality:
             data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -530,32 +530,25 @@ def inversion_core(
         # TODO terminate propgation of errors
         if result_quality is not None and "Error_propagation" in result_quality:
 
-            def Prop_weight(weight, Residu):
+            def Prop_weight(weight, Residu,error):
                 W = np.diag(weight_ix.astype("float32"))
                 FTWF = F.T * W @ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
-                Prop_weight = N @ F.T @ W @ F @ N
-                sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1] + 1)
+                Prop_weight = N @ F.T @ W @ error @ W @ F @ N
+                sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
                 prop_wieght_diag = np.diag(Prop_weight)
-                return prop_wieght_diag, sigma0_weight
+                # Compute the confidence intervals
+                alpha = 0.05  # Confidence level
+                t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
+
+                return prop_wieght_diag, sigma0_weight, t_value
 
             # if not 'GCV' in result_quality:
             F = sp.csc_matrix(A, dtype="float32")
             Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
-            prop_wieght_diagx, sigma0_weightx = Prop_weight(weight_ix, Residux)
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux,np.diag(data_values[:, 3]))
             Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty = Prop_weight(weight_iy, Residuy)
-            # error = np.identity(data_values.shape[0])*data_values[:,2].astype('float32')/data_values[:, -1]
-            # Prop_error = N @ F.T @ W @ error @ F @ N
-            #
-            # t=sigma0 * np.linalg.inv(F.T @ error @ F)
-            # sigma02 = np.sum(Residux ** 2) / (F.shape[0] - F.shape[1] + 1)
-            #
-            #
-            # t=sigma0 * np.linalg.inv(A.T @  np.identity(data_values.shape[0])*weight_ix @ A)
-            #
-            # sigma0 = np.sum(Residux ** 2) / (F.shape[0] - F.shape[1]+1)
-            # t=sigma0 * np.linalg.inv(A.T @ A)
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy,np.diag(data_values[:, 4]))
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:
@@ -622,7 +615,7 @@ def inversion_core(
             result["error_x"] = prop_wieght_diagx
             result["error_y"] = prop_wieght_diagy
             sigma = np.zeros(result.shape[0])
-            sigma[:2] = np.hstack([sigma0_weightx, sigma0_weighty])
+            sigma[:4] = np.hstack([sigma0_weightx, sigma0_weighty, t_valuex, t_valuey])
             result["sigma0"] = sigma
 
     return A, result, dataf
@@ -764,7 +757,7 @@ def interpolation_core(
         if "Error_propagation" in result_quality:
             dataf_lp["error_x"] = error_x * unit / interval_output
             dataf_lp["error_y"] = error_y * unit / interval_output
-            dataf_lp["sigma0"] = np.concatenate([result["sigma0"][:2], np.full(dataf_lp.shape[0] - 2, np.nan)])
+            dataf_lp["sigma0"] = np.concatenate([result["sigma0"][:4], np.full(dataf_lp.shape[0] - 4, np.nan)])
     del x_regu, First_date, Second_date, vx, vy
 
     # Fill with nan values if the first date of the cube which will be interpolated is lower than the first date interpolated for this pixel

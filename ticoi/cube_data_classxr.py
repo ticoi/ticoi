@@ -88,10 +88,10 @@ class cube_data_class:
         self.nx = self.ds["x"].sizes["x"]
         self.ny = self.ds["y"].sizes["y"]
         self.nz = self.ds[time_dim].sizes[time_dim]
-        if len(self.ds["x"]) !=0 and len(self.ds["y"]) !=0:
+        if len(self.ds["x"]) != 0 and len(self.ds["y"]) != 0:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
-        else: 
-            raise ValueError('Your cube is empty, please check the subset or buffer coordinates you provided  ')
+        else:
+            raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
 
     def subset(self, proj: str, subset: list):
 
@@ -1251,17 +1251,18 @@ class cube_data_class:
                 .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
                 .astype("float32")
             )
+
     def reproject_geotiff_to_cube(self, file_path):
-        
+
         """
         Reproject the geotiff file to the same geometry of the cube
         :param: file_path: [str] --- path of the geotifffile to be wrapped
-        :return: warpped data [np.ndarray] --- warped data with same shape and resolution as the cube
+        :return: warped data [np.ndarray] --- warped data with same shape and resolution as the cube
         """
         if file_path.split(".")[-1] == "tif":
             with rio.open(file_path) as src:
                 src_data = src.read(1)
-            
+
             dst_data = np.empty(shape=self.ds.rio.shape, dtype=np.float32)
             dst_data, _ = rio.warp.reproject(
                 source=src_data,
@@ -1275,43 +1276,43 @@ class cube_data_class:
             )
             dst_data[dst_data == src.nodata] = np.nan
         return dst_data
-    
+
     def compute_flow_direction(self, vx_file: str | None = None, vy_file: str | None = None) -> xr.DataArray:
-        
+
         """
         Compute the avaerage flow direction from the input vx and vy files or just from the observations
         :param: vx_file | vy_file: [str] --- path of the flow velocity file, should be geotiff format
         :return: direction: [xr.DataArray] --- computed average flow direction at each pixel
         """
         if vx_file is not None and vy_file is not None:
-            vx = self.reproject_eotiff_to_cube(vx_file)
+            vx = self.reproject_geotiff_to_cube(vx_file)
             vy = self.reproject_geotiff_to_cube(vy_file)
         else:
             vx = self.ds["vx"].values
             vy = self.ds["vy"].values
-            
+
         temporal_baseline = self.ds["temporal_baseline"].values
         temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
         vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
         vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
-        
-        v_mean_weighted = np.sqrt(vx_weighted ** 2 + vy_weighted ** 2)
-        
+
+        v_mean_weighted = np.sqrt(vx_weighted**2 + vy_weighted**2)
+
         direction = np.arctan2(vx_weighted, vy_weighted)
         direction = (np.rad2deg(direction) + 360) % 360
-        
+
         direction = np.where(v_mean_weighted < 1, np.nan, direction)
-        
+
         direction = xr.Dataset(
             data_vars=dict(
                 direction=(["y", "x"], np.array(direction.T)),
             ),
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )
-        
+
         return direction
-            
-    def compute_slo_asp(self, dem_file: str, blur_size: int = 5)-> (xr.DataArray, xr.DataArray):
+
+    def compute_slo_asp(self, dem_file: str, blur_size: int = 5) -> (xr.DataArray, xr.DataArray):
         """
 
         :param dem_file: [str] --- path of the DEM
@@ -1334,18 +1335,17 @@ class cube_data_class:
                 finally:
                     os.dup2(old_stdout, 1)
                     os.dup2(old_stderr, 2)
-                    
+
         if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
             raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
         # Open the DEM file
-        dem = self.reproject_to_cube(dem_file)
+        dem = self.reproject_geotiff_to_cube(dem_file)
 
         # Set no_data value if src.nodata is None
         with rio.open(dem_file) as src:
             no_data = src.nodata if src.nodata is not None else -9999
 
-        dem = median_filter(dem,
-                                   size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
+        dem = median_filter(dem, size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
         # Create richdem array with suppressed output, richDEM is very quick for even very large DEMs.
         with suppress_stdout_stderr():
             dem_rd = rd.rdarray(dem, no_data=no_data)
@@ -1491,7 +1491,6 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-
         def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = None) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
@@ -1515,10 +1514,12 @@ class cube_data_class:
                 idx = np.where(
                     baseline < select_baseline
                 )  # Take only the temporal baseline lower than the threshold selecr_baseline
-                while len(idx[0]) < 3 * len(
-                    date_out
+                while len(idx[0]) < 3 * len(date_out) & (
+                    select_baseline < 200
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
-                    select_baseline += 30
+                    # while (len(idx[0]) < 3 * len(
+                    #             date_out)):
+                    #     select_baseline += 30
                     idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
@@ -1610,7 +1611,7 @@ class cube_data_class:
                     slope, aspect = self.compute_slo_asp(dem_file=dem_file)
                 else:
                     raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
-                
+
             elif (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
@@ -1633,7 +1634,6 @@ class cube_data_class:
             )
             if verbose:
                 start = time.time()
-
 
             vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"], select_baseline=select_baseline)
@@ -1662,13 +1662,15 @@ class cube_data_class:
             obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
             obs_filt.attrs["description"] = "Averaged velocity over the period"
             obs_filt.attrs["units"] = "m/y"
-        else: obs_filt = None
+        else:
+            obs_filt = None
 
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        if obs_filt!= None: obs_filt.load()
+        if obs_filt != None:
+            obs_filt.load()
         self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
@@ -2179,8 +2181,8 @@ class cube_data_class:
                 }
 
         if result_quality is not None and "Error_propagation" in result_quality:
-            long_name = ["Sigma0 Est/West", "Sigma0 North/South [m]"]
-            short_name = ["sigma0_x", "sigma0_y"]
+            long_name = ["Sigma0 Est/West", "Sigma0 North/South [m]", "T value Est/West", "T value North/South"]
+            short_name = ["sigma0_x", "sigma0_y", "t_valuex", "t_valuey"]
             for k, var in enumerate(short_name):
 
                 result_arr = np.array(
