@@ -529,15 +529,18 @@ def inversion_core(
         # propagate the error
         # TODO terminate propgation of errors
         if result_quality is not None and "Error_propagation" in result_quality:
-            def Prop_weight(weight,pos):
+
+            def Prop_weight(weight, pos):
                 F = np.vstack([np.multiply(weight[:, np.newaxis], A), F_regu]).astype("float32")
-                if pos == 0:Residu = data_values[:, pos] - F @ result_dx_i
-                elif pos == 1: Residu = data_values[:, pos] - F @ result_dy_i
+                if pos == 0:
+                    Residu = data_values[:, pos] - F @ result_dx_i
+                elif pos == 1:
+                    Residu = data_values[:, pos] - F @ result_dy_i
 
                 prop_wieght_diag = np.diag(np.linalg.inv(F.T @ F))
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
 
-            # def Prop_weight(weight, Residu, error):
+                # def Prop_weight(weight, Residu, error):
                 # W = np.diag(weight_ix.astype("float32"))
                 # FTWF = F.T * W @ F
                 # N = np.linalg.inv(FTWF + coef * mu.T @ mu)
@@ -549,6 +552,7 @@ def inversion_core(
                 t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
 
                 return prop_wieght_diag, sigma0_weight, t_value
+
             #
             # # if not 'GCV' in result_quality:
             # F = sp.csc_matrix(A, dtype="float32")
@@ -561,9 +565,8 @@ def inversion_core(
             # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
             A = sp.csc_matrix(A, dtype="float32")
             F_regu = np.multiply(coef, mu)
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix,pos=0)
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy,pos=1)
-
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, pos=0)
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, pos=1)
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:

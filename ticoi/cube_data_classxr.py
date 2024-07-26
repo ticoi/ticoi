@@ -763,7 +763,10 @@ class cube_data_class:
                     verbose=verbose,
                 )
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
-                if reproj_vel or reproj_coord: cube2 = self.align_cube(cube2, reproj_vel=reproj_vel, reproj_coord=reproj_coord, interp_method="nearest")
+                if reproj_vel or reproj_coord:
+                    cube2 = self.align_cube(
+                        cube2, reproj_vel=reproj_vel, reproj_coord=reproj_coord, interp_method="nearest"
+                    )
                 self.merge_cube(cube2)  # Merge the new cube to the main one
             del cube2
 

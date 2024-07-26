@@ -469,8 +469,10 @@ def inversion_one_component(
     if verbose:
         matrix_property(A)  # Matrix A properties
 
-    if len(data.shape)>1: v = data[:, v_pos]
-    else:  v = data
+    if len(data.shape) > 1:
+        v = data[:, v_pos]
+    else:
+        v = data
 
     if type(Weight) == int and Weight == 1:
         Weight = np.ones(v.shape[0])  # Equivalent to an Ordinary Least Square

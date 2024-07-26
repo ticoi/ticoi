@@ -34,9 +34,7 @@ warnings.filterwarnings("ignore")
 
 # List of the paths where the data cubes are stored
 
-cube_name = (
-    f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..","..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
-)
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..","..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates

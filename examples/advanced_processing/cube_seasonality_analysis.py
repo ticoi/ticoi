@@ -29,7 +29,7 @@ from osgeo import gdal, osr
 from scipy.optimize import curve_fit
 from tqdm import tqdm
 
-from ticoi.core import process, process_blocks_refine
+from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import prepare_interpolation_date
 
@@ -56,7 +56,10 @@ warnings.filterwarnings("ignore")
 TICOI_process = "load"
 
 save = True  # If True, save TICOI results to a netCDF file
-
+# What results must be returned from TICOI processing (can be a list of both)
+#   - 'invert' for the results of the inversion
+#   - 'interp' for the results of the interpolation
+returned = ["invert", "interp"]
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
@@ -87,7 +90,7 @@ regu = "1accelnotnull"
 coef = 200
 # coef = 200 # Without flag
 solver = "LSMR_ini"  # Solver for the inversion
-delete_outlier = {'mz_score':3.5,'median_angle':45}
+delete_outlier = {"mz_score": 3.5, "median_angle": 45}
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
@@ -314,8 +317,9 @@ if TICOI_process != "load":
     # Write down some information about the data and the TICOI processing performed
     if save:
         if "invert" in returned:
-            source, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs,
-                                                  returned="invert")
+            source, sensor = save_cube_parameters(
+                cube, load_kwargs, preData_kwargs, inversion_kwargs, returned="invert"
+            )
         if "interp" in returned:
             source_interp, sensor = save_cube_parameters(
                 cube, load_kwargs, preData_kwargs, inversion_kwargs, returned="interp"

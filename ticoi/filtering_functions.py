@@ -824,6 +824,7 @@ def NVVC_angle_filt(
 
     return inlier_flag
 
+
 def NVVC_angle_mzscore_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, mz_thres: int = 3.5, axis: int = 2
 ) -> (np.array):
@@ -865,6 +866,7 @@ def NVVC_angle_mzscore_filt(
     inlier_flag = np.where(vvc_cond, angle_filter, mz_score_filt(velo_magnitude, mz_thres=mz_thres, axis=axis))
 
     return inlier_flag
+
 
 def topo_angle_filt(
     obs_cpx: xr.DataArray,
@@ -1005,7 +1007,8 @@ def dask_filt_warpper(
     filt_method: str = "median_angle",
     vvc_thres: float = 0.3,
     angle_thres: int = 45,
-    z_thres: int = 2,mz_thres=3.5,
+    z_thres: int = 2,
+    mz_thres=3.5,
     magnitude_thres: int = 1000,
     median_magnitude_thres=3,
     error_thres: int = 100,
@@ -1042,7 +1045,12 @@ def dask_filt_warpper(
     elif filt_method == "vvc_angle_mzscore":  # combination between z_score and median_angle
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(
-            NVVC_angle_mzscore_filt, vvc_thres=vvc_thres, angle_thres=angle_thres,mz_thres=mz_thres, axis=axis, dtype=obs_arr.dtype
+            NVVC_angle_mzscore_filt,
+            vvc_thres=vvc_thres,
+            angle_thres=angle_thres,
+            mz_thres=mz_thres,
+            axis=axis,
+            dtype=obs_arr.dtype,
         )
 
     elif filt_method == "z_score":  # threshold according to the zscore

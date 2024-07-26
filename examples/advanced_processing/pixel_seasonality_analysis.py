@@ -148,7 +148,7 @@ raw_seasonality = True
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
 # 'lowpass' : or apply a lowpass filter only (to Nyquist frequency) : risk of tackling an interannual trend (long period)
-filt = 'highpass'
+filt = "highpass"
 # Method used to compute local variations
 # 'rolling_7d' : median of the std of the data centered in +- 3 days around each central date
 # 'uniform_7d' : median of the std of the data centered in +- 3 days around dates constantly distributed every redundnacy
