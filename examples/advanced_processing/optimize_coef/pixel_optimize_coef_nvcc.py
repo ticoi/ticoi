@@ -35,9 +35,9 @@ warnings.filterwarnings("ignore")
 # List of the paths where the data cubes are stored
 
 cube_name = (
-    f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
+    f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
 )
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
@@ -92,7 +92,7 @@ load_kwargs = {
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": "EPSG:4326",  # EPSG system of the given coordinates
-    "verbose": verbose,  # Print information throughout the loading process
+    "verbose": False,  # Print information throughout the loading process
 }
 ## ----------------------- Data preparation parameters --------------------- ##
 preData_kwargs = {
@@ -109,7 +109,7 @@ preData_kwargs = {
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "disp",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
     "select_baseline": 120,
-    "verbose": verbose,
+    "verbose": False,
 }  # Print information throughout the filtering process
 
 ## ---------------- Parameters for the pixel loading part ------------------ ##
@@ -119,7 +119,7 @@ load_pixel_kwargs = {
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "interp": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
-    "visual": visual,  # Plot results along the way
+    "visual": False,  # Plot results along the way
 }
 
 ## --------------------------- Inversion parameters ------------------------ ##
@@ -137,8 +137,8 @@ inversion_kwargs = {
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "visual": visual,  # Plot results along the way
-    "verbose": verbose,
+    "visual": False,  # Plot results along the way
+    "verbose": False,
 }  # Print information throughout TICOI processing
 
 ## ----------------------- Interpolation parameters ------------------------ ##
@@ -192,8 +192,7 @@ list_parameter = [
 ]
 
 
-# initialization
-start = [time.time()]
+# Initialization
 options = ""
 if inversion_kwargs["iteration"]:
     options += "_it"
@@ -213,13 +212,18 @@ if "L_curve" in option_visual:
     Residux, Residuy, Regux, Reguy, Rx, Ry, Rmeanx, Rmeany = [], [], [], [], [], [], [], []
 
 
+# %% ======================================================================== #
+#                                LOAD CUBE                                    #
+# =========================================================================%% #
+
+start = [time.time()]
+
 cube = cube_data_class()
 cube.load(cube_name[0], **load_kwargs)
 
 # Prepare interpolation dates
 first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
 interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
-
 
 stop = [time.time()]
 print(f"[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s")
@@ -232,7 +236,6 @@ stop.append(time.time())
 print(f"[Data filtering] Loading the pixel took {round((stop[1] - start[1]), 4)} s")
 
 
-# %% For each parameter
 f = open(f"{path_save}parameters_{options}_{parameter}.txt", "w")
 for param_value in list_parameter:
     print(f"{parameter}: {param_value}")
@@ -250,8 +253,9 @@ for param_value in list_parameter:
         # print(f'Cube of dimesion (nz,nx,ny): ({cube.nz},{cube.nx},{cube.ny} ')
         print(f"Inversion for pixel {i, j}")
 
+
     # %% ======================================================================== #
-    #                                Inversion                                    #
+    #                                INVERSION                                    #
     # =========================================================================%% #
 
     # Load pixel data
@@ -276,6 +280,7 @@ for param_value in list_parameter:
     if save:
         result.to_csv(f"{save_path}/ILF_result.csv")
 
+
     # %% ======================================================================== #
     #                              INTERPOLATION                                  #
     # =========================================================================%% #
@@ -297,8 +302,9 @@ for param_value in list_parameter:
     stop.append(time.time())
     print(f"[Interpolation] Interpolation took {round((stop[4] - start[4]), 4)} s")
 
+
     # %% ======================================================================== #
-    #                              Visualization                                  #
+    #                              VISUALIZATION                                  #
     # =========================================================================%% #
     if visual:
         visualization_core(
@@ -321,8 +327,9 @@ for param_value in list_parameter:
             colors=["orange", "blue"],
         )
 
+
     # %% ======================================================================== #
-    #                                Update vvc                                   #
+    #                                UPDATE VVC                                   #
     # =========================================================================%% #
 
     if "L_curve" in option_visual:
@@ -344,8 +351,9 @@ for param_value in list_parameter:
 end = time.time()
 print(f"{end - start[0]} ms")
 
+
 # %% ======================================================================== #
-#                            VVC visualization                                #
+#                            VVC VISUALIZATION                                #
 # =========================================================================%% #
 dataf = pd.DataFrame({"param": list_parameter, "VCC": list_NCoh_vector_after})
 dataf.sort_values(by="param", inplace=True)

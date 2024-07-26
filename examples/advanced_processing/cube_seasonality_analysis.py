@@ -53,9 +53,9 @@ warnings.filterwarnings("ignore")
 #   - 'load' : The  TICOI cube was already calculated before, load it by giving the cubes to be loaded in a dictionary like {name: path} (at least
 # 'raw' and 'interp' must be given)
 
-TICOI_process = "load"
+TICOI_process = "block_process"
 
-save = True  # If True, save TICOI results to a netCDF file
+save = False  # If True, save TICOI results to a netCDF file
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
@@ -65,6 +65,7 @@ cube_name = {
     "raw": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc',
     "interp": f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube"))}/Argentiere_example_interp.nc',
 }
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2_2022_2023"))}/c_x01225_y03675.nc'
 flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 # path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "seasonality"))}/'  # Path where to store the results
@@ -87,12 +88,16 @@ regu = "1accelnotnull"
 coef = 200
 # coef = 200 # Without flag
 solver = "LSMR_ini"  # Solver for the inversion
+delete_outliers = {
+    "median_angle": 45,
+    "mz_score": 3.5
+}
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+    "subset": [333350.8,335426.9,5080813.3,5083418.1],  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
@@ -110,7 +115,7 @@ preData_kwargs = {
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "delete_outliers": delete_outliers,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": flag_file,  # Divide the data in several areas where different methods should be used
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None)
     "solver": solver,  # Solver for the inversion
@@ -127,7 +132,6 @@ inversion_kwargs = {
     "flag": flag_file,  # Divide the data in several areas where different methods should be used
     "conf": False,  # If True, confidence indicators are set between 0 and 1, with 1 the lowest errors
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": "vvc_angle",  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "proj": proj,  # EPSG system of the given coordinates
     "interpolation_load_pixel": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "iteration": True,  # Allow the inversion process to make several iterations
@@ -160,7 +164,7 @@ block_size = 0.1  # Maximum sub-block size (in GB) for the 'block_process' TICOI
 impose_frequency = True
 # Add several sinus at different freqs (1/365.25 and harmonics (2/365.25, 3/365.25...) if impose_frequency is True)
 #   (only available for impose_frequency = True for now)
-several_freq = 5
+several_freq = 1
 # Compute also the best matching sinus to raw data, for comparison
 raw_seasonality = True
 # Filter to use in the first place
@@ -296,7 +300,7 @@ if TICOI_process == "block_process" or TICOI_process == "direct_process":
                 "temporal_baseline": result["raw"][r][0][1][:, 4],
             }
         )
-        for r in range(len(result))
+        for r in range(len(result['raw']))
     ]
     result = result["interp"]  # Result of the interpolation
 

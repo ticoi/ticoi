@@ -29,10 +29,10 @@ warnings.filterwarnings("ignore")
 
 ## ---------------------------- Data selection ------------------------- ##
 # List of the paths where the data cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
 # Path to the "ground truth" cube used to optimize the regularisation
-cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel", "optimize_coef"))}/'  # Path where to store the results
+cube_gt_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_Pleiades.nc'
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "results", "pixel", "optimize_coef"))}/'  # Path where to store the results
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 i, j = 342537.1, 5092253.3  # Point (pixel) where to carry on the computation
