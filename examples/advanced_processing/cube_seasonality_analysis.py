@@ -29,7 +29,7 @@ from osgeo import gdal, osr
 from scipy.optimize import curve_fit
 from tqdm import tqdm
 
-from ticoi.core import process, process_blocks_refine
+from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import prepare_interpolation_date
 
@@ -55,8 +55,11 @@ warnings.filterwarnings("ignore")
 
 TICOI_process = "block_process"
 
-save = False  # If True, save TICOI results to a netCDF file
-
+save = True  # If True, save TICOI results to a netCDF file
+# What results must be returned from TICOI processing (can be a list of both)
+#   - 'invert' for the results of the inversion
+#   - 'interp' for the results of the interpolation
+returned = ["invert", "interp"]
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 # cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
@@ -317,33 +320,16 @@ print(
 if TICOI_process != "load":
     # Write down some information about the data and the TICOI processing performed
     if save:
-        start.append(time.time())
-        sensor_array = np.unique(cube.ds["sensor"])
-        sensor_strings = [str(sensor) for sensor in sensor_array]
-        sensor = ", ".join(sensor_strings)
-
-        if len(cube_name) > 1:
-            source = f'Temporal inversion on cubes {", ".join(cube.filename)} using TICOI'
-        else:
-            source = f"Temporal inversion on cube {cube.filename} using TICOI"
-        source += (
-            f' with a selection of dates among {load_kwargs["pick_date"]},'
-            if load_kwargs["pick_date"] is not None
-            else "" + f' with a selection of the temporal baselines among {load_kwargs["pick_temp_bas"]}'
-            if load_kwargs["pick_temp_bas"] is not None
-            else ""
-        )
-
-        if inversion_kwargs["apriori_weight"]:
-            source += " and apriori weight"
-        source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
-
-        source_interp = source + f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
-        source_interp += f'The interpolation baseline is {inversion_kwargs["interval_output"]} days.'
-        source_interp += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
-
+        if "invert" in returned:
+            source, sensor = save_cube_parameters(
+                cube, load_kwargs, preData_kwargs, inversion_kwargs, returned="invert"
+            )
+        if "interp" in returned:
+            source_interp, sensor = save_cube_parameters(
+                cube, load_kwargs, preData_kwargs, inversion_kwargs, returned="interp"
+            )
         stop.append(time.time())
-        print(f"[Writing results] Initialisation took {round(stop[-1] - start[-1], 3)} s")
+        print(f"[cube_ticoi_demo] Initialisation took {round(stop[-1] - start[-1], 3)} s")
 
 
 # %%========================================================================= #

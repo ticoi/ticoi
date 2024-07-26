@@ -22,7 +22,7 @@ import pandas as pd
 import scipy.fft as fft
 import scipy.signal as signal
 from scipy.optimize import curve_fit
-from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import mean_squared_error
 
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import cube_data_class
@@ -151,7 +151,7 @@ raw_seasonality = False
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
 # 'lowpass' : or apply a lowpass filter only (to Nyquist frequency) : risk of tackling an interannual trend (long period)
-filt = None
+filt = "highpass"
 # Method used to compute local variations
 # 'rolling_7d' : median of the std of the data centered in +- 3 days around each central date
 # 'uniform_7d' : median of the std of the data centered in +- 3 days around dates constantly distributed every redundnacy
@@ -268,7 +268,7 @@ dataf_lp = dataf_lp.dropna()
 # Get dates and velocities from TICOI results
 dates_c = dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2  # Central dates
 dates = (
-    dates_c - dataf_lp["date1"].min()
+    pd.to_datetime(dates_c) - dataf_lp["date1"].min()
 ).dt.days.to_numpy()  # Number of days to the reference day (first day of acquisition at the point)
 vv = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2).to_numpy()  # Velocity magnitude
 vv_c = vv - np.mean(vv)  # Centered velocities
@@ -349,7 +349,7 @@ if impose_frequency:
     max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
     print(f"                   Maximum at day {max_day.days}")
     print(f"                   Mean value of {round(np.mean(sine + np.mean(vv)), 1)} m/y")
-    print(f"                   RMSE : {round(root_mean_squared_error(sine, vv_filt), 2)} m/y")
+    print(f"                   RMSE : {round(mean_squared_error(sine, vv_filt,squared=False),2)} m/y")
 
     del sine_year
 
@@ -377,7 +377,7 @@ if impose_frequency:
         max_day_raw = first_max_day_raw - pd.Timestamp(year=first_max_day.year, month=1, day=1)
         print(f"                   Maximum at day {max_day_raw.days}")
         print(f'                   Mean value of {round(np.mean(sine_raw + dataff["vv"].mean()), 1)} m/y')
-        print(f"                   RMSE : {round(root_mean_squared_error(sine_raw, raw_c), 2)} m/y")
+        print(f"                   RMSE : {round(mean_squared_error(sine_raw, raw_c, squared=False),2)} m/y")
 
         del sine_raw_year
 
@@ -445,7 +445,7 @@ else:
     first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + dataf_lp["date1"].min()
     max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
     print(f"                   Maximum at day {max_day.days}")
-    print(f"                   RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y")
+    print(f"                   RMSE : {round(mean_squared_error(sine, vv_filt))} m/y")
 
     del sine_year
 
@@ -536,7 +536,7 @@ plt.show()
 # =========================================================================%% #
 # Superpose the curves for each year
 
-dates_c = dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2  # Central dates
+dates_c = pd.to_datetime(dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2)  # Central dates
 vv = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2).to_numpy()  # Velocity magnitude
 
 years = np.unique(np.array([dates_c.iloc[i].year for i in range(dates_c.size)]))

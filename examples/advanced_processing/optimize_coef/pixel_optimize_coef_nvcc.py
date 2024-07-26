@@ -34,15 +34,13 @@ warnings.filterwarnings("ignore")
 
 # List of the paths where the data cubes are stored
 
-cube_name = (
-    f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
-)
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "examples", "results","pixel"))}/'  # Path where to store the results
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..","..","..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # i, j = 343617.7, 5091275.0  # Pixel coordinates
-i,j = 138.28962881999922274,60.25934205396930565
+i, j = 138.28962881999922274, 60.25934205396930565
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
