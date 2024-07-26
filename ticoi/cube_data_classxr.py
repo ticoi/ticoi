@@ -1201,9 +1201,14 @@ class cube_data_class:
                     self.delete_outliers("topo_angle", flag, slope=slope, aspect=aspect)
                 elif method == "flow_angle":
                     self.delete_outliers("flow_angle", flag, direction=direction)
+                elif method == "mz_score":
+                    if delete_outliers["mz_score"] is None:
+                        self.delete_outliers("mz_score", flag)
+                    else:
+                        self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
                 else:
                     raise ValueError(
-                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
+                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
