@@ -14,9 +14,6 @@ import itertools
 import os
 import time
 import warnings
-from datetime import date
-from typing import List, Optional, Union
-
 import dask
 import geopandas
 import numpy as np
@@ -25,13 +22,18 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
+import contextlib
+import xarray as xr
+import dask.array as da
+
+from datetime import date
+from typing import List, Optional, Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 
-from ticoi.filtering_functions import *
-from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
+from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper, median_filter
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
@@ -89,7 +91,7 @@ class cube_data_class:
         if len(self.ds["x"]) != 0 and len(self.ds["y"]) != 0:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
         else:
-            raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided  ")
+            raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
 
     def subset(self, proj: str, subset: list):
 
@@ -695,6 +697,8 @@ class cube_data_class:
         pick_temp_bas: str | None = None,
         proj: str = "EPSG:4326",
         mask: str | xr.DataArray = None,
+        reproj_coord: bool = False,
+        reproj_vel: bool = False,
         verbose: bool = False,
     ):
 
@@ -713,8 +717,12 @@ class cube_data_class:
         :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
         :param mask: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
+        :param reproj_coord: [bool] [default is False] --- If True reproject the second cube of the list filepath to the grid coordinates of the first cube
+        :param reproj_vel: [bool] [default is False] --- If True reproject the velocity components, to match the coordinate system of the first cube
+
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
+        self.__init__()
 
         assert (
             type(filepath) == list or type(filepath) == str
@@ -735,7 +743,6 @@ class cube_data_class:
                 verbose=verbose,
             )
 
-            cube2 = None
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
@@ -753,12 +760,15 @@ class cube_data_class:
                     pick_date=pick_date,
                     pick_sensor=pick_sensor,
                     pick_temp_bas=pick_temp_bas,
-                    proj=proj,
+                    proj=self.ds.proj4,
                     mask=mask,
                     verbose=verbose,
                 )
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
-                cube2 = self.align_cube(cube2, reproj_vel=False, reproj_coord=True, interp_method="nearest")
+                if reproj_vel or reproj_coord:
+                    cube2 = self.align_cube(
+                        cube2, reproj_vel=reproj_vel, reproj_coord=reproj_coord, interp_method="nearest"
+                    )
                 self.merge_cube(cube2)  # Merge the new cube to the main one
             del cube2
 
@@ -774,84 +784,82 @@ class cube_data_class:
                 "IGE": "mid_date",
             }
 
-        self.__init__()
+            with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
+                if filepath.split(".")[-1] == "nc":
+                    try:
+                        self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
+                    except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
+                        chunks = {}
+                        self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
 
-        with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
-            if filepath.split(".")[-1] == "nc":
-                try:
-                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)
-                except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
-                    chunks = {}
-                    self.ds = xr.open_dataset(filepath, engine="netcdf4", chunks=chunks)  # Set no chunks
+                    if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
+                        self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
-                    self.ds.attrs["author"] = self.ds.attrs.pop("Author")
+                    self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
+                    time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
+                    var_name = "vx" if not self.is_TICO else "dx"
 
-                self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
-                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
-                var_name = "vx" if not self.is_TICO else "dx"
+                    if chunks == {}:  # Rechunk with optimal chunk size
+                        tc, yc, xc = self.determine_optimal_chunk_size(
+                            variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
+                        )
+                        self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-                if chunks == {}:  # Rechunk with optimal chunk size
+                elif filepath.split(".")[-1] == "zarr":
+                    if chunks == {}:
+                        chunks = "auto"  # Change the default value to auto
+                    self.ds = xr.open_dataset(
+                        filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks
+                    )
+                    self.is_TICO = False
+                    time_dim = "mid_date"
+                    var_name = "vx"
+
+                if verbose:
+                    print("[Data loading] File open")
+
+                dico_load = {
+                    "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
+                    "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
+                    "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
+                    "L. Charrier, L. Guo": self.load_charrier,
+                    "L. Charrier": self.load_charrier,
+                    "E. Ducasse": self.load_ducasse,
+                    "S. Leinss, L. Charrier": self.load_charrier,
+                }
+                dico_load[self.ds.author](
+                    filepath,
+                    pick_date=pick_date,
+                    subset=subset,
+                    conf=conf,
+                    pick_sensor=pick_sensor,
+                    pick_temp_bas=pick_temp_bas,
+                    buffer=buffer,
+                    proj=proj,
+                )
+
+                time_dim = "mid_date" if not self.is_TICO else "second_date"
+                # Rechunk again if the size of the cube is changed:
+                if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
                     tc, yc, xc = self.determine_optimal_chunk_size(
                         variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
                     )
                     self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-            elif filepath.split(".")[-1] == "zarr":
-                if chunks == {}:
-                    chunks = "auto"  # Change the default value to auto
-                self.ds = xr.open_dataset(
-                    filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks
-                )
-                self.is_TICO = False
-                time_dim = "mid_date"
-                var_name = "vx"
+                # Reorder the coordinates to keep the consistency
+                self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
+                self.standardize_cube_for_processing(time_dim)
 
-            if verbose:
-                print("[Data loading] File open")
+                if mask is not None:
+                    self.mask_cube(mask)
 
-            dico_load = {
-                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
-                "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
-                "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
-                "L. Charrier, L. Guo": self.load_charrier,
-                "L. Charrier": self.load_charrier,
-                "E. Ducasse": self.load_ducasse,
-                "S. Leinss, L. Charrier": self.load_charrier,
-            }
-            dico_load[self.ds.author](
-                filepath,
-                pick_date=pick_date,
-                subset=subset,
-                conf=conf,
-                pick_sensor=pick_sensor,
-                pick_temp_bas=pick_temp_bas,
-                buffer=buffer,
-                proj=proj,
-            )
+                # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
+                #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
+                #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
+                #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
 
-            time_dim = "mid_date" if not self.is_TICO else "second_date"
-            # Rechunk again if the size of the cube is changed:
-            if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-                tc, yc, xc = self.determine_optimal_chunk_size(
-                    variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
-                )
-                self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
-
-            # Reorder the coordinates to keep the consistency
-            self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
-            self.standardize_cube_for_processing(time_dim)
-
-            if mask is not None:
-                self.mask_cube(mask)
-
-            # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
-            #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
-            #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
-            #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
-
-            if verbose:
-                print(f"[Data loading] Author : {self.ds.author}")
+                if verbose:
+                    print(f"[Data loading] Author : {self.ds.author}")
 
     def standardize_cube_for_processing(self, time_dim="mid_date"):
 
@@ -1198,9 +1206,14 @@ class cube_data_class:
                     self.delete_outliers("topo_angle", flag, slope=slope, aspect=aspect)
                 elif method == "flow_angle":
                     self.delete_outliers("flow_angle", flag, direction=direction)
+                elif method == "mz_score":
+                    if delete_outliers["mz_score"] is None:
+                        self.delete_outliers("mz_score", flag)
+                    else:
+                        self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
                 else:
                     raise ValueError(
-                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
+                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
@@ -1427,7 +1440,8 @@ class cube_data_class:
                     ),
                 )
 
-            else:
+
+            elif not isinstance(flag, xr.Dataset):
                 raise ValueError("flag file must be .nc or .shp")
 
         if "flags" in list(flag.variables):
@@ -1606,9 +1620,7 @@ class cube_data_class:
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(
-                delete_outliers=delete_outliers, flag=flag, slope=slope, aspect=aspect, direction=direction
-            )
+            self.delete_outliers(delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 

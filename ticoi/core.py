@@ -352,7 +352,7 @@ def inversion_core(
             temporal_decorrelation=weight_temporal_decorrelation,
         )
         del weight_temporal_decorrelation
-        if not visual and not apriori_weight_in_second_iteration and not 'Error_propagation' in result_quality:
+        if not visual and not apriori_weight_in_second_iteration and not "Error_propagation" in result_quality:
             data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -530,25 +530,43 @@ def inversion_core(
         # TODO terminate propgation of errors
         if result_quality is not None and "Error_propagation" in result_quality:
 
-            def Prop_weight(weight, Residu,error):
-                W = np.diag(weight_ix.astype("float32"))
-                FTWF = F.T * W @ F
-                N = np.linalg.inv(FTWF + coef * mu.T @ mu)
-                Prop_weight = N @ F.T @ W @ error @ W @ F @ N
+            def Prop_weight(weight, pos):
+                F = np.vstack([np.multiply(weight[:, np.newaxis], A), F_regu]).astype("float32")
+                if pos == 0:
+                    Residu = data_values[:, pos] - F @ result_dx_i
+                elif pos == 1:
+                    Residu = data_values[:, pos] - F @ result_dy_i
+
+                prop_wieght_diag = np.diag(np.linalg.inv(F.T @ F))
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
-                prop_wieght_diag = np.diag(Prop_weight)
-                # Compute the confidence intervals
+
+                # def Prop_weight(weight, Residu, error):
+                # W = np.diag(weight_ix.astype("float32"))
+                # FTWF = F.T * W @ F
+                # N = np.linalg.inv(FTWF + coef * mu.T @ mu)
+                # Prop_weight = N @ F.T @ W @ error @ W @ F @ N
+                # sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
+                # prop_wieght_diag = np.diag(Prop_weight)
+                # # Compute the confidence intervals
                 alpha = 0.05  # Confidence level
                 t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
 
                 return prop_wieght_diag, sigma0_weight, t_value
 
-            # if not 'GCV' in result_quality:
-            F = sp.csc_matrix(A, dtype="float32")
-            Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux,np.diag(data_values[:, 3]))
-            Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy,np.diag(data_values[:, 4]))
+            #
+            # # if not 'GCV' in result_quality:
+            # F = sp.csc_matrix(A, dtype="float32")
+            # Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
+            # # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 3] * data_values[:, -1] / unit)**2))
+            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag(Residux**2))
+            #
+            # Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
+            # # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 4]* data_values[:, -1] / unit)**2))
+            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
+            A = sp.csc_matrix(A, dtype="float32")
+            F_regu = np.multiply(coef, mu)
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, pos=0)
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, pos=1)
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:
@@ -825,7 +843,7 @@ def interpolation_to_data(
     """
 
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
-    dataf = reconstruct_common_ref(result, result_quality)  # Build cumulative displacement time series
+    dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     start_date = dataf["Ref_date"][0]  # First date at the considered pixel
     x = np.array(
         (dataf["Second_date"] - np.datetime64(start_date)).dt.days

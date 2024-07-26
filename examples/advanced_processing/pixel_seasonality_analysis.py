@@ -22,7 +22,7 @@ import pandas as pd
 import scipy.fft as fft
 import scipy.signal as signal
 from scipy.optimize import curve_fit
-from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import mean_squared_error
 
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import cube_data_class
@@ -134,10 +134,6 @@ interpolation_kwargs = {
     "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-    "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "visual": visual,  # Plot results along the way
-    "vmax": vmax,  # vmin and vmax of the legend
-    "verbose": verbose,  # Print information throughout TICOI processing
 }
 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
@@ -145,14 +141,14 @@ interpolation_kwargs = {
 impose_frequency = True
 # Add several sinus at different freqs (1/365.25 and harmonics (2/365.25, 3/365.25...) if impose_frequency is True)
 #   (only available for impose_frequency = True for now)
-several_freq = 5
+several_freq = 1
 # Compute also the best matching sinus to raw data, for comparison
 raw_seasonality = True
 # Filter to use in the first place
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
 # 'lowpass' : or apply a lowpass filter only (to Nyquist frequency) : risk of tackling an interannual trend (long period)
-filt = None
+filt = "highpass"
 # Method used to compute local variations
 # 'rolling_7d' : median of the std of the data centered in +- 3 days around each central date
 # 'uniform_7d' : median of the std of the data centered in +- 3 days around dates constantly distributed every redundnacy
@@ -226,8 +222,6 @@ last_date_interpol = np.max(np.max(cube.date2_()))
 # Proceed to interpolation
 dataf_lp = interpolation_core(
     result,
-    path_save=path_save,
-    data=dataf,
     first_date_interpol=start_date_interpol,
     last_date_interpol=last_date_interpol,
     **interpolation_kwargs,
@@ -271,7 +265,7 @@ dataf_lp = dataf_lp.dropna()
 # Get dates and velocities from TICOI results
 dates_c = dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2  # Central dates
 dates = (
-    dates_c - dataf_lp["date1"].min()
+    pd.to_datetime(dates_c) - dataf_lp["date1"].min()
 ).dt.days.to_numpy()  # Number of days to the reference day (first day of acquisition at the point)
 vv = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2).to_numpy()  # Velocity magnitude
 vv_c = vv - np.mean(vv)  # Centered velocities
@@ -352,7 +346,7 @@ if impose_frequency:
     max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
     print(f"                   Maximum at day {max_day.days}")
     print(f"                   Mean value of {round(np.mean(sine + np.mean(vv)), 1)} m/y")
-    print(f"                   RMSE : {round(root_mean_squared_error(sine, vv_filt), 2)} m/y")
+    print(f"                   RMSE : {round(mean_squared_error(sine, vv_filt,squared=False),2)} m/y")
 
     del sine_year
 
@@ -380,7 +374,7 @@ if impose_frequency:
         max_day_raw = first_max_day_raw - pd.Timestamp(year=first_max_day.year, month=1, day=1)
         print(f"                   Maximum at day {max_day_raw.days}")
         print(f'                   Mean value of {round(np.mean(sine_raw + dataff["vv"].mean()), 1)} m/y')
-        print(f"                   RMSE : {round(root_mean_squared_error(sine_raw, raw_c), 2)} m/y")
+        print(f"                   RMSE : {round(mean_squared_error(sine_raw, raw_c, squared=False),2)} m/y")
 
         del sine_raw_year
 
@@ -539,7 +533,7 @@ plt.show()
 # =========================================================================%% #
 # Superpose the curves for each year
 
-dates_c = dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2  # Central dates
+dates_c = pd.to_datetime(dataf_lp["date1"] + (dataf_lp["date2"] - dataf_lp["date1"]) // 2)  # Central dates
 vv = np.sqrt(dataf_lp["vx"] ** 2 + dataf_lp["vy"] ** 2).to_numpy()  # Velocity magnitude
 
 years = np.unique(np.array([dates_c.iloc[i].year for i in range(dates_c.size)]))
