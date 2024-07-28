@@ -32,6 +32,8 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
+from tqdm import tqdm
+from joblib import Parallel, delayed
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper, median_filter
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
@@ -2004,27 +2006,33 @@ class cube_data_class:
         return line_df_vv
 
     # @jit(nopython=True)
-    def ncvv(self):
-        """Return the Normalized Coherence Vector Velocity"""
-        return np.array(
-            [
-                np.sqrt(
-                    np.nansum(
-                        self.ds["vx"].isel(x=i, y=j)
-                        / np.sqrt(self.ds["vx"].isel(x=i, y=j) ** 2 + self.ds["vy"].isel(x=i, y=j) ** 2)
-                    )
-                    ** 2
-                    + np.nansum(
-                        self.ds["vy"].isel(x=i, y=j)
-                        / np.sqrt(self.ds["vx"].isel(x=i, y=j) ** 2 + self.ds["vy"].isel(x=i, y=j) ** 2)
-                    )
-                    ** 2
-                )
-                / self.nz
-                for i in range(self.nx)
-                for j in range(self.ny)
-            ]
-        ).reshape(self.nx, self.ny)
+    def nvvc(self, parallel=True, nb_cpu=8, verbose=True):
+        
+        """
+        Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
+        
+        """
+        
+        def ncvv_pixel(cube, i, j):
+            return np.sqrt(
+                            np.nansum(
+                                cube.ds["vx"].isel(x=i, y=j)
+                                / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
+                            )
+                            ** 2
+                            + np.nansum(
+                                cube.ds["vy"].isel(x=i, y=j)
+                                / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
+                            )
+                            ** 2
+                        ) / cube.nz
+                
+        xy_values = itertools.product(range(self.nx), range(self.ny))
+        xy_values_tqdm = tqdm(xy_values, total=self.nx * self.ny, mininterval=0.5)
+        
+        return np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(ncvv_pixel)(self, i, j) \
+                                                  for i, j in (xy_values_tqdm if verbose else xy_values))).reshape(self.nx, self.ny)
+
 
     # %% ======================================================================== #
     #                            WRITING RESULTS AS NETCDF                        #

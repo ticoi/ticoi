@@ -231,6 +231,7 @@ def RMSE_TICOI_GT(
     coef: int,
     inversion_kwargs: dict,
     interpolation_kwargs: dict,
+    method: str = "stable_ground",
     regu: int | str | None = None,
     unit: int = 365,
     visual: bool = False,
@@ -250,6 +251,7 @@ def RMSE_TICOI_GT(
     :param coef: [int] --- Coef of Tikhonov regularisation
     :param inversion_kwargs: [dict] --- Inversion parameters
     :param interpolation_kwargs: [dict] --- Parameters for the interpolation to GT dates (less parameters than for core interpolation)
+    :param method: [str] [default is 'stable_ground'] --- Method to be used to optimise the coef (among 'ground_truth' and 'stable_ground')
     :parma unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
     :param visual: [bool] [default is False] --- Plot interpolated and GT velocities
     :param plot_raw: [bool] [default is False] --- Add raw data to the plot
@@ -272,7 +274,7 @@ def RMSE_TICOI_GT(
     del dates_range, mean
 
     # Proceed to interpolation
-    if data_gt is not None:
+    if method == "ground_truth":
         dataf_lp = interpolation_to_data(result, data_gt, **interpolation_kwargs)
         del A, result, dataf
         
@@ -401,7 +403,7 @@ def RMSE_TICOI_GT(
             
         return RMSE, None
         
-    else:
+    elif method == "stable_ground":
         dataf_lp = interpolation_core(result, **interpolation_kwargs)
         del A, result, dataf
         
@@ -411,9 +413,54 @@ def RMSE_TICOI_GT(
         
         # RMSE between TICOI result and ground truth data
         RMSE = np.sqrt(sm.mean_squared_error(dataf_lp[["vx", "vy"]], data_gt[["vx", "vy"]]))
+        
+        # TODO Option to visualize the results (if visual)
 
-        return RMSE, data_gt.shape[0]
+        return RMSE, dataf_lp.shape[0]
+    
+    else:
+        raise ValueError("Please select 'ground_truth' or 'stable_ground' as method")
 
+def VVC_TICOI(
+        data: list,
+        mean: list | None,
+        dates_range: np.ndarray | None,
+        i: float | int,
+        j: float | int,
+        coef: int,
+        inversion_kwargs: dict,
+        interpolation_kwargs: dict,
+        regu: int | str | None = None):
+    
+    """
+    """
+    
+    # Proceed to inversion
+    if regu is None:
+        A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, coef=coef, **inversion_kwargs)
+    else:
+        A, result, dataf = inversion_core(
+            data, i, j, dates_range=dates_range, mean=mean, coef=coef, regu=regu, **inversion_kwargs
+        )
+    
+    # Interpolation
+    dataf_lp = interpolation_core(result, **interpolation_kwargs)
+    del A, result, dataf
+    
+    VVC = np.sqrt(
+                    np.nansum(
+                        dataf_lp['vx']
+                        / np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
+                    )
+                    ** 2
+                    + np.nansum(
+                        dataf_lp['vy']
+                        / np.sqrt(dataf_lp['vx'] ** 2 + dataf_lp['vy'] ** 2)
+                    )
+                    ** 2
+                ) / dataf_lp.shape[0]
+    
+    return VVC, dataf_lp.shape[0]
 
 def optimize_coef(
     cube: cube_data_class,
@@ -424,6 +471,7 @@ def optimize_coef(
     load_pixel_kwargs: dict,
     inversion_kwargs: dict,
     interpolation_kwargs: dict,
+    method: str = 'vvc',
     regu: dict | None = None,
     flag: xr.DataArray | None = None,
     cmin: int = 10,
@@ -446,6 +494,7 @@ def optimize_coef(
     :param load_pixel_kwargs: [dict] --- Pixel loading parameters
     :param inversion_kwargs: [dict] --- Inversion parameters
     :param interpolation_kwargs: [dict] --- Parameters for the interpolation to GT dates (less parameters than for core interpolation)
+    :param method: [str] [default is 'vvc'] --- Method used to optimize the coef ('ground_truth', 'stable_ground' or 'vvc')
     :parma regu: [dict | None] [default is None] --- Must be a dictionary if flags is not None, otherwise the regularisation method must be passed in the kwargs
     :param flags: [xr dataarray | None] [default is None] --- Divide the cube in several areas where the coefficient is optimized independently
     :param cmin: [int] [default is 10] --- If coefs=None, start point of the range of coefs to be tested
@@ -482,7 +531,9 @@ def optimize_coef(
 
     # Load ground truth pixel and convert to pd dataframe
     data_gt = None
-    if cube_gt is not None:
+    if method == 'ground_truth':
+        assert cube_gt is not None, "Please provide ground truth data for method 'ground_truth'"
+        
         data_gt = cube_gt.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)[0]
         data_gt = pd.DataFrame(
             data={
@@ -512,49 +563,100 @@ def optimize_coef(
     else:
         coefs = np.array(coefs)
 
-    # Compute RMSE for every coefficient
-    if parallel:
-        RMSEs = Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(RMSE_TICOI_GT)(
-                data,
-                mean,
-                dates_range,
-                data_gt,
-                i,
-                j,
-                coef,
-                inversion_kwargs,
-                interpolation_kwargs,
-                regu=regu,
-                **visual_options,
+    if method == "ground_truth" or method == "stable_ground":
+        # Compute RMSE for every coefficient
+        if parallel:
+            measures = Parallel(n_jobs=nb_cpu, verbose=0)(
+                delayed(RMSE_TICOI_GT)(
+                    data,
+                    mean,
+                    dates_range,
+                    data_gt,
+                    i,
+                    j,
+                    coef,
+                    inversion_kwargs,
+                    interpolation_kwargs,
+                    method=method,
+                    regu=regu,
+                    **visual_options,
+                )
+                for coef in coefs
             )
-            for coef in coefs
-        )
-    else:
-        RMSEs = [
-            RMSE_TICOI_GT(
-                data,
-                mean,
-                dates_range,
-                data_gt,
-                i,
-                j,
-                coef,
-                inversion_kwargs,
-                interpolation_kwargs,
-                regu=regu,
-                **visual_options,
-            )
-            for coef in coefs
-        ]
-    data_gt_shape = RMSEs[0][1]
-    RMSEs = [RMSEs[i][0] for i in range(len(coefs))]
+        else:
+            measures = [
+                RMSE_TICOI_GT(
+                    data,
+                    mean,
+                    dates_range,
+                    data_gt,
+                    i,
+                    j,
+                    coef,
+                    inversion_kwargs,
+                    interpolation_kwargs,
+                    method=method,
+                    regu=regu,
+                    **visual_options,
+                )
+                for coef in coefs
+            ]
+        
+    elif method == "vvc":
+        if parallel:
+            measures = Parallel(n_jobs=nb_cpu, verbose=0)(
+                delayed(VVC_TICOI)(
+                    data,
+                    mean,
+                    dates_range,
+                    i, j,
+                    coef,
+                    inversion_kwargs,
+                    interpolation_kwargs,
+                    regu=regu) for coef in coefs)
+        else:
+            measures = [
+                VVC_TICOI(
+                    data,
+                    mean,
+                    dates_range,
+                    i, j,
+                    coef,
+                    inversion_kwargs,
+                    interpolation_kwargs,
+                    regu=regu) 
+                for coef in coefs]
+
+    data_gt_shape = measures[0][1]
+    measures = [measures[i][0] for i in range(len(coefs))]
 
     if stats:
+        mean_disp = (dataf['vx'].mean(), dataf['vy'].mean()) # Displacements mean
+        directions = np.arctan(dataf['vy'] / dataf['vx'])
+        mean_angle_to_median = np.mean(directions - np.median(directions))
+        
         dataf['vx'] = dataf['vx'] * 365 / dataf['temporal_baseline']
         dataf['vy'] = dataf['vy'] * 365 / dataf['temporal_baseline']
         
-        if cube_gt is not None:
+        # Average temporal baseline
+        temporal_baseline = dataf["temporal_baseline"].mean()
+        
+        # Mean of similar data (same acquisition dates) of raw and GT data
+        mean_raw = (
+            dataf.groupby(["date1", "date2"], as_index=False)[["vx", "vy", "errorx", "errory"]]
+            .mean()[["vx", "vy"]]
+            .mean()
+        )
+        # Standard deviation of similar data (same acquisition dates) of raw and GT data
+        std_raw = (
+            dataf.groupby(["date1", "date2"], as_index=False)[["vx", "vy", "errorx", "errory"]]
+            .std(ddof=0)[["vx", "vy"]]
+            .mean()
+        )
+        # Standard deviation of raw data
+        std_raw_all = dataf[["vx", "vy"]].std(ddof=0)
+        
+        if method == "ground_truth":
             # Average temporal baseline
             temporal_baseline = (dataf["temporal_baseline"].mean(), 
                                  data_gt["temporal_baseline"].mean())
@@ -585,11 +687,13 @@ def optimize_coef(
             std_gt_all = data_gt[["vx", "vy"]].std(ddof=0)
     
             return xr.DataArray(
-                data=RMSEs,
+                data=measures,
                 attrs={
                     "regu": inversion_kwargs["regu"] if flag is None else regu,
                     "nb_data": (dataf.shape[0], data_gt.shape[0]),
                     "mean_temporal_baseline": temporal_baseline,
+                    "mean_disp": mean_disp,
+                    "mean_angle_to_median": mean_angle_to_median,
                     "mean_v": (dataf['vx'].mean(), dataf['vy'].mean(), data_gt['vx'].mean(), data_gt['vy'].mean()),
                     "mean_v_similar_data": (mean_raw["vx"], mean_raw["vy"], mean_gt["vx"], mean_gt["vy"]),
                     "std_v_similar_data": (std_raw["vx"], std_raw["vy"], std_gt["vx"], std_gt["vy"]),
@@ -597,31 +701,15 @@ def optimize_coef(
                 },
             )
         
-        else:
-            # Average temporal baseline
-            temporal_baseline = dataf["temporal_baseline"].mean()
-            
-            # Mean of similar data (same acquisition dates) of raw and GT data
-            mean_raw = (
-                dataf.groupby(["date1", "date2"], as_index=False)[["vx", "vy", "errorx", "errory"]]
-                .mean()[["vx", "vy"]]
-                .mean()
-            )
-            # Standard deviation of similar data (same acquisition dates) of raw and GT data
-            std_raw = (
-                dataf.groupby(["date1", "date2"], as_index=False)[["vx", "vy", "errorx", "errory"]]
-                .std(ddof=0)[["vx", "vy"]]
-                .mean()
-            )
-            # Standard deviation of raw data
-            std_raw_all = dataf[["vx", "vy"]].std(ddof=0)
-    
+        elif method == "stable_ground" or method == "vvc":
             return xr.DataArray(
-                data=RMSEs,
+                data=measures,
                 attrs={
                     "regu": inversion_kwargs["regu"] if flag is None else regu,
                     "nb_data": (dataf.shape[0], data_gt_shape),
                     "mean_temporal_baseline": temporal_baseline,
+                    "mean_disp": mean_disp,
+                    "mean_angle_to_median": mean_angle_to_median,
                     "mean_v": (dataf['vx'].mean(), dataf['vy'].mean()),
                     "mean_v_similar_data": (mean_raw["vx"], mean_raw["vy"]),
                     "std_v_similar_data": (std_raw["vx"], std_raw["vy"]),
@@ -630,7 +718,7 @@ def optimize_coef(
             )
 
     return xr.DataArray(
-        data=RMSEs,
+        data=measures,
         attrs={
             "regu": inversion_kwargs["regu"] if flag is None else regu,
             "nb_data": (dataf.shape[0], data_gt.shape[0] if data_gt is not None else None),

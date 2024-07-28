@@ -14,7 +14,7 @@ from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
 from scipy.signal import savgol_filter
 from scipy.stats import median_abs_deviation
 import pwlf
-from ticoi.ALPS_Functions import Outlier
+# from ticoi.ALPS_Functions import Outlier
 from scipy import interpolate
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
@@ -226,7 +226,8 @@ def non_uniform_savgol(x, y, window, polynom):
 
     return y_smoothed
 
-from statsmodels.nonparametric.smoothers_lowess import lowess
+# from statsmodels.nonparametric.smoothers_lowess import lowess
+
 def lowess_smooth(
     series: np.ndarray,
     t_obs: np.ndarray,
