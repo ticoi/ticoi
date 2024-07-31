@@ -1229,7 +1229,7 @@ class cube_data_class:
         """
 
         if type(mask) is str:
-            if mask[-3:] == "shp":  # Convert the shp file to an xarray dataset (rasterize the shapefile)
+            if mask[-3:] == "shp" or mask[-4:] == "gpkg":  # Convert the shp file or geopackage to an xarray dataset (rasterize the shapefile)
                 polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
                 raster = rasterize(
                     [polygon.geometry[0]],

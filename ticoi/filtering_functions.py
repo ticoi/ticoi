@@ -733,12 +733,12 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
     return inlier_flag
 
-def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
+def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
 
     """
     Remove the observations if it is 3 time the MAD from the median of observations over this pixel
     :param obs: cube data to filter
-    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param mz_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
@@ -748,8 +748,8 @@ def mz_score_filt(obs: da.array, z_thres: int = 3.5, axis: int = 2):
 
     # mad = median_abs_deviation(obs, axis=axis)
 
-    z_scores = 0.6745*(obs - med) / mad
-    inlier_flag = np.abs(z_scores) < z_thres
+    mz_scores = 0.6745*(obs - med) / mad
+    inlier_flag = np.abs(mz_scores) < mz_thres
 
     return inlier_flag
 
@@ -844,7 +844,7 @@ def topo_angle_filt(
     slope: xr.DataArray,
     aspect: xr.DataArray,
     angle_thres: int = 45,
-    z_thres: int = 3,
+    mz_thres: int = 3.5,
     axis: int = 2,
 ) -> da.array:
 
@@ -872,7 +872,7 @@ def topo_angle_filt(
 
     # combine a filter based on the aspect and a filter based on the zscore only if the slope is lower than 3
     slope_cond = slope > 3
-    slope_filter = np.where(slope_cond, True, mz_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    slope_filter = np.where(slope_cond, True, mz_score_filt(velo_magnitude, mz_thres=mz_thres, axis=axis))
 
     inlier_flag = np.logical_and(slope_filter, aspect_filter.data)
 
@@ -1027,8 +1027,8 @@ def dask_filt_warpper(
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "mz_score":  # threshold according to the zscore
-        inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
-        inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
+        inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
 
@@ -1059,7 +1059,7 @@ def dask_filt_warpper(
             obs_arr,
             args=(slope_expanded, aspect_expanded),
             template=obs_arr,
-            kwargs={"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis},
+            kwargs={"angle_thres": angle_thres, "mz_thres": mz_thres, "axis": axis},
         )
     elif filt_method == "flow_angle":
         obs_arr = da_vx + 1j * da_vy
