@@ -91,16 +91,18 @@ regu = "1accelnotnull"
 coef = 200
 # coef = 200 # Without flag
 solver = "LSMR_ini"  # Solver for the inversion
-delete_outliers = {
-    "median_angle": 45,
-    "mz_score": 3.5
-}
+delete_outliers = {"median_angle": 45, "mz_score": 3.5}
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": [333350.8,335426.9,5080813.3,5083418.1],  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+    "subset": [
+        333350.8,
+        335426.9,
+        5080813.3,
+        5083418.1,
+    ],  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
@@ -303,7 +305,7 @@ if TICOI_process == "block_process" or TICOI_process == "direct_process":
                 "temporal_baseline": result["raw"][r][0][1][:, 4],
             }
         )
-        for r in range(len(result['raw']))
+        for r in range(len(result["raw"]))
     ]
     result = result["interp"]  # Result of the interpolation
 

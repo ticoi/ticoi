@@ -14,7 +14,11 @@ import itertools
 import os
 import time
 import warnings
+from datetime import date
+from typing import List, Optional, Union
+
 import dask
+import dask.array as da
 import geopandas
 import numpy as np
 import pandas as pd
@@ -22,20 +26,19 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
-import contextlib
 import xarray as xr
-import dask.array as da
-
-from datetime import date
-from typing import List, Optional, Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
+from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 from tqdm import tqdm
-from joblib import Parallel, delayed
 
-from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper, median_filter
+from ticoi.filtering_functions import (
+    dask_filt_warpper,
+    dask_smooth_wrapper,
+    median_filter,
+)
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
@@ -1229,7 +1232,9 @@ class cube_data_class:
         """
 
         if type(mask) is str:
-            if mask[-3:] == "shp" or mask[-4:] == "gpkg":  # Convert the shp file or geopackage to an xarray dataset (rasterize the shapefile)
+            if (
+                mask[-3:] == "shp" or mask[-4:] == "gpkg"
+            ):  # Convert the shp file or geopackage to an xarray dataset (rasterize the shapefile)
                 polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
                 raster = rasterize(
                     [polygon.geometry[0]],
@@ -1442,7 +1447,6 @@ class cube_data_class:
                     ),
                 )
 
-
             elif not isinstance(flag, xr.Dataset):
                 raise ValueError("flag file must be .nc or .shp")
 
@@ -1622,7 +1626,9 @@ class cube_data_class:
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction)
+            self.delete_outliers(
+                delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction
+            )
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
@@ -2007,32 +2013,37 @@ class cube_data_class:
 
     # @jit(nopython=True)
     def nvvc(self, parallel=True, nb_cpu=8, verbose=True):
-        
+
         """
         Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
-        
+
         """
-        
+
         def ncvv_pixel(cube, i, j):
-            return np.sqrt(
-                            np.nansum(
-                                cube.ds["vx"].isel(x=i, y=j)
-                                / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
-                            )
-                            ** 2
-                            + np.nansum(
-                                cube.ds["vy"].isel(x=i, y=j)
-                                / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
-                            )
-                            ** 2
-                        ) / cube.nz
-                
+            return (
+                np.sqrt(
+                    np.nansum(
+                        cube.ds["vx"].isel(x=i, y=j)
+                        / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
+                    )
+                    ** 2
+                    + np.nansum(
+                        cube.ds["vy"].isel(x=i, y=j)
+                        / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
+                    )
+                    ** 2
+                )
+                / cube.nz
+            )
+
         xy_values = itertools.product(range(self.nx), range(self.ny))
         xy_values_tqdm = tqdm(xy_values, total=self.nx * self.ny, mininterval=0.5)
-        
-        return np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(ncvv_pixel)(self, i, j) \
-                                                  for i, j in (xy_values_tqdm if verbose else xy_values))).reshape(self.nx, self.ny)
 
+        return np.array(
+            Parallel(n_jobs=nb_cpu, verbose=0)(
+                delayed(ncvv_pixel)(self, i, j) for i, j in (xy_values_tqdm if verbose else xy_values)
+            )
+        ).reshape(self.nx, self.ny)
 
     # %% ======================================================================== #
     #                            WRITING RESULTS AS NETCDF                        #

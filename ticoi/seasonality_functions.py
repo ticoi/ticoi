@@ -4,13 +4,15 @@ import scipy.fft as fft
 import scipy.signal as signal
 from scipy.optimize import curve_fit
 
+
 def match_sine(
     d: pd.DataFrame,
     filt: str | None = None,
     impose_frequency: bool = True,
     several_freq: int | None = None,
     raw_seasonality: bool = False,
-    d_raw: pd.DataFrame | None = None,variable:str='vv'
+    d_raw: pd.DataFrame | None = None,
+    variable: str = "vv",
 ):
 
     """
@@ -23,7 +25,7 @@ def match_sine(
        :param several_freq: [int | None] [default is None] --- If > 1, a signal made of several frequencies (at n*f) is matched to the data
        :param raw_seasonality: [bool] [default is False] --- If True, we also match a sinus to the raw data
        :param d_raw: [pd dataframe | None] [default is None] --- If raw_seasonality is True, must be the dataframe of the raw velocity data (not displacements)
-       :param variable: [str] [default is 'vv'] --- variable used to fit the sinus (vx, vy or vv). vv corespond to the velocity magnitude
+       :param variable: [str] [default is 'vv'] --- variable used to fit the sinus (vx, vy or vv). vv correspond to the velocity magnitude
     """
 
     d = d.dropna()
@@ -33,8 +35,10 @@ def match_sine(
         if raw_seasonality:
             return np.nan, np.nan, np.nan, np.nan, np.nan
         return np.nan, np.nan, np.nan
-    if variable == 'vv':vv = np.sqrt(d["vx"] ** 2 + d["vy"] ** 2).to_numpy()
-    else: vv = d[variable]
+    if variable == "vv":
+        vv = np.sqrt(d["vx"] ** 2 + d["vy"] ** 2).to_numpy()
+    else:
+        vv = d[variable]
     Ts = dates[1] - dates[0]
 
     # Filtering to remove inter-annual variations
@@ -54,7 +58,9 @@ def match_sine(
     if impose_frequency:
 
         def sine_fconst(t, *args, freqs=1, f=1 / 365.25):
-            sine = args[0] * np.sin(2 * np.pi * f * t + args[1])#args[0] amplitude of the signal, and args[1] the phase of the signal
+            sine = args[0] * np.sin(
+                2 * np.pi * f * t + args[1]
+            )  # args[0] amplitude of the signal, and args[1] the phase of the signal
             for freq in range(1, freqs):
                 sine += args[2 * freq] * np.sin(2 * np.pi * (freq + 1) * f * t + args[2 * freq + 1])
             return sine + args[-1]
@@ -71,8 +77,8 @@ def match_sine(
             sine_year = sine_fconst(np.linspace(1, 365, 365), *popt, freqs=several_freq)
             A = np.max(sine_year) - popt[-1]
             f = 1 / 365.25
-            first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + d["date1"].min()#date of the maximum
-            max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days #day of the year
+            first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + d["date1"].min()  # date of the maximum
+            max_day = (first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)).days  # day of the year
             del sine_year
 
             if raw_seasonality:
@@ -98,7 +104,7 @@ def match_sine(
                 A_raw, max_day_raw = np.nan, np.nan
 
     # Frequency is to be found too
-    else:#use fft, with an hanning window
+    else:  # use fft, with an hanning window
         n = 64 * N
         window = signal.windows.hann(N)
         vv_win_tf = fft.rfft(vv_filt * window, n=n)
@@ -185,4 +191,3 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
         var = dataff_vv_c.std(ddof=0)
 
     return max(0, 1 - var / abs(A))
-

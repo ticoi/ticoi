@@ -10,12 +10,15 @@ Reference:
 import dask.array as da
 import numpy as np
 import xarray as xr
-from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter
+
+# import pwlf
+# # from ticoi.ALPS_Functions import Outlier
+from scipy import interpolate
+from scipy.interpolate import BSpline, make_lsq_spline
+from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 from scipy.stats import median_abs_deviation
-import pwlf
-# from ticoi.ALPS_Functions import Outlier
-from scipy import interpolate
+
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
 # =========================================================================%% #
@@ -113,6 +116,7 @@ def gaussian_smooth(
     except:
         return np.zeros(len(t_out))
 
+
 import numpy as np
 
 
@@ -145,7 +149,7 @@ def non_uniform_savgol(x, y, window, polynom):
         raise ValueError('"x" and "y" must be of the same size')
 
     if len(x) < window:
-        raise ValueError('The data size must be larger than the window size')
+        raise ValueError("The data size must be larger than the window size")
 
     if type(window) is not int:
         raise TypeError('"window" must be an integer')
@@ -163,9 +167,9 @@ def non_uniform_savgol(x, y, window, polynom):
     polynom += 1
 
     # Initialize variables
-    A = np.empty((window, polynom))     # Matrix
-    tA = np.empty((polynom, window))    # Transposed matrix
-    t = np.empty(window)                # Local x variables
+    A = np.empty((window, polynom))  # Matrix
+    tA = np.empty((polynom, window))  # Transposed matrix
+    t = np.empty(window)  # Local x variables
     y_smoothed = np.full(len(y), np.nan)
 
     # Start smoothing
@@ -226,46 +230,48 @@ def non_uniform_savgol(x, y, window, polynom):
 
     return y_smoothed
 
+
 # from statsmodels.nonparametric.smoothers_lowess import lowess
+#
+# def lowess_smooth(
+#     series: np.ndarray,
+#     t_obs: np.ndarray,
+#     t_interp: np.ndarray,
+#     t_out: np.ndarray,
+#     t_win: int = 90,
+#     sigma: int = 3,
+#     order: int | None = 3,
+# ) -> np.ndarray:
+#
+#     try:
+#         frac = 180 / len(t_interp)
+#
+#         not_nan = ~np.isnan(series)
+#         series, t_obs = series[not_nan], t_obs[not_nan]
+#         # dy = np.gradient(series, t_obs)
+#         # smoothed_dy = lowess(dy, t_obs, frac=frac, return_sorted=False)
+#         # y_smooth = np.zeros_like(t_obs)
+#         # y_smooth[0] = series[0]
+#
+#         # # 对于每个点，使用梯形规则累加积分
+#         # for i in range(1, len(t_obs)):
+#         #     delta_x = t_obs[i] - t_obs[i - 1]
+#         #     # 使用梯度（变化率）直接更新Y值
+#         #     y_smooth[i] = y_smooth[i - 1] + smoothed_dy[i - 1] * delta_x
+#
+#         # # 插值到指定的输出时间点
+#         # series_interp = np.interp(t_interp, t_obs, y_smooth)
+#         # return series_interp[t_out]
+#
+#         series_smooth = lowess(series, t_obs, frac=frac, return_sorted=False)
+#         series_interp = np.interp(t_interp, t_obs, series_smooth)
+#         return series_interp[t_out]
+#     except:
+#         return np.zeros(len(t_out))
 
-def lowess_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
-    
-    try:
-        frac = 180 / len(t_interp)
-        
-        not_nan = ~np.isnan(series)
-        series, t_obs = series[not_nan], t_obs[not_nan]
-        # dy = np.gradient(series, t_obs)
-        # smoothed_dy = lowess(dy, t_obs, frac=frac, return_sorted=False)
-        # y_smooth = np.zeros_like(t_obs)
-        # y_smooth[0] = series[0]
-        
-        # # 对于每个点，使用梯形规则累加积分
-        # for i in range(1, len(t_obs)):
-        #     delta_x = t_obs[i] - t_obs[i - 1]
-        #     # 使用梯度（变化率）直接更新Y值
-        #     y_smooth[i] = y_smooth[i - 1] + smoothed_dy[i - 1] * delta_x
-        
-        # # 插值到指定的输出时间点
-        # series_interp = np.interp(t_interp, t_obs, y_smooth)
-        # return series_interp[t_out]
-        
-        series_smooth = lowess(series, t_obs, frac=frac, return_sorted=False)
-        series_interp = np.interp(t_interp, t_obs, series_smooth)
-        return series_interp[t_out]
-    except:
-        return np.zeros(len(t_out))
-
-from sklearn.decomposition import FastICA
 import numpy as np
+from sklearn.decomposition import FastICA
+
 
 def ica_denoise(
     series: np.ndarray,
@@ -311,40 +317,41 @@ def ica_denoise(
         # series_denoised_flat = series_denoised.flatten()
 
         # Interpolate to get values at the desired output time points
-        denoised_output = np.interp(t_interp, t_obs, data_denoised[:,0])
+        denoised_output = np.interp(t_interp, t_obs, data_denoised[:, 0])
         # denoised_output = np.interp(t_out, t_interp, series_denoised_flat)
 
         return denoised_output[t_out]
     except Exception as e:
         return np.zeros(len(t_out))
 
-def pwlf_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
-    
-    t_obs = t_obs[~np.isnan(series)]
-    series = series[~np.isnan(series)]
-    
-    try:
-        my_pwlf = pwlf.PiecewiseLinFit(t_obs, series)
-        res = my_pwlf.fitfast(6, pop=3)
-        series_pwlf = my_pwlf.predict(t_obs)
-        residual = series - series_pwlf
-        residual_filt = mz_score_filt(residual, t_obs, axis=0)
-        series_smooth = series_pwlf + residual_filt
-        series_interp = np.interp(t_interp, t_obs, series_smooth)
-        return series_interp[t_out]
-    except:
-        return np.zeros(len(t_out))
-        
 
-from scipy.interpolate import make_lsq_spline, BSpline
+#
+# def pwlf_smooth(
+#     series: np.ndarray,
+#     t_obs: np.ndarray,
+#     t_interp: np.ndarray,
+#     t_out: np.ndarray,
+#     t_win: int = 90,
+#     sigma: int = 3,
+#     order: int | None = 3,
+# ) -> np.ndarray:
+#
+#     t_obs = t_obs[~np.isnan(series)]
+#     series = series[~np.isnan(series)]
+#
+#     try:
+#         my_pwlf = pwlf.PiecewiseLinFit(t_obs, series)
+#         res = my_pwlf.fitfast(6, pop=3)
+#         series_pwlf = my_pwlf.predict(t_obs)
+#         residual = series - series_pwlf
+#         residual_filt = mz_score_filt(residual, t_obs, axis=0)
+#         series_smooth = series_pwlf + residual_filt
+#         series_interp = np.interp(t_interp, t_obs, series_smooth)
+#         return series_interp[t_out]
+#     except:
+#         return np.zeros(len(t_out))
+#
+
 
 def bspline_smooth(
     series: np.ndarray,
@@ -355,44 +362,44 @@ def bspline_smooth(
     sigma: int = 3,
     order: int | None = 3,
 ) -> np.ndarray:
-    
+
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
-    
+
     try:
         order = 3
         n_knots = len(t_interp) // 90
         knots = np.linspace(t_obs.min(), t_obs.max(), n_knots - order + 1)
         knots = np.concatenate(([t_obs.min()] * order, knots, [t_obs.max()] * order))
-        
+
         bspline = make_lsq_spline(t_obs, series, knots, order)
         series_smooth = bspline(t_out)
         return series_smooth
     except:
         return np.zeros(len(t_out))
 
-def alps_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
-    
-    t_obs = t_obs[~np.isnan(series)]
-    series = series[~np.isnan(series)]
-    try:
-        data, out = Outlier(np.column_stack((series, t_obs)), thresh1=3, thresh2=1.5)
-        series_smooth, t_obs_smooth = data[:,0], data[:,1]
-        series_interp = np.interp(t_interp, t_obs_smooth, series_smooth)
-        series_smooth = savgol_filter(series_interp, window_length=90, polyorder=order, axis=-1)
 
-        return series_smooth[t_out]
-    except:
-        return np.zeros(len(t_out))
-
+# def alps_smooth(
+#     series: np.ndarray,
+#     t_obs: np.ndarray,
+#     t_interp: np.ndarray,
+#     t_out: np.ndarray,
+#     t_win: int = 90,
+#     sigma: int = 3,
+#     order: int | None = 3,
+# ) -> np.ndarray:
+#
+#     t_obs = t_obs[~np.isnan(series)]
+#     series = series[~np.isnan(series)]
+#     try:
+#         data, out = Outlier(np.column_stack((series, t_obs)), thresh1=3, thresh2=1.5)
+#         series_smooth, t_obs_smooth = data[:,0], data[:,1]
+#         series_interp = np.interp(t_interp, t_obs_smooth, series_smooth)
+#         series_smooth = savgol_filter(series_interp, window_length=90, polyorder=order, axis=-1)
+#
+#         return series_smooth[t_out]
+#     except:
+#         return np.zeros(len(t_out))
 
 
 def smoothing_cubic_spline_smooth(
@@ -416,7 +423,8 @@ def smoothing_cubic_spline_smooth(
 
     :return:The smoothed series corresponding to the output time values t_out
     """
-    from scipy.interpolate import splrep, BSpline
+    from scipy.interpolate import BSpline, splrep
+
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
@@ -429,21 +437,22 @@ def smoothing_cubic_spline_smooth(
         # smoothing_spline = make_smoothing_spline(t_obs, series)
         # series_interp = smoothing_spline(t_out)
 
-        #With outliers detetection
-        smoothing_spline = splrep(t_obs, series, s=len(t_obs)*100)
-        series_interp = BSpline(*smoothing_spline,extrapolate=False)(t_obs)
+        # With outliers detetection
+        smoothing_spline = splrep(t_obs, series, s=len(t_obs) * 100)
+        series_interp = BSpline(*smoothing_spline, extrapolate=False)(t_obs)
         t_obs_filtered = t_obs[abs(series_interp - series) / series_interp * 100 < 50]
         series_filtered = series[abs(series_interp - series) / series_interp * 100 < 50]
         smoothing_spline = splrep(t_obs_filtered, series_filtered, s=len(t_obs_filtered) * 100)
-        series_interp = BSpline(*smoothing_spline,extrapolate=False)(t_out)
+        series_interp = BSpline(*smoothing_spline, extrapolate=False)(t_out)
 
         # noinspection PyTypeChecker
         # series_smooth = median_filter(series_interp, size=t_win, mode="reflect", axes=0)
     except:
-        print('Error in smoothing spline')
+        print("Error in smoothing spline")
         return np.zeros(len(t_out))
 
     return series_interp
+
 
 def ridge_regression_smooth(
     series: np.ndarray,
@@ -467,36 +476,38 @@ def ridge_regression_smooth(
     :return:The smoothed series corresponding to the output time values t_out
     """
     from sklearn.kernel_ridge import KernelRidge
-    from sklearn.model_selection import GridSearchCV
     from sklearn.metrics import mean_squared_error
+    from sklearn.model_selection import GridSearchCV
+
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
-        #search for the best parameters
+        # search for the best parameters
         param_grid = {
-    'alpha': [1e-3, 1e-2, 1e-1, 1, 10, 100],
-    'gamma': np.logspace(-2, 2, 5)  # [0.01, 0.1, 1, 10, 100]
-}
-        krr = KernelRidge(kernel='rbf')
+            "alpha": [1e-3, 1e-2, 1e-1, 1, 10, 100],
+            "gamma": np.logspace(-2, 2, 5),  # [0.01, 0.1, 1, 10, 100]
+        }
+        krr = KernelRidge(kernel="rbf")
 
-        grid_search = GridSearchCV(krr, param_grid, cv=5, scoring='neg_mean_squared_error')
+        grid_search = GridSearchCV(krr, param_grid, cv=5, scoring="neg_mean_squared_error")
         grid_search.fit(t_obs.reshape(-1, 1), series.reshape(-1, 1))
 
         # Extract the best parameters
-        best_alpha = grid_search.best_params_['alpha']
-        best_gamma = grid_search.best_params_['gamma']
+        best_alpha = grid_search.best_params_["alpha"]
+        best_gamma = grid_search.best_params_["gamma"]
 
-        print(best_alpha,best_gamma)
-        krr = KernelRidge(kernel='rbf', alpha=best_alpha, gamma=best_gamma)
+        print(best_alpha, best_gamma)
+        krr = KernelRidge(kernel="rbf", alpha=best_alpha, gamma=best_gamma)
         # Fit the model
         krr.fit(t_obs.reshape(-1, 1), series.reshape(-1, 1))
         series_interp = krr.predict(t_out.reshape(-1, 1))
 
     except:
-        print('Error in smoothing spline')
+        print("Error in smoothing spline")
         return np.zeros(len(t_out))
 
     return series_interp.ravel()
+
 
 def median_smooth(
     series: np.ndarray,
@@ -531,6 +542,7 @@ def median_smooth(
 
     return series_smooth[t_out]
 
+
 def savgol_smooth(
     series: np.ndarray,
     t_obs: np.ndarray,
@@ -562,6 +574,7 @@ def savgol_smooth(
         return np.zeros(len(t_out))
 
     return series_smooth[t_out]
+
 
 def savgol_non_uniform_smooth(
     series: np.ndarray,
@@ -696,9 +709,32 @@ def dask_smooth_wrapper(
     )  # Time stamps for interpolated velocity, here every day
 
     # Apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
-    filt_func = {"gaussian": gaussian_smooth, "ewma": ewma_smooth, "median": median_smooth, "savgol": savgol_smooth, 
-                 "ICA": ica_denoise, "lowess": lowess_smooth, "pwlf": pwlf_smooth, "bspline": bspline_smooth, "alps": alps_smooth,"savgol_non_uniform": savgol_non_uniform_smooth,'smoothing_spline':smoothing_cubic_spline_smooth,'ridge_regression':ridge_regression_smooth}
+    filt_func = {
+        "gaussian": gaussian_smooth,
+        "ewma": ewma_smooth,
+        "median": median_smooth,
+        "savgol": savgol_smooth,
+        "ICA": ica_denoise,
+        "bspline": bspline_smooth,
+        "savgol_non_uniform": savgol_non_uniform_smooth,
+        "smoothing_spline": smoothing_cubic_spline_smooth,
+        "ridge_regression": ridge_regression_smooth,
+    }
 
+    # filt_func = {
+    #     "gaussian": gaussian_smooth,
+    #     "ewma": ewma_smooth,
+    #     "median": median_smooth,
+    #     "savgol": savgol_smooth,
+    #     "ICA": ica_denoise,
+    #     "lowess": lowess_smooth,
+    #     "pwlf": pwlf_smooth,
+    #     "bspline": bspline_smooth,
+    #     "alps": alps_smooth,
+    #     "savgol_non_uniform": savgol_non_uniform_smooth,
+    #     "smoothing_spline": smoothing_cubic_spline_smooth,
+    #     "ridge_regression": ridge_regression_smooth,
+    # }
     da_smooth = dask_array.map_blocks(
         dask_smooth,
         filt_func=filt_func[smooth_method],
@@ -733,6 +769,7 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
     return inlier_flag
 
+
 def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
 
     """
@@ -744,14 +781,15 @@ def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
     """
 
     med = np.nanmedian(obs, axis=axis, keepdims=True)
-    mad = np.nanmedian(abs(obs-med), axis=axis, keepdims=True)
+    mad = np.nanmedian(abs(obs - med), axis=axis, keepdims=True)
 
     # mad = median_abs_deviation(obs, axis=axis)
 
-    mz_scores = 0.6745*(obs - med) / mad
+    mz_scores = 0.6745 * (obs - med) / mad
     inlier_flag = np.abs(mz_scores) < mz_thres
 
     return inlier_flag
+
 
 def NVVC_angle_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
@@ -858,7 +896,7 @@ def topo_angle_filt(
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
-    
+
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
     velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
 
@@ -877,6 +915,7 @@ def topo_angle_filt(
     inlier_flag = np.logical_and(slope_filter, aspect_filter.data)
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
+
 
 def flow_angle_filt(
     obs_cpx: xr.DataArray,
@@ -900,20 +939,22 @@ def flow_angle_filt(
     angle_rad = np.arctan2(vx, vy)
 
     flow_direction = (np.rad2deg(angle_rad) + 360) % 360
-    
+
     direction_diff = np.abs((flow_direction - direction + 180) % 360 - 180)
-    
+
     angle_filter = direction_diff < angle_thres
-    
+
     # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
     # valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
-    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2) 
+    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2)
     # bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
 
     # mag_filter = np.where(bis_cond , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     # angle_filter[np.expand_dims(np.isnan(direction), axis=2)] = True
-    angle_filter = angle_filter.where(~np.isnan(direction), True) # change the stable area to true incase of all invalid data
-    mag_filter = np.where(~np.isnan(direction) , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    angle_filter = angle_filter.where(
+        ~np.isnan(direction), True
+    )  # change the stable area to true in case of all invalid data
+    mag_filter = np.where(~np.isnan(direction), True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     inlier_flag = np.logical_and(mag_filter, angle_filter.data)
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
@@ -1030,7 +1071,6 @@ def dask_filt_warpper(
         inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
-
 
     elif filt_method == "magnitude":  # delete according to a threshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)

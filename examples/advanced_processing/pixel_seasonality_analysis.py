@@ -41,7 +41,7 @@ proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # i, j = 342890.4,5092114.7  # Point (pixel) where to carry on the computation
 i, j = 343686.3, 5091294.9  # Pixel coordinates
-i, j = 337783.8,5079818.0
+i, j = 337783.8, 5079818.0
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used
