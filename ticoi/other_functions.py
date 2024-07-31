@@ -443,8 +443,20 @@ def VVC_TICOI(
     regu: int | str | None = None,
 ):
 
-    """ """
-
+    """
+    Compute TICOI for one particular coefficent, and compute the VVC
+    :param data:
+    :param mean:
+    :param dates_range:
+    :param i:
+    :param j:
+    :param coef:
+    :param inversion_kwargs:
+    :param interpolation_kwargs:
+    :param regu:
+    :return:
+    """
+    #TODO commentaire Laurane: pourquoi cette option ici ?
     # Proceed to inversion
     if regu is None:
         A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, coef=coef, **inversion_kwargs)
@@ -491,7 +503,9 @@ def optimize_coef(
 ):
 
     """
-    Compute the RMSE between the velocities obtained with TICOI using velocity data and "ground truth" (GT) data for different coefficients.
+    Optimization of the regularization coefficient value for the TICOI post-processing method, either by comparing the results
+    to a "ground truth" (method='ground_truth') or a zero velocity in stable ground ('stable_ground'), or by computing the
+    Velocity Vector Coherence of the results (method = 'vvc').
 
     :param cube: [cube_data_class] --- Data cube used to compute TICOI at point (i, j)
     :param cube_gt: [cube_data_class] --- Data cube of "ground truth" velocities
@@ -565,7 +579,7 @@ def optimize_coef(
 
     # Coefficients to be tested
     if coefs is None:
-        coefs = np.arange(cmin, cmax + 1, step)
+        coefs = np.arange(cmin, cmax + 1, step)#range of coef
     else:
         coefs = np.array(coefs)
 
