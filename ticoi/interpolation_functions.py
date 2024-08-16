@@ -234,7 +234,7 @@ def visualisation_interpolation(
 
     pixel_object = pixel_class()
     pixel_object.load(
-        list_dataf, save=save, show=show, path_save=path_save, type_data=["obs", "interp"], figsize=figsize
+        list_dataf, save=save, show=show, path_save=path_save, type_data=["obs", "invert", "interp"], figsize=figsize
     )
 
     dico_visual = {
@@ -251,8 +251,10 @@ def visualisation_interpolation(
             lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
         ),
         "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp")),
+        "invert_interp_obs_residual": (lambda pix: pix.plot_invert_interp_obs_residual()),
     }
 
     for option in option_visual:
         if option in dico_visual.keys():
-            dico_visual[option](pixel_object)
+            ax, fig = dico_visual[option](pixel_object)
+    return ax, fig

@@ -724,6 +724,17 @@ class cube_data_class:
         """
         self.__init__()
 
+        time_dim_name = {
+            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
+            "J. Mouginot, R.Millan, A.Derkacheva": "z",
+            "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
+            "L. Charrier, L. Guo": "mid_date",
+            "L. Charrier": "mid_date",
+            "E. Ducasse": "time",
+            "S. Leinss, L. Charrier": "mid_date",
+            "IGE": "mid_date",
+        }
+        
         assert (
             type(filepath) == list or type(filepath) == str
         ), f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
@@ -771,19 +782,15 @@ class cube_data_class:
                     )
                 self.merge_cube(cube2)  # Merge the new cube to the main one
             del cube2
+            if chunks == {}:  # Rechunk with optimal chunk size
+                var_name = "vx" if not self.is_TICO else "dx"
+                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
+                tc, yc, xc = self.determine_optimal_chunk_size(
+                    variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
+                )
+                self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
         else:  # Load one cube
-            time_dim_name = {
-                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
-                "J. Mouginot, R.Millan, A.Derkacheva": "z",
-                "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
-                "L. Charrier, L. Guo": "mid_date",
-                "L. Charrier": "mid_date",
-                "E. Ducasse": "time",
-                "S. Leinss, L. Charrier": "mid_date",
-                "IGE": "mid_date",
-            }
-
             with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
                 if filepath.split(".")[-1] == "nc":
                     try:
@@ -1523,7 +1530,7 @@ class cube_data_class:
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     # while (len(idx[0]) < 3 * len(
                     #             date_out)):
-                    #     select_baseline += 30
+                    select_baseline += 30
                     idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
@@ -1564,7 +1571,7 @@ class cube_data_class:
             ):  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
                 spatial_axis = tuple(i for i in range(3) if i != time_axis)
                 pad_widths = tuple((s_win // 2, s_win // 2) if i != time_axis else (0, 0) for i in range(3))
-                spatial_mean = da.nanmean(
+                spatial_mean = da.nanmedian(
                     sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis), axis=(-1, -2)
                 )
                 spatial_mean = da.pad(spatial_mean, pad_widths, mode="edge")
