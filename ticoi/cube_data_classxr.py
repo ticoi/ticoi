@@ -14,7 +14,11 @@ import itertools
 import os
 import time
 import warnings
+from datetime import date
+from typing import List, Optional, Union
+
 import dask
+import dask.array as da
 import geopandas
 import numpy as np
 import pandas as pd
@@ -22,18 +26,17 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import richdem as rd
-import contextlib
 import xarray as xr
-import dask.array as da
-
-from datetime import date
-from typing import List, Optional, Union
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 
-from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper, median_filter
+from ticoi.filtering_functions import (
+    dask_filt_warpper,
+    dask_smooth_wrapper,
+    median_filter,
+)
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
@@ -734,7 +737,7 @@ class cube_data_class:
             "S. Leinss, L. Charrier": "mid_date",
             "IGE": "mid_date",
         }
-        
+
         assert (
             type(filepath) == list or type(filepath) == str
         ), f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
@@ -1300,19 +1303,19 @@ class cube_data_class:
         else:
             vx = self.ds["vx"]
             vy = self.ds["vy"]
-            
+
         temporal_baseline = self.ds["temporal_baseline"].values
         temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
         vx_weighted = np.nansum(vx.values * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
         vy_weighted = np.nansum(vy.values * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
-        
-        v_mean_weighted = np.sqrt(vx_weighted ** 2 + vy_weighted ** 2)
-        
+
+        v_mean_weighted = np.sqrt(vx_weighted**2 + vy_weighted**2)
+
         direction = np.arctan2(vx_weighted, vy_weighted)
         direction = (np.rad2deg(direction) + 360) % 360
-        
+
         direction = np.where(v_mean_weighted < 1.5, np.nan, direction)
-        
+
         direction = xr.Dataset(
             data_vars=dict(
                 direction=(["y", "x"], np.array(direction.T)),
@@ -1446,7 +1449,6 @@ class cube_data_class:
                         y=(["y"], self.ds.y.data),
                     ),
                 )
-
 
             elif not isinstance(flag, xr.Dataset):
                 raise ValueError("flag file must be .nc or .shp")
@@ -1627,7 +1629,9 @@ class cube_data_class:
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction)
+            self.delete_outliers(
+                delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction
+            )
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 

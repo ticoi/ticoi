@@ -16,7 +16,7 @@ import pandas as pd
 import scipy.ndimage as ndi
 from numba import jit
 from scipy import interpolate
-from numba import jit
+
 from ticoi.pixel_class import pixel_class
 
 
@@ -41,6 +41,7 @@ def prepare_interpolation_date(
     last_date_interpol = np.max(cube.date2_())
 
     return first_date_interpol, last_date_interpol
+
 
 def reconstruct_common_ref(
     result: pd.DataFrame,
