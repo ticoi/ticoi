@@ -14,7 +14,7 @@ from tqdm import tqdm
 from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.other_functions import optimize_coef
-
+import scipy.interpolate as interp
 
 async def process_block(cube,
     block,
@@ -167,16 +167,39 @@ def find_good_coefs(
     visual=False,
 ):
     if select_method == "curvature":
-        smooth_measures = [
-            measures[i - 1] / 4 + measures[i] / 2 + measures[i - 1] / 4 for i in range(1, len(measures) - 1)
-        ]
-        accel = np.array(
-            [
-                (smooth_measures[i + 1] - 2 * smooth_measures[i] + smooth_measures[i - 1])
-                / ((coefs[i + 2] - coefs[i]) / 2) ** 2
-                for i in range(1, len(coefs) - 3)
-            ]
-        )
+
+
+        # Create a uniform grid
+        coefs_uniform = np.linspace(coefs.min(), coefs.max(), 10000)
+        print(coefs_uniform)
+        # Interpolate x and y to the uniform grid
+        interpfunction = interp.interp1d(coefs, measures, kind='cubic', fill_value="extrapolate")
+        measures_interp = interpfunction(coefs_uniform)
+        # First derivatives
+        dx = np.gradient(coefs_uniform)
+        dy = np.gradient(measures_interp)
+        # Second derivatives
+        ddx = np.gradient(dx)
+        ddy = np.gradient(dy)
+        # Calculate the curvature using the formula
+        accel = np.abs(dx * ddy - dy * ddx) / (dx ** 2 + dy ** 2) ** 1.5
+
+        #
+        # smooth_measures = [
+        #     measures[i - 1] / 4 + measures[i] / 2 + measures[i - 1] / 4 for i in range(1, len(measures) - 1)
+        # ]
+        # accel = np.array(
+        #     [
+        #         (smooth_measures[i + 1] - 2 * smooth_measures[i] + smooth_measures[i - 1])
+        #         / ((coefs[i + 2] - coefs[i]) / 2) ** 2
+        #         for i in range(1, len(coefs) - 3)
+        #     ]
+        # )
+        plt.plot(coefs_uniform, accel)
+        plt.show()
+
+        plt.plot(coefs_uniform, measures_interp)
+        plt.show()
 
         if visual:
             plt.plot(coefs[2:-2], accel)
@@ -189,8 +212,12 @@ def find_good_coefs(
             good_measure = measures[np.argmin(accel) + 2]
             good_coefs = coefs[measures < good_measure]
         elif method == "vvc":
-            best_coef = coefs[np.argmax(measures)]
-            best_measure = np.max(measures)
+            # best_coef = coefs[np.argmax(measures)]
+            # best_measure = np.max(measures)
+            # good_measure = measures[np.argmax(accel) + 2]
+            # good_coefs = coefs[measures > good_measure]
+            best_coef = coefs_uniform[np.argmin(accel)]
+            best_measure = np.argmin(accel)
             good_measure = measures[np.argmax(accel) + 2]
             good_coefs = coefs[measures > good_measure]
 

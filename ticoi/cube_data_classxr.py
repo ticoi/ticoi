@@ -1527,9 +1527,7 @@ class cube_data_class:
                 while len(idx[0]) < 3 * len(date_out) & (
                     select_baseline < 200
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
-                    # while (len(idx[0]) < 3 * len(
-                    #             date_out)):
-                    #     select_baseline += 30
+                    select_baseline += 30
                     idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])

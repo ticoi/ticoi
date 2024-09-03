@@ -114,12 +114,15 @@ def inversion_iteration(
         :return weight: [np array] Weight for the inversion
         """
 
-        r_std = residu / (stats.median_abs_deviation(residu) / 0.6745)
-        if Weight is not None:  # The weight is a combination of apriori weight and the studentized residual
-            # Weight = Weight / (stats.median_abs_deviation(Weight) / 0.6745)
-            weight = Weight * TukeyBiweight(r_std, 4.685)
-        else:
-            weight = TukeyBiweight((r_std), 4.685)
+        mad = (stats.median_abs_deviation(residu) / 0.6745)
+        if mad != 0.0:
+            r_std = residu / mad
+            if Weight is not None:  # The weight is a combination of apriori weight and the studentized residual
+                # Weight = Weight / (stats.median_abs_deviation(Weight) / 0.6745)
+                weight = Weight * TukeyBiweight(r_std, 4.685)
+            else:
+                weight = TukeyBiweight((r_std), 4.685)
+        else: weight = np.ones(residu.shape[0])
 
         return weight
 
@@ -272,9 +275,9 @@ def inversion_core(
 ) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
 
     """
-    Computes A in AX = Y and does the inversion using a given solver.
+    Computes A in AX = Y and does the inversion using a given solver and regularization.
 
-    :param data: [list] --- An array where each line is (date1, date2, other elements ) for which a velocity is computed (correspond to the original displacements)
+    :param data: [list] --- List of arrays, representing the observations: the first array contain the first and last acquisition dates, the second array contain the displacements values and errors, and optionally the last array contain information about the sensor, author, etc
     :params i, j: [float | int] --- Coordinates of the point in pixel
     :param dates_range: [np array | None] [default is None] --- List of np.datetime64 [D], dates of the estimated displacement in X with an irregular temporal sampling (ILF)
     :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
@@ -301,7 +304,7 @@ def inversion_core(
 
     if data[0].size:  # If there are available data on this pixel
 
-        # Split the data, which one dtype per array
+        # Split the data, with one dtype per array
         if len(data) == 3:
             data_dates, data_values, data_str = data
         else:
@@ -310,14 +313,15 @@ def inversion_core(
         if dates_range is None:
             dates_range = construction_dates_range_np(
                 data_dates
-            )  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+            )
 
         ####  Build A (design matrix in AX = Y)
         if not linear_operator:
             A = construction_a_lf(
                 data_dates, dates_range
-            )  # 1.93 ms ± 219 µs per loop (mean ± std. dev. of 7 runs, 1 loop each)
-        else:  # use a linear operator to solve the inversion
+            )
+            linear_operator = None
+        else:  # use a linear operator to solve the inversion, it is sometimes faster
             linear_operator = class_linear_operator()
             linear_operator.load(
                 find_date_obs(data_dates[:, :2], dates_range), dates_range, coef
@@ -330,7 +334,6 @@ def inversion_core(
             mu = None
 
         # Set a weight of 0, for large temporal baseline in the first inversion
-        # 115 µs ± 1.2 µs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
         weight_temporal_decorrelation = (
             np.where(data_values[:, 4] > 200, 0, 1) if detect_temporal_decorrelation else None
         )
@@ -352,10 +355,10 @@ def inversion_core(
             temporal_decorrelation=weight_temporal_decorrelation,
         )
         del weight_temporal_decorrelation
-        if not visual and not apriori_weight_in_second_iteration and not "Error_propagation" in result_quality:
-            data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
+        if not visual:
+            if result_quality is not None and not apriori_weight_in_second_iteration and not "Error_propagation" in result_quality:
+                data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
-        # 493 µs ± 2.35 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
         if not linear_operator:
             if regu == "directionxy":
                 # Constrain according to the vectorial product, the magnitude of the vector corresponds to mean2, the magnitude of a rolling mean
@@ -365,6 +368,7 @@ def inversion_core(
 
         ##  Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
+        #TODO: we can make it shorter
         if regu == "1accelnotnull":
             accel = [
                 np.diff(mean[0]),
@@ -386,7 +390,6 @@ def inversion_core(
             accel = None
 
         ##  Inversion
-        # 87.5 ms ± 668 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
         if regu == "directionxy":
             result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(
                 A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef, ini=mean_ini
@@ -509,8 +512,9 @@ def inversion_core(
                 weight_ix = weight_2x
 
             del result_dx, result_dy
-            if not visual and not "Error_propagation" in result_quality:
-                del data_values, data_dates
+            if not visual:
+                if result_quality is not None and "Error_propagation" in result_quality:
+                    del data_values, data_dates
 
         else:  # If not iteration
             result_dy_i = result_dy
@@ -530,7 +534,7 @@ def inversion_core(
         # TODO terminate propgation of errors
         if result_quality is not None and "Error_propagation" in result_quality:
 
-            def Prop_weight(weight, pos):
+            def Prop_weightVictor(weight, pos, F_regu):
                 F = np.vstack([np.multiply(weight[:, np.newaxis], A), F_regu]).astype("float32")
                 if pos == 0:
                     Residu = data_values[:, pos] - F @ result_dx_i
@@ -539,15 +543,20 @@ def inversion_core(
 
                 prop_wieght_diag = np.diag(np.linalg.inv(F.T @ F))
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
+                alpha = 0.05  # Confidence level
+                t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
 
-                # def Prop_weight(weight, Residu, error):
-                # W = np.diag(weight_ix.astype("float32"))
-                # FTWF = F.T * W @ F
-                # N = np.linalg.inv(FTWF + coef * mu.T @ mu)
-                # Prop_weight = N @ F.T @ W @ error @ W @ F @ N
-                # sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
-                # prop_wieght_diag = np.diag(Prop_weight)
-                # # Compute the confidence intervals
+                return prop_wieght_diag, sigma0_weight, t_value
+
+            def Prop_weight(weight, Residu, error):
+                W = np.diag(weight.astype("float32"))
+                FTWF = F.T * W @ F
+                N = np.linalg.inv(FTWF + coef * mu.T @ mu)
+                Prop_weight = N @ F.T @ W @ error @ W @ F @ N
+                # Prop_weight = N @ F.T @ W @ F @ N
+                sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
+                prop_wieght_diag = np.diag(Prop_weight)
+                # Compute the confidence intervals
                 alpha = 0.05  # Confidence level
                 t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
 
@@ -555,18 +564,22 @@ def inversion_core(
 
             #
             # # if not 'GCV' in result_quality:
-            # F = sp.csc_matrix(A, dtype="float32")
-            # Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
-            # # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 3] * data_values[:, -1] / unit)**2))
+            F = sp.csc_matrix(A, dtype="float32")
+            Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
+            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 2])**2))
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 3] * data_values[:, -1] / unit)**2))
             # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag(Residux**2))
             #
-            # Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            # # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 4]* data_values[:, -1] / unit)**2))
+            Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 4]* data_values[:, -1] / unit)**2))
+            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 3])**2))
             # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
-            A = sp.csc_matrix(A, dtype="float32")
-            F_regu = np.multiply(coef, mu)
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, pos=0)
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, pos=1)
+
+            #Victor method
+            # A = sp.csc_matrix(A, dtype="float32")
+            # F_regu = np.multiply(coef, mu)
+            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weightVictor(weight_ix, pos=0)
+            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weightVictor(weight_iy, pos=1)
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:
@@ -593,7 +606,7 @@ def inversion_core(
                 }
             )
             if (
-                residu_normx is not None
+                    residu_normx is not None
             ):  # save the L2-norm from the last inversion, of the term AXY and the regularization term for the x- and y-component
                 NormR = np.zeros(data_values.shape[0])
                 NormR[:4] = np.hstack(
@@ -609,7 +622,7 @@ def inversion_core(
             print(f"[Inversion] NO DATA TO INVERSE AT POINT {i, j}")
         return None, None, None
 
-    # pandas dataframe with the saved results
+        # pandas dataframe with the saved results
     result = pd.DataFrame(
         {
             "date1": dates_range[:-1],
@@ -637,7 +650,6 @@ def inversion_core(
             result["sigma0"] = sigma
 
     return A, result, dataf
-
 
 # %% ======================================================================== #
 #                               INTERPOLATION                                 #
@@ -1272,7 +1284,7 @@ def visualization_core(
     path_save: Optional[str] = None,
     A: Optional[np.array] = None,
     log_scale: bool = False,
-    cmap: str = "rainbow",
+    cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
     figsize: tuple[int, int] = (10, 6),
 ):
