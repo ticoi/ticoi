@@ -231,43 +231,44 @@ def non_uniform_savgol(x, y, window, polynom):
     return y_smoothed
 
 
-# from statsmodels.nonparametric.smoothers_lowess import lowess
-#
-# def lowess_smooth(
-#     series: np.ndarray,
-#     t_obs: np.ndarray,
-#     t_interp: np.ndarray,
-#     t_out: np.ndarray,
-#     t_win: int = 90,
-#     sigma: int = 3,
-#     order: int | None = 3,
-# ) -> np.ndarray:
-#
-#     try:
-#         frac = 180 / len(t_interp)
-#
-#         not_nan = ~np.isnan(series)
-#         series, t_obs = series[not_nan], t_obs[not_nan]
-#         # dy = np.gradient(series, t_obs)
-#         # smoothed_dy = lowess(dy, t_obs, frac=frac, return_sorted=False)
-#         # y_smooth = np.zeros_like(t_obs)
-#         # y_smooth[0] = series[0]
-#
-#         # # 对于每个点，使用梯形规则累加积分
-#         # for i in range(1, len(t_obs)):
-#         #     delta_x = t_obs[i] - t_obs[i - 1]
-#         #     # 使用梯度（变化率）直接更新Y值
-#         #     y_smooth[i] = y_smooth[i - 1] + smoothed_dy[i - 1] * delta_x
-#
-#         # # 插值到指定的输出时间点
-#         # series_interp = np.interp(t_interp, t_obs, y_smooth)
-#         # return series_interp[t_out]
-#
-#         series_smooth = lowess(series, t_obs, frac=frac, return_sorted=False)
-#         series_interp = np.interp(t_interp, t_obs, series_smooth)
-#         return series_interp[t_out]
-#     except:
-#         return np.zeros(len(t_out))
+def gp_smooth(
+    series: np.ndarray,
+    t_obs: np.ndarray,
+    t_interp: np.ndarray,
+    t_out: np.ndarray,
+    t_win: int = 90,
+    sigma: int = 3,
+    order: int | None = 3,
+) -> np.ndarray:
+    kernel = C(1.0, (1e-4, 1e1)) * RBF(10, (1e-2, 1e2))
+    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
+
+    gp.fit(df_aggregated.index.values[:, np.newaxis], df_aggregated['value'].values)
+    t_new = np.linspace(df_aggregated.index.min(), df_aggregated.index.max(), 3000)
+    y_pred, sigma = gp.predict(t_new[:, np.newaxis], return_std=True)
+
+from statsmodels.nonparametric.smoothers_lowess import lowess
+
+def lowess_smooth(
+    series: np.ndarray,
+    t_obs: np.ndarray,
+    t_interp: np.ndarray,
+    t_out: np.ndarray,
+    t_win: int = 90,
+    sigma: int = 3,
+    order: int | None = 3,
+) -> np.ndarray:
+
+    try:
+        frac = t_win / len(t_interp)
+
+        not_nan = ~np.isnan(series)
+        series, t_obs = series[not_nan], t_obs[not_nan]
+        series_smooth = lowess(series, t_obs, frac=frac, return_sorted=False)
+        series_interp = np.interp(t_interp, t_obs, series_smooth)
+        return series_interp[t_out]
+    except:
+        return np.zeros(len(t_out))
 
 import numpy as np
 from sklearn.decomposition import FastICA
@@ -438,11 +439,11 @@ def smoothing_cubic_spline_smooth(
         # series_interp = smoothing_spline(t_out)
 
         # With outliers detetection
-        smoothing_spline = splrep(t_obs, series, s=len(t_obs) * 100)
+        smoothing_spline = splrep(t_obs, series, s=len(t_obs)*100)
         series_interp = BSpline(*smoothing_spline, extrapolate=False)(t_obs)
         t_obs_filtered = t_obs[abs(series_interp - series) / series_interp * 100 < 50]
         series_filtered = series[abs(series_interp - series) / series_interp * 100 < 50]
-        smoothing_spline = splrep(t_obs_filtered, series_filtered, s=len(t_obs_filtered) * 100)
+        smoothing_spline = splrep(t_obs_filtered, series_filtered, s=len(t_obs_filtered)*100)
         series_interp = BSpline(*smoothing_spline, extrapolate=False)(t_out)
 
         # noinspection PyTypeChecker
@@ -602,7 +603,7 @@ def savgol_non_uniform_smooth(
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
-        series_smooth = non_uniform_savgol(t_obs, series, window=9, polynom=3)
+        series_smooth = non_uniform_savgol(t_obs, series, window=t_win, polynom=3)
         # series_smooth = np.interp(t_interp, t_obs, series_smooth)
         series_interp = np.interp(t_interp, t_obs, series_smooth)
         # series_smooth = savgol_filter(series_interp, window_length=9, polyorder=order, axis=-1)
@@ -718,7 +719,7 @@ def dask_smooth_wrapper(
         "bspline": bspline_smooth,
         "savgol_non_uniform": savgol_non_uniform_smooth,
         "smoothing_spline": smoothing_cubic_spline_smooth,
-        "ridge_regression": ridge_regression_smooth,
+        "ridge_regression": ridge_regression_smooth,"lowess": lowess_smooth
     }
 
     # filt_func = {

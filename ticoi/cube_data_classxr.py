@@ -1057,7 +1057,6 @@ class cube_data_class:
             i, j = self.convert_coordinates(i, j, proj=proj)
             # Interpolate only necessary variables and drop NaN values
             if interp == "nearest":
-                # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each)
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
                 data = data.dropna(dim="mid_date")
             else:
@@ -1082,7 +1081,7 @@ class cube_data_class:
                 # Load rolling mean for the given pixel, only on the dates available
                 dates_range = construction_dates_range_np(
                     data_dates
-                )  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                )
                 mean = rolling_mean.sel(
                     mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method="nearest"
                 )[["vx_filt", "vy_filt"]]
@@ -1472,13 +1471,13 @@ class cube_data_class:
         solver: str = "LSMR_ini",
         proj: str = "EPSG:4326",
         velo_or_disp: str = "velo",
-        select_baseline: int | None = None,
+        select_baseline: int | None = 180,
         verbose: bool = False,
     ) -> xr.Dataset:
 
         """
            Filter the original data before the inversion:
-        -delete outliers according to the provided criterium
+        -delete outliers according to the provided criterion
         -compute a spatio-temporal kernel of the data, which can be used as apriori for the inversion (for "1accelnotnull" or "directionxy" )
         -compute mean velocity along x and y ( for solver = 'LSMR_ini' if regu is not "1accelnotnull" or "directionxy" )
 
@@ -1501,15 +1500,15 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = None) -> (np.ndarray, np.ndarray):  # type: ignore
+        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = 180) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
-            A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
+            A function to calculate spatial mean, resample data, and calculate smoothed velocity.
 
             :param da_arr: [xr dataset] --- Original data
-            :param select_baseline: [int] [default is 200] --- Threshold over the temporal baselines
+            :param select_baseline: [int] [default is None] --- Threshold over the temporal baselines
 
-            :return spatial_mean: [np array] --- Exponential smoothed velocity
+            :return spatial_mean: [np array] --- smoothed velocity
             :return date_out: [np array] --- Observed dates
             """
 
@@ -1519,16 +1518,14 @@ class cube_data_class:
 
             if verbose:
                 start = time.time()
-            if select_baseline is not None:
+            if select_baseline is not None:#select data with a temporal baseline lower than a threshold
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(
                     baseline < select_baseline
-                )  # Take only the temporal baseline lower than the threshold selecr_baseline
                 while len(idx[0]) < 3 * len(date_out) & (
-                    select_baseline < 200
+                        select_baseline < 200
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
-                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -1589,12 +1586,12 @@ class cube_data_class:
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # The rolling smooth should be carried on velocity, while we need displacement during inversion
+        # The spatio-temporal smoothing should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide velocity values
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
-        if flag is not None:
+        if flag is not None: #create a flag, to indentify stable,areas, and eventually surges
             flag = self.create_flag(flag)
             flag.load()
 
@@ -1641,11 +1638,12 @@ class cube_data_class:
                         axis=0,
                     )
                 )
-            )
+            )#dates between which the displacement should be estimated
             if verbose:
                 start = time.time()
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)
+            #spatio-temporal filter
+            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)#dates_uniq correspond to the central date of dates_range
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"], select_baseline=select_baseline)
 
             # The time dimension of the smoothed velocity observations is different from the original,
