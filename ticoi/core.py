@@ -682,7 +682,6 @@ def interpolation_core(
 
     :return dataf_lp: [pd dataframe] --- Result of the temporal interpolation
     """
-    # result=result[(result['xcount_x']>1) & (result['xcount_y']>1)]
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     if first_date_interpol is None:
