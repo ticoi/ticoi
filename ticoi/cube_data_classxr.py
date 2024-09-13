@@ -1521,7 +1521,7 @@ class cube_data_class:
             if select_baseline is not None:#select data with a temporal baseline lower than a threshold
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(
-                    baseline < select_baseline
+                    baseline < select_baseline)
                 while len(idx[0]) < 3 * len(date_out) & (
                         select_baseline < 200
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
@@ -1785,18 +1785,6 @@ class cube_data_class:
             )
             cube.ds["vy"].encoding = {"vy": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
             del vx, vy
-
-            # if reproj_coord:
-        #     # Convert the system of coordinate and adjust the spatial resolution of self to match the resolution, projection, and region of cube
-        #     cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
-        #     self.ds = self.ds.rio.write_crs(self.ds.proj4)
-        #     if interp_method == 'nearest':
-        #         cube.ds = self.ds.rio.reproject_match(cube.ds, resampling=rasterio.enums.Resampling.nearest)
-        #     # Update of cube_data_classxr attributes
-        #     self.ds = self.ds.assign_attrs({'proj4': cube.ds.proj4})
-        #     # cube2.ds = cube2.ds.rio.write_crs(cube2.proj4, inplace=True)
-        #     self.nx = self.ds.dims['x']
-        #     self.ny = self.ds.dims['y']
 
         if reproj_coord:
             # Convert the system of coordinate and adjust the spatial resolution of the cube2 to match the resolution, projection, and region of self, using a bilinear interpolation
@@ -2337,9 +2325,6 @@ class cube_data_class:
         unit = ["m", "m", "no unit", "no unit"]
 
         start = time.time()
-        from joblib import Parallel, delayed
-
-        start = time.time()
         second_date_list = [
             np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
         ]
@@ -2347,7 +2332,6 @@ class cube_data_class:
         df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, second_date_list) for df in result)
 
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
-        start = time.time()
 
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))

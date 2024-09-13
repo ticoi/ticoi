@@ -309,6 +309,7 @@ def inversion_core(
             data_dates, data_values, data_str = data
         else:
             data_dates, data_values = data
+        del data
 
         if dates_range is None:
             dates_range = construction_dates_range_np(
@@ -513,7 +514,7 @@ def inversion_core(
 
             del result_dx, result_dy
             if not visual:
-                if result_quality is not None and "Error_propagation" in result_quality:
+                if result_quality is not None and "Error_propagation" not in result_quality:
                     del data_values, data_dates
 
         else:  # If not iteration
@@ -548,13 +549,29 @@ def inversion_core(
 
                 return prop_wieght_diag, sigma0_weight, t_value
 
-            def Prop_weight(weight, Residu, error):
+            def Prop_weight(F,weight, Residu, error):
+
+                error = np.max([Residu,error],axis=0)
+                W = weight.astype("float32")
+                FTWF = np.multiply(F.T, W[np.newaxis, :])@ F
+                N = np.linalg.inv(FTWF + coef * mu.T @ mu)
+                Prop_weight = np.multiply(np.multiply(N @ F.T, W[np.newaxis, :]) * error, W[np.newaxis, :]) @ F @ N
+                sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
+                prop_wieght_diag = np.diag(Prop_weight)
+                # Compute the confidence intervals
+                alpha = 0.05  # Confidence level
+                t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
+
+                return prop_wieght_diag, sigma0_weight, t_value
+
+            def Prop_weight2(F,weight, Residu, error):
                 W = np.diag(weight.astype("float32"))
-                FTWF = F.T * W @ F
+                error = np.diag(error)
+                FTWF = F.T @ W @ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
                 Prop_weight = N @ F.T @ W @ error @ W @ F @ N
                 # Prop_weight = N @ F.T @ W @ F @ N
-                sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
+                sigma0_weight = np.sum(Residu ** 2 * weight) / (F.shape[0] - F.shape[1])
                 prop_wieght_diag = np.diag(Prop_weight)
                 # Compute the confidence intervals
                 alpha = 0.05  # Confidence level
@@ -564,14 +581,18 @@ def inversion_core(
 
             #
             # # if not 'GCV' in result_quality:
-            F = sp.csc_matrix(A, dtype="float32")
-            Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
+            # F = sp.csc_matrix(A, dtype="float32")
+            Residux = data_values[:, 0] - A @ result_dx_i  # has a normal distribution
             # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 2])**2))
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 2] * data_values[:, -1] / unit)**2))
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(A,weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit)**2)
+            prop_wieght_diagx2, sigma0_weightx, t_valuex = Prop_weight2(A, weight_ix, Residux,
+                                                                        (data_values[:, 2] * data_values[:,
+                                                                                             -1] / unit) ** 2)
+
             # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag(Residux**2))
             #
-            Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 3]* data_values[:, -1] / unit)**2))
+            Residuy = data_values[:, 1] - A @ result_dy_i  # has a normal distribution
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(A,weight_iy, Residuy, (data_values[:, 3]* data_values[:, -1] / unit)**2)
             # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 3])**2))
             # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
 

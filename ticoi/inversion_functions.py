@@ -38,10 +38,10 @@ def mu_regularisation(regu: str | int, A: np.ndarray, dates_range: np.ndarray, i
 
     # First order Tikhonov regularisation
     if regu == 1:
-        mu = np.identity(A.shape[1], dtype="float32")
-        mu[np.arange(mu.shape[0] - 1) + 1, np.arange(mu.shape[0] - 1)] = -1
+        mu = np.diag(np.full(A.shape[1], -1, dtype="float32"))
+        mu[np.arange(A.shape[1] - 1), np.arange(A.shape[1] - 1) + 1] = 1
         mu /= np.diff(dates_range) / np.timedelta64(1, "D")
-        mu = np.delete(mu, 0, axis=0)
+        mu = np.delete(mu, -1, axis=0)
 
     # First order Tikhonov regularisation, with an apriori on the acceleration
     elif regu == "1accelnotnull":
