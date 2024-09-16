@@ -1728,6 +1728,101 @@ class cube_data_class:
 
         return cubes
 
+
+    def reproj_coord(self,new_proj:Optional[str]=None,new_res:Optional[float]=None,interp_method:str="nearest",cube_to_match:Optional["cube_data_class"] =None):
+        """
+        Repreject the cube_data_self to a given projection system, and (optionally) resample this cube to a given resolution.
+        The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
+        The new resolution can be defined by the variable new_res or by a cube stored in cube_to_match.
+        :param new_proj:
+        :param new_res:
+        :param interp_method:
+        :param cube_to_match:
+        :return:
+        """
+
+        self.ds = self.ds.rio.write_crs(self.ds.proj4)
+        self.ds = self.ds.transpose("mid_date", "y", "x")
+        # Reproject coordinates
+        if cube_to_match is not None:
+            if interp_method == "nearest": self.ds = self.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
+            elif interp_method == "bilinear":self.ds = self.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.bilinear)
+            if new_res is not None or new_proj is not None:  print('The new projection has been defined according to cube_to_match.')
+        elif new_res is None: self.ds =self.ds.rio.reproject(new_proj)
+        else: self.ds= self.ds.rio.reproject(new_proj,resolution=new_res)
+
+        # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
+        self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(
+            (np.abs(self.ds["vx"].values) < 10000) | (np.abs(self.ds["vy"].values) < 10000), np.nan
+        )
+
+        # Update of cube_data_classxr attributes
+        warnings.filterwarnings("ignore", category=UserWarning, module="pyproj")#prevent to have a warning
+        self.ds = self.ds.assign_attrs({"proj4": CRS.from_epsg(new_proj[5:]).to_proj4()})
+        self.nx = self.ds.sizes["x"]
+        self.ny = self.ds.sizes["y"]
+        self.ds = self.ds.assign_coords({"x": self.ds.x, "y": self.ds.y})
+
+    def reproj_vel(self, new_proj: Optional[str] = None, cube_to_match: Optional["cube_data_class"] = None,
+                   unit: int = 365,nb_cpu:int=8):
+        """
+
+        :param new_proj: [str]  --- EPSG code of the new projection
+        :param cube_to_match: [cube_data_class]  --- EPSG code of the new projection
+        :param unit:
+        :param nb_cpu:
+        :return:
+        """
+
+        if new_proj is None:
+            if cube_to_match is not None:
+                new_proj = cube_to_match.proj4
+            else:
+                raise ValueError("Please provide new_proj or cube_to_match")
+
+        # Prepare grid and transformer
+        grid = np.meshgrid(self.ds["x"], self.ds["y"])
+        transformer = Transformer.from_crs(self.ds.proj4, CRS.from_epsg(new_proj[5:]).to_proj4())
+        grid_transformed = transformer.transform(grid[0], grid[1])
+        temp = self.temp_base_()
+
+        def transform_slice(z):
+            """Transform the velocity slice for a single time step."""
+            endx = (self.ds["vx"].isel(mid_date=z) * temp[z] / unit) + grid[0]
+            endy = (self.ds["vy"].isel(mid_date=z) * temp[z] / unit) + grid[1]
+
+            # Transform final coordinates
+            t = transformer.transform(endx, endy)
+            # Compute differences in the new coordinate system
+            vx = (grid_transformed[0] - t[0]) / temp[z] * unit
+            vy = (t[1] - grid_transformed[1]) / temp[z] * unit
+
+            return vx, vy
+
+        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(transform_slice)(z)
+            for z in range(self.nz)
+        ))
+        # Unpack the results
+        vx, vy = results[:,0,:,:],results[:,1,:,:]
+
+        # Updating DataArrays
+        self.ds["vx"] = xr.DataArray(
+            vx.astype("float32"),
+            dims=["mid_date", "x", "y"],
+            coords={"mid_date": self.ds.mid_date, "x": self.ds.x, "y": self.ds.y},
+        )
+        self.ds["vx"].encoding = {"vx": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
+
+        self.ds["vy"] = xr.DataArray(
+            vy.astype("float32"),
+            dims=["mid_date", "x", "y"],
+            coords={"mid_date": self.ds.mid_date, "x": self.ds.x, "y": self.ds.y},
+        )
+        self.ds["vy"].encoding = {"vy": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
+
+        del grid, transformer, temp, vx, vy
+
     def align_cube(
         self,
         cube: "cube_data_class",
@@ -2255,6 +2350,8 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # Save the dataset to a netcdf file
+            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
+
             encoding = {
                 "vx": {"zlib": True, "complevel": 5, "dtype": "float32"},
                 "vy": {"zlib": True, "complevel": 5, "dtype": "float32"},
@@ -2384,6 +2481,7 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
+            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
             encoding = {
                 "dx": {"zlib": True, "complevel": 5, "dtype": "float32"},
                 "dy": {"zlib": True, "complevel": 5, "dtype": "float32"},

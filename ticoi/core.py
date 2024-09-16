@@ -563,38 +563,27 @@ def inversion_core(
                 t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
 
                 return prop_wieght_diag, sigma0_weight, t_value
-
-            def Prop_weight2(F,weight, Residu, error):
-                W = np.diag(weight.astype("float32"))
-                error = np.diag(error)
-                FTWF = F.T @ W @ F
-                N = np.linalg.inv(FTWF + coef * mu.T @ mu)
-                Prop_weight = N @ F.T @ W @ error @ W @ F @ N
-                # Prop_weight = N @ F.T @ W @ F @ N
-                sigma0_weight = np.sum(Residu ** 2 * weight) / (F.shape[0] - F.shape[1])
-                prop_wieght_diag = np.diag(Prop_weight)
-                # Compute the confidence intervals
-                alpha = 0.05  # Confidence level
-                t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
-
-                return prop_wieght_diag, sigma0_weight, t_value
-
             #
-            # # if not 'GCV' in result_quality:
-            # F = sp.csc_matrix(A, dtype="float32")
+            # def Prop_weight2(F,weight, Residu, error):
+            #     W = np.diag(weight.astype("float32"))
+            #     error = np.diag(error)
+            #     FTWF = F.T @ W @ F
+            #     N = np.linalg.inv(FTWF + coef * mu.T @ mu)
+            #     Prop_weight = N @ F.T @ W @ error @ W @ F @ N
+            #     # Prop_weight = N @ F.T @ W @ F @ N
+            #     sigma0_weight = np.sum(Residu ** 2 * weight) / (F.shape[0] - F.shape[1])
+            #     prop_wieght_diag = np.diag(Prop_weight)
+            #     # Compute the confidence intervals
+            #     alpha = 0.05  # Confidence level
+            #     t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
+            #
+            #     return prop_wieght_diag, sigma0_weight, t_value
+
             Residux = data_values[:, 0] - A @ result_dx_i  # has a normal distribution
-            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 2])**2))
             prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(A,weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit)**2)
-            prop_wieght_diagx2, sigma0_weightx, t_valuex = Prop_weight2(A, weight_ix, Residux,
-                                                                        (data_values[:, 2] * data_values[:,
-                                                                                             -1] / unit) ** 2)
 
-            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag(Residux**2))
-            #
             Residuy = data_values[:, 1] - A @ result_dy_i  # has a normal distribution
             prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(A,weight_iy, Residuy, (data_values[:, 3]* data_values[:, -1] / unit)**2)
-            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 3])**2))
-            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
 
             #Victor method
             # A = sp.csc_matrix(A, dtype="float32")
