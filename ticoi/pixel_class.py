@@ -896,7 +896,7 @@ class pixel_class:
     #                       PLOTS ABOUT INVERSION RESULTS                         #
     # =========================================================================%% #
 
-    def plot_xcount_vx_vy(self, cmap: str = "rainbow", block_plot: bool = True):
+    def plot_xcount_vx_vy(self, cmap: str = "viridis", block_plot: bool = True):
 
         """
         Plot the obersvation contribution to the inversion on top of velocities x and y components.
@@ -920,7 +920,7 @@ class pixel_class:
             self.datainvert.dataf["date_cori"],
             self.datainvert.dataf["vx"],
             c=self.datainvert.dataf["xcount_x"],
-            s=4,
+            s=8,
             cmap=cmap,
             label="Y_contribution",
         )
@@ -930,19 +930,12 @@ class pixel_class:
             self.datainvert.dataf["date_cori"],
             self.datainvert.dataf["vy"],
             c=self.datainvert.dataf["xcount_y"],
-            s=4,
-            cmap="rainbow",
+            s=8,
+            cmap=cmap,
         )
-        legend1 = ax[1].legend(
-            *scat.legend_elements(num=5),
-            loc="lower left",
-            bbox_to_anchor=(0, -0.7),
-            ncol=5,
-            title="Amount of contributing observations",
-            fontsize=14,
-        )
-        plt.subplots_adjust(bottom=0.22)
-        ax[1].add_artist(legend1)
+        plt.subplots_adjust(bottom=0.1)
+        cbar = fig.colorbar(scat, ax=ax.ravel().tolist(), orientation='horizontal', pad=0.15)
+        cbar.set_label('Amount of contributing observations', fontsize=14)
         fig.suptitle(
             "Contribution of the observations to the resulting inverted velocity x and y components",
             y=0.95,
@@ -956,7 +949,7 @@ class pixel_class:
 
         return ax, fig
 
-    def plot_xcount_vv(self, cmap: str = "rainbow", block_plot: bool = True):
+    def plot_xcount_vv(self, cmap: str = "viridis", block_plot: bool = True):
 
         """
         Plot the observation contribution to the inversion on top of the velocity magnitude.
@@ -979,21 +972,15 @@ class pixel_class:
         ax.set_xlabel("Central dates", fontsize=14)
         scat = ax.scatter(
             self.datainvert.dataf["date_cori"],
-            self.datainvert.dataf["vx"],
+            self.datainvert.dataf["vv"],
             c=(self.datainvert.dataf["xcount_x"] + self.datainvert.dataf["xcount_y"]) / 2,
-            s=4,
+            s=8,
             cmap=cmap,
         )
-        legend1 = ax.legend(
-            *scat.legend_elements(num=5),
-            loc="lower left",
-            bbox_to_anchor=(0, -0.3),
-            ncol=5,
-            title="Amount of contributing observations",
-            fontsize=14,
-        )
+        # Adding a colorbar for the scatter plot
+        cbar = plt.colorbar(scat, ax=ax, pad=0.02)
+        cbar.set_label('Amount of contributing observations', fontsize=14)
         plt.subplots_adjust(bottom=0.2)
-        ax.add_artist(legend1)
         fig.suptitle("Contribution of the observations to the resulting inverted velocities", y=0.95, fontsize=16)
 
         if self.show:

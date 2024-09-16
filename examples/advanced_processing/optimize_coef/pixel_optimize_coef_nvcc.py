@@ -251,7 +251,6 @@ for param_value in list_parameter:
         # print(f'Cube of dimesion (nz,nx,ny): ({cube.nz},{cube.nx},{cube.ny} ')
         print(f"Inversion for pixel {i, j}")
 
-
     # %% ======================================================================== #
     #                                INVERSION                                    #
     # =========================================================================%% #
@@ -278,7 +277,6 @@ for param_value in list_parameter:
     if save:
         result.to_csv(f"{save_path}/ILF_result.csv")
 
-
     # %% ======================================================================== #
     #                              INTERPOLATION                                  #
     # =========================================================================%% #
@@ -299,7 +297,6 @@ for param_value in list_parameter:
 
     stop.append(time.time())
     print(f"[Interpolation] Interpolation took {round((stop[4] - start[4]), 4)} s")
-
 
     # %% ======================================================================== #
     #                              VISUALIZATION                                  #
@@ -324,7 +321,6 @@ for param_value in list_parameter:
             path_save=save_path,
             colors=["orange", "blue"],
         )
-
 
     # %% ======================================================================== #
     #                                UPDATE VVC                                   #

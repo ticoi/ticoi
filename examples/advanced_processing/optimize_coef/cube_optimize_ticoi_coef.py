@@ -3,7 +3,7 @@
 """
 Optimization of the regularization coefficient value for the TICOI post-processing method, either by comparing the results
 to a "ground truth" (method='ground_truth') or a zero velocity in stable ground ('stable_ground'), or by computing the
-Velocity Vector Coherence of the results. 
+Velocity Vector Coherence of the results.
 
 RMSE-coef and VVC-coef curves are plotted and best_coef and good_coef maps are generated.
 """
@@ -24,7 +24,7 @@ from tqdm import tqdm
 from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.other_functions import optimize_coef
-
+from ticoi.optimize_coefficient_functions import *
 # %%========================================================================= #
 #                                    PARAMETERS                               #
 # =========================================================================%% #
@@ -62,7 +62,7 @@ result_quality = (
 # than the 'direct_process' method
 #      /!\ This implementation uses asyncio (way faster) which requires its own event loop to run : if you launch this code from a raw terminal,
 # there should be no problem, but if you try to launch it from some IDE (like Spyder), think of specifying to your IDE to launch it
-# in a raw terminal instead of the default console (whic h leads to a RuntimeError)
+# in a raw terminal instead of the default console (which leads to a RuntimeError)
 #    - 'direct_process' : No subdivisition of the data is made beforehand which generally leads to memory overconsumption and kernel crashes
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.optimization_process = 'direct_process'
@@ -76,15 +76,15 @@ optimization_method = "vvc"
 
 # Method to select the "good coef":
 #    - 'curvature': Compute the second derivative of the data to find the greatest curvature (coefs must be uniformally distributed)
-#    - 'min-max relative': (RECOMMANDED) Put the limit at thresh% of max(RMSE or VVC) - min(RMSE or VVC), position of the "elbow" for 1 - e^{-x} function
+#    - 'min-max relative': (RECOMMENDED) Put the limit at thresh% of max(RMSE or VVC) - min(RMSE or VVC), position of the "elbow" for 1 - e^{-x} function
 #    - 'max relative': Put the limit at thresh% of max(RMSE or VVC)
 #    - 'absolute': Put the limit at best_RMSE + thresh or bset_VVC - thresh
 #    - 'vvc_angle_thresh': Compute the incertainty of the VVC for variation of angle thresh around angle_limit, which is passed to an 'absolute' selection
 #    - 'vvc_disp_thresh': Compute the incertainty of the angle for an incertainty of thresh on the displacements, which is passed to a 'vvc_angle_thresh' selection
-select_method = 'min-max relative'
+select_method = "min-max relative"
 
 # Parameters for the selection method
-thresh = 95 
+thresh = 95
 angle_limit = None
 
 # Specify the coefficients you want to test
@@ -127,7 +127,7 @@ coef_min = 0  # If coefs=None, start point of the range of coefs to be tested
 coef_max = 5000  # If coefs=None, stop point of the range of coefs to be tested
 step = 100  # If coefs=None, step for the range of coefs to be tested
 
-# Visualisation options 
+# Visualisation options
 save = True
 plot_them_all = True
 coef_maps = ["best", "good"]
@@ -136,13 +136,13 @@ coef_maps = ["best", "good"]
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset":  [342899.30,343449.60,5091549.77,5092101.18],  # Subset to be loaded
+    "subset": [342899.30, 343449.60, 5091549.77, 5092101.18],  # Subset to be loaded
     "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
-    "mask": mask_file, # Mask part of the data
-    "verbose": False, # Print information throughout the loading process
+    "mask": mask_file,  # Mask part of the data
+    "verbose": False,  # Print information throughout the loading process
 }
 
 ## ------------------- Data preparation parameters --------------------- ##
@@ -155,13 +155,13 @@ preData_kwargs = {
     "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": {
         "median_angle": 45,
-        "mz_score": 3.5
+        "mz_score": 3.5,
     },  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "regu": regu,  # Regularization method to be used
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
     "velo_or_disp": "velo",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
-    "verbose": False, # Print information throughout the filtering process
+    "verbose": False,  # Print information throughout the filtering process
 }
 
 ## -------------- Parameters for the pixel loading part ---------------- ##
@@ -188,17 +188,19 @@ inversion_kwargs = {
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": False,  # Plot results along the way
-    "verbose": False, # Print information throughout TICOI processing
+    "verbose": False,  # Print information throughout TICOI processing
 }
 
 ## --------------------- Interpolation parameters ---------------------- ##
-if optimization_method == "ground_truth": # The results of the inversion are interpolated to GT dates
+if optimization_method == "ground_truth":  # The results of the inversion are interpolated to GT dates
     interpolation_kwargs = {
         "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
         "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
-        "unit": unit, # 365 if the unit is m/y, 1 if the unit is m/d
-    }  
-elif optimization_method == "stable_ground" or optimization_method == "vvc": # The results of the inversion are interpolated as usual
+        "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
+    }
+elif (
+    optimization_method == "stable_ground" or optimization_method == "vvc"
+):  # The results of the inversion are interpolated as usual
     interpolation_kwargs = {
         "interval_output": 30,  # Temporal baseline of the time series resulting from TICOI (after interpolation)
         "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
@@ -243,162 +245,42 @@ print(f"Data cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ({
 if optimization_method == "ground_truth_data":
     print(f"Ground Truth cube of dimension (nz,nx,ny) : ({cube_gt.nz}, {cube_gt.nx}, {cube_gt.ny})")
 
-    
+
 # %% ======================================================================== #
 #                         COEFFICIENT OPTIMIZATION                            #
 # =========================================================================%% #
-
-async def process_block(
-    block,
-    cube_gt,
-    load_pixel_kwargs,
-    inversion_kwargs,
-    interpolation_kwargs,
-    method="stable_ground",
-    regu=None,
-    flag=None,
-    cmin=10,
-    cmax=1000,
-    step=10,
-    coefs=None,
-    nb_cpu=8,
-):
-    
-    ''' Optimize the coef on a given block '''
-
-    if optimization_method == "stable_ground": # We only compute stable ground pixels
-        xy_values = list(filter(bool, [(x, y) if flag.sel(x=x, y=y)['flag'].values == 0 else False 
-                            for x in flag['x'].values for y in flag['y'].values]))
-    else: 
-        xy_values = list(itertools.product(cube.ds["x"].values, cube.ds["y"].values))
-    
-    # Progression bar
-    xy_values_tqdm = tqdm(xy_values, total=len(xy_values))
-
-    # Filter cube
-    obs_filt, flag_block = block.filter_cube(**preData_kwargs, flag=flag)
-
-    # Optimization of the coefficient for every pixels of the block
-    #    (faster using parallelization here and sequential processing in optimize_coef)
-    result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(optimize_coef)(
-            block,
-            cube_gt,
-            i,
-            j,
-            obs_filt,
-            load_pixel_kwargs,
-            inversion_kwargs,
-            interpolation_kwargs,
-            method=method,
-            regu=regu,
-            flag=flag_block,
-            cmin=cmin,
-            cmax=cmax,
-            step=step,
-            coefs=coefs,
-            stats=True,
-            parallel=False,
-            visual=False,
-        )
-        for i, j in xy_values_tqdm
-    )
-
-    return result_block
-
-async def process_blocks_main(
-    cube,
-    cube_gt,
-    load_pixel_kwargs,
-    inversion_kwargs,
-    interpolation_kwargs,
-    method="stable_ground",
-    regu=None,
-    flag=None,
-    cmin=10,
-    cmax=1000,
-    step=10,
-    coefs=None,
-    nb_cpu=8,
-    block_size=0.5,
-    verbose=False,
-):
-    
-    ''' Main function for the optimization of the coef using a block processing approach'''
-
-    blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
-
-    dataf_list = [None] * (cube.nx * cube.ny)
-
-    loop = asyncio.get_event_loop()
-
-    for n in range(len(blocks)):
-        print(f"Processing block {n+1}/{len(blocks)}")
-
-        # Load the first block and start the loop
-        if n == 0:
-            x_start, x_end, y_start, y_end = blocks[0]
-            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
-
-        block, block_flag, duration = await future
-        if verbose:
-            print(f"Block {n+1} loaded in {duration:.2f} s")
-
-        if n < len(blocks) - 1:
-            # Load the next block while processing the current block
-            x_start, x_end, y_start, y_end = blocks[n + 1]
-            future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end)
-
-        block_result = await process_block(
-            block,
-            cube_gt,
-            load_pixel_kwargs,
-            inversion_kwargs,
-            interpolation_kwargs,
-            method=method,
-            regu=regu,
-            flag=flag,
-            cmin=cmin,
-            cmax=cmax,
-            step=step,
-            coefs=coefs,
-            nb_cpu=nb_cpu,
-        )
-
-        for i in range(len(block_result)):
-            row = i % block.ny + blocks[n][2]
-            col = np.floor(i / block.ny) + blocks[n][0]
-            idx = int(col * cube.ny + row)
-
-            dataf_list[idx] = block_result[i]
-
-        del block_result, block
-
-    return dataf_list
-
 
 nb_points = len(cube.ds["x"].values) * len(cube.ds["y"].values)
 print(f"{nb_points} points to be computed within the given subset")
 
 start.append(time.time())
 
-if optimization_method == "stable_ground": # We only compute stable ground pixels
-    xy_values = list(filter(bool, [(x, y) if flag.sel(x=x, y=y)['flag'].values == 0 else False 
-                        for x in flag['x'].values for y in flag['y'].values]))
-else: 
+if optimization_method == "stable_ground":  # We only compute stable ground pixels
+    xy_values = list(
+        filter(
+            bool,
+            [
+                (x, y) if flag.sel(x=x, y=y)["flag"].values == 0 else False
+                for x in flag["x"].values
+                for y in flag["y"].values
+            ],
+        )
+    )
+else:
     xy_values = list(itertools.product(cube.ds["x"].values, cube.ds["y"].values))
 
 if optimization_process == "block_process":
     print(f"Number of CPU : {nb_cpu}")
-    
+
     result = asyncio.run(
         process_blocks_main(
             cube,
             cube_gt,
             load_pixel_kwargs,
             inversion_kwargs,
+            preData_kwargs,
             interpolation_kwargs,
-            method=optimization_method,
+            optimization_method=optimization_method,
             regu=regu,
             flag=flag,
             cmin=coef_min,
@@ -413,7 +295,7 @@ if optimization_process == "block_process":
 
 elif optimization_process == "direct_process":
     obs_filt, flag = cube.filter_cube(**preData_kwargs, flag=flag)
-    
+
     # Progression bar
     xy_values_tqdm = tqdm(xy_values, total=len(xy_values), mininterval=0.5)
 
@@ -445,94 +327,6 @@ print(f"Whole coefficient optimization took {round((stop[-1] - start[-1]), 1)} s
 
 
 # %% ======================================================================== #
-#                               FIND GOOD COEF                                #
-# =========================================================================%% #
-
-def find_good_coefs(coefs, measures, method="stable_ground", select_method="min-max relative", thresh=None, mean_disp=None, mean_angle=None, visual=False):
-    if select_method == 'curvature':
-        smooth_measures = [measures[i-1]/4 + measures[i]/2 + measures[i-1]/4 for i in range(1, len(measures)-1)]
-        accel = np.array([(smooth_measures[i+1] - 2*smooth_measures[i] + smooth_measures[i-1]) / ((coefs[i+2] - coefs[i]) / 2) ** 2 for i in range(1, len(coefs)-3)])
-
-        if visual:            
-            plt.plot(coefs[2:-2], accel)
-            plt.ylim([-2*10**-6, 0.5*10**-6])
-            plt.show()
-        
-        if method in ['ground_truth', 'stable_ground']:
-            best_coef = coefs[np.argmin(measures)]
-            best_measure = np.min(measures)
-            good_measure = measures[np.argmin(accel)+2]
-            good_coefs = coefs[measures < good_measure]
-        elif method == 'vvc':
-            best_coef = coefs[np.argmax(measures)]
-            best_measure = np.max(measures)
-            good_measure = measures[np.argmax(accel)+2]
-            good_coefs = coefs[measures > good_measure]
-        
-    elif select_method == 'min-max relative':
-        if method in ["ground_truth", "stable_ground"]:
-            best_measure = np.min(measures)
-            good_measure = best_measure + (1 - thresh/100) * (np.max(measures) - best_measure)
-            best_coef = coefs[np.argmin(measures)]
-            good_coefs = coefs[measures < good_measure]
-        elif method == 'vvc':
-            best_measure = np.max(measures)
-            good_measure = best_measure - (1 - thresh/100) * (best_measure - np.min(measures))
-            best_coef = coefs[np.argmax(measures)]
-            good_coefs = coefs[measures > good_measure]
-            
-    elif select_method == 'max relative':
-        if method in ['ground_truth', 'stable_ground']:
-            best_measure = np.min(measures)
-            good_measure = (1 + thresh/100) * best_measure
-            best_coef = coefs[np.argmin(measures)]
-            good_coefs = coefs[measures < good_measure]
-        elif method == 'vvc':
-            best_measure = np.max(measures)
-            good_measure = (1 - thresh/100) * best_measure
-            best_coef = coefs[np.argmax(measures)]
-            good_coefs = coefs[measures > good_measure]
-    
-    elif select_method == 'absolute':
-        if method in ['ground_truth', 'stable_ground']:
-            best_measure = np.min(measures)
-            good_measure = best_measure + thresh
-            best_coef = coefs[np.argmin(measures)]
-            good_coefs = coefs[measures < good_measure]
-        elif method == 'vvc':
-            best_measure = np.max(measures)
-            good_measure = best_measure - thresh
-            best_coef = coefs[np.argmax(measures)]
-            good_coefs = coefs[measures > good_measure]
-            
-    elif select_method == 'vvc_angle_thresh': 
-        assert mean_angle is not None, "Mean angle to median direction over the area must be given for 'vvc_angle_thresh' selection method"
-        
-        dVVC = abs(-np.sin(mean_angle) / (2 * np.sqrt(2 * (1 + np.cos(mean_angle)))) * thresh)
-        if visual: 
-            print(mean_angle * 360 / (2*np.pi))
-            print(dVVC)
-            
-        return find_good_coefs(coefs, measures, method='vvc', select_method='absolute', thresh=dVVC)
-    
-    elif select_method == 'vvc_disp_thresh':
-        assert mean_disp is not None, "Mean displacements over the area must be given for 'vvc_disp_thresh' selection method"
-        
-        vx, vy = mean_disp
-        v0 = np.array([vx - thresh, vy + thresh])
-        v1 = np.array([vx + thresh, vy - thresh])
-        d_angle = np.arccos((v0[0] * v1[0] + v0[1] * v1[1]) / (np.linalg.norm(v0) * np.linalg.norm(v1)))
-        
-        if visual: 
-            print(mean_disp)
-            print(d_angle * 360 / (2*np.pi))
-            
-        return find_good_coefs(coefs, measures, method == 'vvc', select_method='vvc_angle_thresh', thresh=d_angle, mean_angle=mean_angle, visual=visual)
-            
-    return good_measure, good_coefs, best_measure, best_coef
-
-
-# %% ======================================================================== #
 #                                  COEF MAPS                                  #
 # =========================================================================%% #
 
@@ -558,7 +352,9 @@ nb_res = len(result)
 nb_data = np.array([result[i].nb_data if result[i] is not None else 0 for i in range(nb_res)])
 mean_baseline = np.array([result[i].mean_temporal_baseline if result[i] is not None else np.nan for i in range(nb_res)])
 mean_disp = np.array([result[i].mean_disp if result[i] is not None else np.nan for i in range(nb_res)])
-mean_angle_to_median = np.array([result[i].mean_angle_to_median if result[i] is not None else np.nan for i in range(nb_res)])
+mean_angle_to_median = np.array(
+    [result[i].mean_angle_to_median if result[i] is not None else np.nan for i in range(nb_res)]
+)
 mean_v = np.array([result[i].mean_v if result[i] is not None else np.nan for i in range(nb_res)])
 std_v = np.array([result[i].std_raw_data if result[i] is not None else np.nan for i in range(nb_res)])
 measures_result = np.array(
@@ -569,12 +365,19 @@ measures_result = np.array(
 resolution = int(cube.ds["x"].values[1] - cube.ds["x"].values[0])
 long_data = (positions[:, 0] - np.min(cube.ds["x"].values)).astype(int) // resolution
 lat_data = (positions[:, 1] - np.min(cube.ds["y"].values)).astype(int) // resolution
-    
-goods = [find_good_coefs(coefs, result[i].values, method=optimization_method,
-                         select_method=select_method, thresh=thresh,
-                         mean_disp=(np.nanmean(mean_disp[:, 0]), np.nanmean(mean_disp[:, 1])),
-                         mean_angle=angle_limit if angle_limit is not None else np.nanmax(mean_angle_to_median))
-         for i in range(len(result))]
+
+goods = [
+    find_good_coefs(
+        coefs,
+        result[i].values,
+        method=optimization_method,
+        select_method=select_method,
+        thresh=thresh,
+        mean_disp=(np.nanmean(mean_disp[:, 0]), np.nanmean(mean_disp[:, 1])),
+        mean_angle=angle_limit if angle_limit is not None else np.nanmax(mean_angle_to_median),
+    )
+    for i in range(len(result))
+]
 
 # Map with the coefficient giving the best RMSE with GT data in band 1 and the value of this RMSE in band 2
 if "best" in coef_maps:
@@ -585,7 +388,7 @@ if "best" in coef_maps:
 
     best_coef_map[long_data, lat_data] = [goods[i][3] for i in range(len(result))]
     best_measure_map[long_data, lat_data] = [goods[i][2] for i in range(len(result))]
-    
+
     tiff = driver.Create(
         f"{path_save}best_map.tiff", best_coef_map.shape[0], best_coef_map.shape[1], 2, gdal.GDT_Float32
     )
@@ -606,7 +409,7 @@ if "good" in coef_maps:
     max_good_coef_map[:, :] = np.nan
     good_measure_map = np.empty([cube.nx, cube.ny])
     good_measure_map[:, :] = np.nan
-    
+
     good_measure_map[long_data, lat_data] = [goods[i][0] for i in range(len(result))]
     min_good_coef_map[long_data, lat_data] = [np.min(goods[i][1]) for i in range(len(result))]
     max_good_coef_map[long_data, lat_data] = [np.max(goods[i][1]) for i in range(len(result))]
@@ -639,11 +442,11 @@ start.append(time.time())
 if flag is None:
     regu = {0: regu}
 for key in regu.keys():
-    if flag is not None: # Select the corresponding area
-        mask_regu = [flag.sel(x=x, y=y)['flag'].values == key for x, y in xy_values]
+    if flag is not None:  # Select the corresponding area
+        mask_regu = [flag.sel(x=x, y=y)["flag"].values == key for x, y in xy_values]
     else:
         mask_regu = [True for i in range(nb_res)]
-        
+
     if any(mask_regu):
         nb_data_regu = nb_data[mask_regu]
         mean_baseline_regu = mean_baseline[mask_regu]
@@ -659,14 +462,14 @@ for key in regu.keys():
         print(f"Nb data median S2 : {np.median(nb_data_regu[:, 0])}")
         if optimization_method == "ground_truth":
             print(f"Nb data median Pleiades : {np.median(nb_data_regu[:, 1])}")
-        
+
         print(f"Mean temporal baseline : {np.nanmean(mean_baseline_regu)}")
         print(f"Mean disp S2 : {np.nanmean(np.sqrt(mean_disp_regu[:, 0] ** 2 + mean_disp_regu[:, 1] ** 2))} m")
         print(f"Mean velocity S2 : {np.nanmean(np.sqrt(mean_v_regu[:, 0] ** 2 + mean_v_regu[:, 1] ** 2))} m/y")
         print(f"Mean std dev S2 : {np.nanmean(np.sqrt(std_v_regu[:, 0] ** 2 + std_v_regu[:, 1] ** 2))} m/y")
         if optimization_method == "ground_truth":
             print(f"Mean velocity Pleiades : {np.nanmean(np.sqrt(mean_v_regu[:, 2] ** 2 + mean_v_regu[:, 3] ** 2))}")
-        
+
         if optimization_method == "ground_truth" or optimization_method == "stable_ground":
             # Average RMSE on the area
             measures = np.array(
@@ -683,14 +486,13 @@ for key in regu.keys():
                 ]
             )
         else:
-            measures = np.array([np.nanmean(measures_result_regu[~np.isnan(measures_result_regu).any(axis=1)][:, i]) for i in range(len(coefs))])
-        
-        # good_measure, good_coefs, best_measure, best_coef = find_good_coefs(coefs, measures, method=optimization_method,
-        #                                                                     select_method=select_method, thresh=thresh,
-        #                                                                     mean_disp = (np.nanmean(mean_disp_regu[:, 0]), np.nanmean(mean_disp_regu[:, 1])), 
-        #                                                                     mean_angle = angle_limit if angle_limit is not None else np.nanmax(mean_angle_to_median_regu), 
-        #                                                                     visual=visual)
-        
+            measures = np.array(
+                [
+                    np.nanmean(measures_result_regu[~np.isnan(measures_result_regu).any(axis=1)][:, i])
+                    for i in range(len(coefs))
+                ]
+            )
+
         # Compute median good_coef, best_coef and best_measure over the area
         coefs = np.array(coefs)
         good_coef = np.nanmedian(min_good_coef_map)
@@ -698,7 +500,7 @@ for key in regu.keys():
         best_coef = np.nanmedian(best_coef_map)
         best_measure = measures[np.argmin(np.abs(coefs - best_coef))]
         term = "RMSE" if optimization_method in ["ground_truth", "stable_ground"] else "VVC"
-        
+
         # Plot result
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.plot(
@@ -717,7 +519,7 @@ for key in regu.keys():
             linestyle="",
             markeredgecolor="darkgreen" if optimization_method in ["ground_truth", "stable_ground"] else "darkred",
         )
-        
+
         ax.plot([coefs[0], coefs[-1]], [good_measure, good_measure], linestyle="--", color="midnightblue")
         ax.set_xlabel("Regularisation coefficient value", fontsize=14)
         ax.set_xlim([np.min(coefs), np.max(coefs)])
