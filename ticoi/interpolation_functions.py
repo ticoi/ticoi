@@ -149,9 +149,7 @@ def set_function_for_interpolation(
             fdx_error = interpolation_func(x, dataf["error_x"])
             fdy_error = interpolation_func(x, dataf["error_y"])
 
-        return fdx, fdy, fdx_xcount, fdy_xcount, fdx_error, fdy_error
-
-    return None, None, None, None  # Return default values if interpolation option is not valid
+    return fdx, fdy, fdx_xcount, fdy_xcount, fdx_error, fdy_error
 
 
 def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd.Series) -> pd.DataFrame:

@@ -19,6 +19,7 @@ from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 from scipy.stats import median_abs_deviation
 from pykalman import KalmanFilter
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
@@ -233,23 +234,8 @@ def non_uniform_savgol(x, y, window, polynom):
     return y_smoothed
 
 
-def gp_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
-    kernel = C(1.0, (1e-4, 1e1)) * RBF(10, (1e-2, 1e2))
-    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
 
-    gp.fit(df_aggregated.index.values[:, np.newaxis], df_aggregated['value'].values)
-    t_new = np.linspace(df_aggregated.index.min(), df_aggregated.index.max(), 3000)
-    y_pred, sigma = gp.predict(t_new[:, np.newaxis], return_std=True)
 
-from statsmodels.nonparametric.smoothers_lowess import lowess
 
 def lowess_smooth(
     series: np.ndarray,

@@ -294,7 +294,7 @@ if optimization_process == "block_process":
     )
 
 elif optimization_process == "direct_process":
-    obs_filt, flag = cube.filter_cube(**preData_kwargs, flag=flag)
+    obs_filt, flag = cube.filter_cube_before_inversion(**preData_kwargs, flag=flag)
 
     # Progression bar
     xy_values_tqdm = tqdm(xy_values, total=len(xy_values), mininterval=0.5)

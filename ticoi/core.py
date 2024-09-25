@@ -1196,7 +1196,7 @@ def process_blocks_refine(
             return result_block
 
         # Filter the cube
-        obs_filt, flag_block = block.filter_cube(**preData_kwargs)
+        obs_filt, flag_block = block.filter_cube_before_inversion(**preData_kwargs)
         if isinstance(inversion_kwargs, dict):
             inversion_kwargs.update({"flag": flag_block})
 
