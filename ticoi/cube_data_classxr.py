@@ -97,7 +97,7 @@ class cube_data_class:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
         else:
             raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
-
+        
     def subset(self, proj: str, subset: list):
 
         """
@@ -148,7 +148,7 @@ class cube_data_class:
                 x=slice(np.min([i1, i2, i3, i4]), np.max([i1, i2, i3, i4])),
                 y=slice(np.max([j1, j2, j3, j4]), np.min([j1, j2, j3, j4])),
             )
-            del i3, i4, j3, j4
+            del i1, i2, j1, j2,i3, i4, j3, j4
         else:
             i1, j1 = buffer[0] - buffer[2], buffer[1] + buffer[2]
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
@@ -751,11 +751,9 @@ class cube_data_class:
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
-                sub = [
-                    self.ds["x"].min().values,
-                    self.ds["x"].max().values,
-                    self.ds["y"].min().values,
-                    self.ds["y"].max().values,
+                sub = [self.ds["y"].min().values,
+                    self.ds["y"].max().values,self.ds["x"].min().values,
+                    self.ds["x"].max().values
                 ]
                 cube2.load(
                     filepath[n],
@@ -1740,13 +1738,15 @@ class cube_data_class:
         :param interp_method: [str]  ---
         :param cube_to_match:  [cube_data_class]  --- cube used as a reference to reproject self
         """
-
+        #asign coordinate system
+        if cube_to_match is not None: cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
         self.ds = self.ds.rio.write_crs(self.ds.proj4)
         self.ds = self.ds.transpose("mid_date", "y", "x")
+        
         # Reproject coordinates
         if cube_to_match is not None:
-            if interp_method == "nearest": self.ds = self.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
-            elif interp_method == "bilinear":self.ds = self.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.bilinear)
+            if interp_method == "nearest": self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.nearest)
+            elif interp_method == "bilinear":self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.bilinear)
             if new_res is not None or new_proj is not None:  print('The new projection has been defined according to cube_to_match.')
         elif new_res is None: self.ds =self.ds.rio.reproject(new_proj)
         else: self.ds= self.ds.rio.reproject(new_proj,resolution=new_res)
@@ -1762,9 +1762,8 @@ class cube_data_class:
             new_proj = cube_to_match.ds.proj4
             self.ds = self.ds.assign_attrs({"proj4": new_proj})
         else: self.ds = self.ds.assign_attrs({"proj4": CRS.from_epsg(new_proj[5:]).to_proj4()})
-        self.nx = self.ds.sizes["x"]
-        self.ny = self.ds.sizes["y"]
         self.ds = self.ds.assign_coords({"x": self.ds.x, "y": self.ds.y})
+        self.update_dimension()
 
     def reproj_vel(self, new_proj: Optional[str] = None, cube_to_match: Optional["cube_data_class"] = None,
                    unit: int = 365,nb_cpu:int=8):
@@ -1858,6 +1857,7 @@ class cube_data_class:
         if reproj_coord: cube.reproj_coord(cube_to_match=self)
 
         cube.ds = cube.ds.assign_attrs({"author": f"{cube.ds.author} aligned"})
+        cube.update_dimension()
 
         return cube
 
@@ -2046,7 +2046,7 @@ class cube_data_class:
         return line_df_vv
 
     # @jit(nopython=True)
-    def nvvc(self, parallel=True, nb_cpu=8, verbose=True):
+    def nvvc(self, nb_cpu=8, verbose=True):
 
         """
         Compute the Normalized Coherence Vector Velocity for every pixel of the cube.

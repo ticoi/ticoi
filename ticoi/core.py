@@ -563,21 +563,6 @@ def inversion_core(
                 t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
 
                 return prop_wieght_diag, sigma0_weight, t_value
-            #
-            # def Prop_weight2(F,weight, Residu, error):
-            #     W = np.diag(weight.astype("float32"))
-            #     error = np.diag(error)
-            #     FTWF = F.T @ W @ F
-            #     N = np.linalg.inv(FTWF + coef * mu.T @ mu)
-            #     Prop_weight = N @ F.T @ W @ error @ W @ F @ N
-            #     # Prop_weight = N @ F.T @ W @ F @ N
-            #     sigma0_weight = np.sum(Residu ** 2 * weight) / (F.shape[0] - F.shape[1])
-            #     prop_wieght_diag = np.diag(Prop_weight)
-            #     # Compute the confidence intervals
-            #     alpha = 0.05  # Confidence level
-            #     t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
-            #
-            #     return prop_wieght_diag, sigma0_weight, t_value
 
             Residux = data_values[:, 0] - A @ result_dx_i  # has a normal distribution
             prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(A,weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit)**2)

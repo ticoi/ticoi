@@ -152,12 +152,14 @@ def weight_for_inversion(
             Weight = data[:, pos]
         else:  # The data quality corresponds to errors in m/y or m/d
             # Normalization of the errors
-            try:
-                Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
-            except ZeroDivisionError:
-                Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            Weight = TukeyBiweight(Weight, 4.685)
+
+            Weight = 1 - (data[:, pos] - np.min(data[:, pos])) / (np.max(data[:, pos]) - np.min(data[:, pos]))
+            # try:
+            #     Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
+            # except ZeroDivisionError:
+            #     Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
+            # # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
+            # Weight = TukeyBiweight(Weight, 4.685)
 
         if temporal_decorrelation is not None:
             Weight = np.multiply(temporal_decorrelation, Weight)
