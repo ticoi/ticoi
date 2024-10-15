@@ -332,7 +332,7 @@ def inversion_core(
         # Set a weight of 0, for large temporal baseline in the first inversion
         # 115 µs ± 1.2 µs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
         weight_temporal_decorrelation = (
-            np.where(data_values[:, 4] > 400, 0, 1) if detect_temporal_decorrelation else None
+            np.where(data_values[:, 4] > 200, 0, 1) if detect_temporal_decorrelation else None
         )
         # First weight of the inversion
         Weightx = weight_for_inversion(
