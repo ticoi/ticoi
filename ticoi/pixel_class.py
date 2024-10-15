@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import copy
 from typing import List, Optional, Union
 
@@ -772,8 +773,8 @@ class pixel_class:
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
-        fig, ax = plt.subplots(figsize=self.figsize)
-        # fig, ax = plt.subplots(figsize=(6, 3.5))
+        # fig, ax = plt.subplots(figsize=self.figsize)
+        fig, ax = plt.subplots(figsize=(6, 3.5))
         ax.set_ylim(data.vvymin, data.vvymax)
         ax.set_ylabel(f"Velocity magnitude  [{self.unit}]", fontsize=14)
         p = ax.plot(
