@@ -22,6 +22,7 @@ import dask.array as da
 import geopandas
 import numpy as np
 import pandas as pd
+import pyproj.datadir
 import rasterio as rio
 import rasterio.enums
 import rasterio.warp
@@ -29,6 +30,8 @@ import richdem as rd
 import xarray as xr
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
+import pyproj
+print(pyproj.datadir.get_data_dir())
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 
@@ -47,7 +50,7 @@ from ticoi.mjd2date import mjd2date
 
 
 class cube_data_class:
-    def __init__(self, cube=None, ds=None):
+    def __init__(self, cube=None, ds=None, sar=False):
 
         """
         Initialisation of the main attributes, or copy cube's attributes and ds dataset if given.
@@ -67,6 +70,11 @@ class cube_data_class:
             self.ds = xr.Dataset({})
             self.resolution = 50
             self.is_TICO = False
+            self.is_SAR = False
+            if sar:
+                self.is_SAR = True
+                self.incidenceAngle = 40
+                self.headingAngle = -20
 
         else:
             self.filedir = cube.filedir
@@ -79,6 +87,11 @@ class cube_data_class:
             self.ds = cube.ds if ds is None else ds
             self.resolution = cube.resolution
             self.is_TICO = cube.is_TICO
+            self.is_SAR = cube.is_SAR
+            if self.is_SAR:
+                self.incidenceAngle = cube.incidenceAngle
+                self.headingAngle = cube.headingAngle
+
 
     def update_dimension(self, time_dim: str = "mid_date"):
 
@@ -104,7 +117,7 @@ class cube_data_class:
         :param proj: [str] --- EPSG system of the coordinates given in subset
         :param subset: [list] --- A list of 4 float, these values are used to give a subset of the dataset : [xmin, xmax, ymax, ymin]
         """
-
+        print(os.environ.get("PROJ_LIB"))
         if CRS(self.ds.proj4) != CRS(proj):
             transformer = Transformer.from_crs(
                 CRS(proj), CRS(self.ds.proj4)
@@ -702,6 +715,7 @@ class cube_data_class:
         mask: str | xr.DataArray = None,
         reproj_coord: bool = False,
         reproj_vel: bool = False,
+        sar_info: str | None = None,
         verbose: bool = False,
     ):
 
@@ -863,6 +877,17 @@ class cube_data_class:
                 if mask is not None:
                     self.mask_cube(mask)
 
+                if self.is_SAR:
+                    if sar_info is None:
+                        raise ValueError("The sar_info file must be provided for SAR data.")
+                    else:
+                        import json
+                        if sar_info.split(".")[-1] != "json":
+                            raise ValueError("The sar_info file must be a json file.")
+                        with open(sar_info) as f:
+                            sar_info = json.load(f)
+                            self.incidenceAngle = sar_info["incidenceAngle"]
+                            self.headingAngle = sar_info["headingAngle"]
                 # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
                 #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
                 #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
@@ -1757,7 +1782,7 @@ class cube_data_class:
 
         :return: Cube projected to self
         """
-
+        # TODO: fix bug due to the order of cube.ds could be different from 'mid_date', 'y', 'x'
         if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
             grid = np.meshgrid(cube.ds["x"], cube.ds["y"])
             temp = cube.temp_base_()
@@ -2459,3 +2484,73 @@ class cube_data_class:
                 result_quality=result_quality,
                 verbose=verbose,
             )
+
+class cube_3d_class:
+    def __init__(self):
+        self.at = cube_data_class(sar=True)
+        self.dt = cube_data_class(sar=True)
+        self.nz = self.at.nz + self.dt.nz
+        self.nx = self.at.nx
+        self.ny = self.at.ny
+    
+        self.filedir = [self.at.filedir, self.dt.filedir]
+        self.filename = [self.at.filename, self.dt.filename]
+        self.author = self.at.author
+        self.source = self.at.source
+
+        self.resolution = self.at.resolution
+        self.is_TICO = self.at.is_TICO
+    
+    def load(self,
+        filepath_at: list | str,
+        filepath_dt: list | str,
+        load_kwargs,
+        sar_info_at: str | None = None,
+        sar_info_dt: str | None = None,
+    ):  
+        
+        self.at.load(filepath_at, **load_kwargs, sar_info=sar_info_at)
+        self.dt.load(filepath_dt, **load_kwargs, sar_info=sar_info_dt)
+        
+        # rechunking to ensure the same chunksize at x and y dimension for both cubes
+        chunks_at = self.at.ds.chunksizes
+        chunks_dt = self.dt.ds.chunksizes
+        if chunks_at['x'] != chunks_dt['x'] or chunks_at['y'] != chunks_dt['y']:
+            new_chunks = {dim: max(chunks_at[dim], chunks_dt[dim]) for dim in ['x', 'y']}
+            self.at.ds = self.at.ds.chunk(new_chunks)
+            self.dt.ds = self.dt.ds.chunk(new_chunks)
+        # self.cube_dt = self.cube_dt.align_cube(self.cube_at)
+        
+    def filter_cube(self, preData_kwargs):
+        
+        if preData_kwargs['regu'] == '1accelnotnull' or '1accelnotnull' in preData_kwargs['regu'].values():
+            raise ValueError("The regularization '1accelnotnull' is not available right now for 3D inversion")
+        obs_filt_at, regu = self.at.filter_cube(**preData_kwargs)
+        obs_filt_dt, regu = self.dt.filter_cube(**preData_kwargs)
+        
+        
+        return obs_filt_at, obs_filt_dt, regu
+    
+    def load_pixel(
+        self,
+        i: int | float,
+        j: int | float,
+        unit: int = 365,
+        regu: int | str = 1,
+        coef: int = 100,
+        flag: xr.Dataset | None = None,
+        solver: str = "LSMR",
+        interp: str = "nearest",
+        proj: str = "EPSG:4326",
+        rolling_mean: xr.Dataset | None = None,
+        visual: bool = False,
+        output_format="np",
+    ):
+
+        data_at = self.at.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean, visual=visual, output_format=output_format)
+        data_dt = self.dt.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean, visual=visual, output_format=output_format)
+        
+        data_at[0]['track'] = 'ascending'
+        data_dt[0]['track'] = 'descending'
+        
+        

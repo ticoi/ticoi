@@ -1048,8 +1048,156 @@ def process(
         return returned_list[0]
     return returned_list if len(returned_list) > 0 else None
 
+def process_3d(
+    cube_at: cube_data_class,
+    cube_dt: cube_data_class,
+    i: float | int,
+    j: float | int,
+    path_save,
+    solver: str = "LSMR",
+    regu: int | str = 1,
+    coef: int = 100,
+    flag: xr.Dataset | None = None,
+    apriori_weight: bool = False,
+    apriori_weight_in_second_iteration: bool = False,
+    returned: list | str = "interp",
+    obs_filt: xr.Dataset | None = None,
+    interpolation_load_pixel: str = "nearest",
+    iteration: bool = True,
+    interval_output: int = 1,
+    first_date_interpol: np.datetime64 | None = None,
+    last_date_interpol: np.datetime64 | None = None,
+    proj="EPSG:4326",
+    threshold_it: float = 0.1,
+    conf: bool = True,
+    option_interpol: str = "spline",
+    redundancy: int | None = None,
+    detect_temporal_decorrelation: bool = True,
+    unit: int = 365,
+    result_quality: list | str | None = None,
+    nb_max_iteration: int = 10,
+    delete_outliers: int | str | None = None,
+    linear_operator: bool = False,
+    visual: bool = False,
+    verbose: bool = False,
+):
 
-def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool = False):
+    """
+    :params i, j: [float | int] --- Coordinates of the point in pixel
+    :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
+    :param regu: [int | str] [default is 1] --- Type of regularization
+    :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
+    :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+    :param apriori_weight: [bool] [default is False] --- If True use of aprori weight
+    :param returned: [list | str] [default is 'interp'] --- What results must be returned ('raw', 'invert' and/or 'interp')
+    :param obs_filt: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
+    :param interpolation_load_pixel: [str] [default is 'nearest'] --- Type of interpolation to load the previous pixel in the temporal interpolation ('nearest' or 'linear')
+    :param iteration: [bool] [default is True] --- If True, use of iterations
+    :param interval_output: [int] [default is 1] --- Temporal sampling of the leap frog time series
+    :param first_date_interpol: [np.datetime64 | None] --- First date at which the time series are interpolated
+    :param last_date_interpol: [np.datetime64 | None] --- Last date at which the time series are interpolated
+    :param proj: [str] [default is 'EPSG:4326'] --- Projection of the cube
+    :param threshold_it: [float] [default is 0.1] --- Threshold to test the stability of the results between each iteration, use to stop the process
+    :param conf: [bool] [default is False] --- If True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
+    :param option_interpol: [str] [default is 'spline'] --- Type of interpolation, it can be 'spline', 'spline_smooth' or 'nearest'
+    :param redundancy: [int | None] [default is None] --- If None there is no redundancy between two velocity in the interpolated time-series, else the overlap between two velocities is redundancy days
+    :param detect_temporal_decorrelation: [bool] [default is True] --- If True the first inversion is solved using only velocity observations with small temporal baselines, to detect temporal decorelation
+    :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
+    :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+    :param nb_max_iteration: [int] [default is 10] --- Maximum number of iterations
+    :param delete_outliers: [int | str | None] [default is None] --- Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    :param linear_operator: [bool] [default is False] --- If linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
+    :param visual: [bool] [default is False] --- Keep the weights for future plots
+    :param verbose: [bool] [default is False] --- Print information along the way
+
+    :return dataf_list: [pd dataframe] Result of the temporal inversion + interpolation at point (i, j) if inversion was successful, an empty dataframe if not
+    """
+
+    returned_list = []
+
+    # Loading data at pixel location
+    data_at = cube_at.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver, coef=coef, regu=regu, rolling_mean=obs_filt, flag=flag)
+    data_dt = cube_dt.load_pixel(i, j, proj=proj, interp=interpolation_load_pixel, solver=solver, coef=coef, regu=regu, rolling_mean=obs_filt, flag=flag)
+
+    if "raw" in returned:  # return the raw data
+        returned_list.append(data)
+
+    if "invert" in returned or "interp" in returned:
+        if flag is not None:  # set regu and coef for every flags
+            regu, coef = data[3], data[4]
+
+        # Inversion
+        # TODO: to check that!
+        if delete_outliers == "median_angle":
+            conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
+
+        result = inversion_core(
+            data[0],
+            i,
+            j,
+            dates_range=data[2],
+            solver=solver,
+            coef=coef,
+            apriori_weight=apriori_weight,
+            apriori_weight_in_second_iteration=apriori_weight_in_second_iteration,
+            unit=unit,
+            conf=conf,
+            regu=regu,
+            mean=data[1],
+            iteration=iteration,
+            threshold_it=threshold_it,
+            detect_temporal_decorrelation=detect_temporal_decorrelation,
+            linear_operator=linear_operator,
+            result_quality=result_quality,
+            nb_max_iteration=nb_max_iteration,
+            visual=visual,
+            verbose=verbose,
+        )
+
+        if "invert" in returned:
+            if result[1] is not None:
+                returned_list.append(result[1])
+            else:
+                if result_quality is not None and "X_contribution" in result_quality:
+                    variables = ["result_dx", "result_dy", "xcount_x", "xcount_y"]
+                else:
+                    variables = ["result_dx", "result_dy"]
+                returned_list.append(pd.DataFrame({"date1": [], "date2": [], **{col: [] for col in variables}}))
+
+        if "interp" in returned:
+            # Interpolation
+            if result[1] is not None:  # If inversion have been performed
+                dataf_list = interpolation_core(
+                    result[1],
+                    interval_output,
+                    option_interpol=option_interpol,
+                    first_date_interpol=first_date_interpol,
+                    last_date_interpol=last_date_interpol,
+                    unit=unit,
+                    redundancy=redundancy,
+                    result_quality=result_quality,
+                )
+
+                if result_quality is not None and "Norm_residual" in result_quality:
+                    dataf_list["NormR"] = result[1]["NormR"]  # Store norm of the residual from the inversion
+                returned_list.append(dataf_list)
+            else:
+                if result_quality is not None and "Norm_residual" in result_quality:
+                    returned_list.append(
+                        pd.DataFrame(
+                            {"date1": [], "date2": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": [], "NormR": []}
+                        )
+                    )
+                else:
+                    returned_list.append(
+                        pd.DataFrame({"date1": [], "date2": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": []})
+                    )
+
+    if len(returned_list) == 1:
+        return returned_list[0]
+    return returned_list if len(returned_list) > 0 else None
+
+def chunk_to_block(cube: cube_data_class | list, block_size: float = 1, verbose: bool = False):
 
     """
     Split a dataset in blocks of a given size (maximum).
@@ -1063,6 +1211,12 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
 
     GB = 1073741824
     blocks = []
+    if isinstance(cube, list):
+        cube_merge = cube[0]
+        for i in range(1, len(cube)):
+            cube_merge.merge_cube(cube[i])
+        cube = cube_merge
+    
     if cube.ds.nbytes > block_size * GB:
         num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
         chunk_bytes = num_elements * cube.ds["vx"].dtype.itemsize
@@ -1256,6 +1410,140 @@ def process_blocks_refine(
     # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
     return asyncio.run(
         process_blocks_main(cube, nb_cpu=nb_cpu, block_size=block_size, returned=returned, verbose=verbose)
+    )
+
+def process_blocks_3d(
+    cube_at: cube_data_class,
+    cube_dt: cube_data_class,
+    nb_cpu: int = 8,
+    block_size: float = 0.5,
+    returned: list | str = "interp",
+    preData_kwargs: dict = None,
+    inversion_kwargs: dict = None,
+    verbose: bool = False,
+):
+
+    """
+    Separate the cube in several blocks computed synchronously one after the other by loading one block while the other is computed (with
+    parallelization) in order to avoid memory overconsumption and kernel crashing, and benefit from smaller computation time.
+
+    :param cube: [cube_data_class] --- Cube of raw data to be processed
+    :param nb_cpu: [int] [default is 8] --- Number of processing unit to use for parallel processing
+    :param block_size: [float] [default is 0.5] --- Maximum size of the blocks (in GB)
+    :param returned: [list | str] [default is 'interp'] --- What results must be returned ('raw', 'invert' and/or 'interp')
+    :param preData_kwargs: [dict] [default is None] --- Pre-processing parameters (see cube_data_classxr.filter_cube)
+    :param inversion_kwargs: [dict] [default is None] --- Inversion (and interpolation) parameters (see core.process)
+    :param verbose: [bool] [default is False] --- Print information along the way
+
+    :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
+    """
+
+    async def process_block(
+        block: cube_data_class, returned: list | str = "interp", nb_cpu: int = 8, verbose: bool = False
+    ):
+        xy_values = itertools.product(block.ds["x"].values, block.ds["y"].values)
+        # Return only raw data => no need to filter the cube
+        if "raw" in returned and (type(returned) == str or len(returned) == 1):  # Only load the raw data
+            xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
+            result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+                delayed(block.load_pixel)(
+                    i,
+                    j,
+                    proj=inversion_kwargs["proj"],
+                    interp=inversion_kwargs["interpolation_load_pixel"],
+                    solver=inversion_kwargs["solver"],
+                    regu=inversion_kwargs["regu"],
+                    rolling_mean=None,
+                    visual=inversion_kwargs["visual"],
+                )
+                for i, j in xy_values_tqdm
+            )
+            return result_block
+
+        # Filter the cube
+        obs_filt, flag_block = block.filter_cube(**preData_kwargs)
+        if isinstance(inversion_kwargs, dict):
+            inversion_kwargs.update({"flag": flag_block})
+
+        # There is no data on the whole block (masked data)
+        if obs_filt is None and "interp" in returned:
+            if inversion_kwargs["result_quality"] is not None and "Norm_residual" in inversion_kwargs["result_quality"]:
+                return [
+                    pd.DataFrame(
+                        {"date1": [], "date2": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": [], "NormR": []}
+                    )
+                ]
+            else:
+                return [
+                    pd.DataFrame(
+                        {"First_date": [], "Second_date": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": []}
+                    )
+                ]
+
+        xy_values_tqdm = tqdm(xy_values, total=(obs_filt["x"].shape[0] * obs_filt["y"].shape[0]))
+        result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+            for i, j in xy_values_tqdm
+        )
+
+        return result_block
+
+    async def process_blocks_3d_main(cube, nb_cpu=8, block_size=0.5, returned="interp", verbose=False):
+        if isinstance(preData_kwargs, dict) and "flag" in preData_kwargs.keys():
+            flag = preData_kwargs["flag"]
+            if flag is not None:
+                flag = cube.create_flag(flag)
+        else:
+            flag = None
+
+        blocks = chunk_to_block(cube, block_size=block_size, verbose=True)  # Split the cube in smaller blocks
+
+        dataf_list = [None] * (cube.nx * cube.ny)
+
+        loop = asyncio.get_event_loop()
+        for n in range(len(blocks)):
+            print(f"[Block process] Processing block {n+1}/{len(blocks)}")
+
+            # Load the first block and start the loop
+            if n == 0:
+                x_start, x_end, y_start, y_end = blocks[0]
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
+
+            block, block_flag, duration = await future
+            print(f"Block {n+1} loaded in {duration:.2f} s")
+
+            if n < len(blocks) - 1:
+                # Load the next block while processing the current block
+                x_start, x_end, y_start, y_end = blocks[n + 1]
+                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
+
+            # need to change the flag back...
+            if flag is not None:
+                preData_kwargs.update({"flag": block_flag})
+
+            block_result = await process_block(
+                block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
+            )  # Process TICOI
+
+            # Transform to list
+            for i in range(len(block_result)):
+                row = i % block.ny + blocks[n][2]
+                col = np.floor(i / block.ny) + blocks[n][0]
+                idx = int(col * cube.ny + row)
+
+                dataf_list[idx] = block_result[i]
+
+            del block_result, block
+
+        if isinstance(returned, list) and len(returned) > 1:
+            dataf_list = {returned[r]: [dataf_list[i][r] for i in range(len(dataf_list))] for r in range(len(returned))}
+
+        return dataf_list
+
+    # /!\ The use of asyncio can cause problems when the code is launched from an IDE if it has its own event loop
+    # (leads to RuntimeError), you must launch it in an external terminal (IDEs generally offer this option)
+    return asyncio.run(
+        process_blocks_3d_main(cube_at, cube_dt, nb_cpu=nb_cpu, block_size=block_size, returned=returned, verbose=verbose)
     )
 
 
