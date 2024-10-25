@@ -2523,13 +2523,14 @@ class cube_3d_class:
         
     def filter_cube(self, preData_kwargs):
         
-        if preData_kwargs['regu'] == '1accelnotnull' or '1accelnotnull' in preData_kwargs['regu'].values():
-            raise ValueError("The regularization '1accelnotnull' is not available right now for 3D inversion")
+        if isinstance(preData_kwargs['regu'], str):
+            if preData_kwargs['regu'] == '1accelnotnull' or '1accelnotnull' in preData_kwargs['regu'].values():
+                raise ValueError("The regularization '1accelnotnull' is not available right now for 3D inversion")
         obs_filt_at, regu = self.at.filter_cube(**preData_kwargs)
         obs_filt_dt, regu = self.dt.filter_cube(**preData_kwargs)
+        obs_filt = [obs_filt_at, obs_filt_dt]
         
-        
-        return obs_filt_at, obs_filt_dt, regu
+        return obs_filt, regu
     
     def load_pixel(
         self,
@@ -2542,15 +2543,27 @@ class cube_3d_class:
         solver: str = "LSMR",
         interp: str = "nearest",
         proj: str = "EPSG:4326",
-        rolling_mean: xr.Dataset | None = None,
+        rolling_mean: List[xr.Dataset] | None = None,
         visual: bool = False,
         output_format="np",
     ):
 
-        data_at = self.at.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean, visual=visual, output_format=output_format)
-        data_dt = self.dt.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean, visual=visual, output_format=output_format)
-        
-        data_at[0]['track'] = 'ascending'
-        data_dt[0]['track'] = 'descending'
+        data_at = self.at.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean[0], visual=visual, output_format=output_format)
+        data_dt = self.dt.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean[1], visual=visual, output_format=output_format)
         
         
+        data_at[0].append(np.full((data_at[0][0].shape[0], 1), 'S1_at'))
+        data_dt[0].append(np.full((data_dt[0][0].shape[0], 1), 'S1_dt'))
+        
+        data_values = []
+        for i in range(len(data_at[0])):
+            data_values.append(np.concatenate((data_at[0][i], data_dt[0][i]), axis=0))
+        
+        mean = [data_at[1], data_dt[1]]  # mean[0] for ascending, mean[1] for descending
+        dates_range = [data_at[2], data_dt[2]] # dates_range[0] for ascending, dates_range[1] for descending
+        
+        if len(data_at) > 3:
+            flag, regu = data_at[3], data_dt[4]
+            return data_values, mean, dates_range, flag, regu
+        else:
+            return data_values, mean, dates_range

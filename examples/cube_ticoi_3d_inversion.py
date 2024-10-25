@@ -45,7 +45,7 @@ warnings.filterwarnings("ignore")
 # if the amount of pixel to compute is too high (depending on your available memory). If you want to process big amount of data, you should use
 # 'block_process', which is also faster. This method is essentially used for debug purposes.
 
-TICOI_process = "block_process"
+TICOI_process = "direct_process"
 
 save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
@@ -69,12 +69,14 @@ solver = "LSMR_ini"  # Solver for the inversion
 #   - 'invert' for the results of the inversion
 #   - 'interp' for the results of the interpolation
 returned = ["invert", "interp"]
+i, j = 527460, 3993660
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": [523451, 531469, 3990739, 3996586],  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-    "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    # "subset": [523451, 531469, 3990739, 3996586],  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+    "subset": None,
+    "buffer": [i, j, 300],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": None,  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
@@ -182,17 +184,22 @@ start.append(time.time())
 
 # Direct computation of the whole TICOI cube
 if TICOI_process == "direct_process":
+    
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
-    obs_filt_at, obs_filt_dt, flag = cube.filter_cube(preData_kwargs)
-    # Progression bar
-    xy_values = itertools.product(cube.at.ds["x"].values, cube.at.ds["y"].values)
-    xy_values_tqdm = tqdm(xy_values, total=len(cube.at.ds["x"].values) * len(cube.at.ds["y"].values), mininterval=0.5)
+    obs_filt, flag = cube.filter_cube(preData_kwargs)
+    
+    if i is not None and j is not None:
+        result = process(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+    else:
+        # Progression bar
+        xy_values = itertools.product(cube.at.ds["x"].values, cube.at.ds["y"].values)
+        xy_values_tqdm = tqdm(xy_values, total=len(cube.at.ds["x"].values) * len(cube.at.ds["y"].values), mininterval=0.5)
 
-    # Main processing of the data with TICOI algorithm, individually for each pixel
-    result = Parallel(n_jobs=nb_cpu, verbose=0)(
-        delayed(process)(cube, i, j, obs_filt_at=obs_filt_at, obs_filt_dt=obs_filt_dt, returned=returned, **inversion_kwargs)
-        for i, j in xy_values_tqdm
-    )
+        # Main processing of the data with TICOI algorithm, individually for each pixel
+        result = Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(process)(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
+            for i, j in xy_values_tqdm
+        )
 else:
     raise NameError("Please enter either direct_process or block_process")
 

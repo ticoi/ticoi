@@ -903,7 +903,7 @@ def process(
     apriori_weight: bool = False,
     apriori_weight_in_second_iteration: bool = False,
     returned: list | str = "interp",
-    obs_filt: xr.Dataset | None = None,
+    obs_filt: xr.Dataset | List[xr.Dataset] | None = None,
     interpolation_load_pixel: str = "nearest",
     iteration: bool = True,
     interval_output: int = 1,
