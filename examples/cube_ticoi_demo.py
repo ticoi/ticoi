@@ -54,8 +54,8 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2"))}/c_x01470_y03675_all_filt-multi.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "test_data"))}/c_x01470_y03675_all_filt-multi.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","cube"))}/'  # Path where to stored the results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
 

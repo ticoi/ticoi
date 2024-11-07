@@ -43,7 +43,7 @@ from ticoi.inversion_functions import (
     construction_dates_range_np,
     find_date_obs,
     inversion_one_component,
-    inversion_two_components,
+    inversion_two_components,inversion_3D,
     mu_regularisation,
     weight_for_inversion,
 )
@@ -307,7 +307,7 @@ def inversion_core(
         else:
             data_dates, data_values = data
 
-        if dates_range is None:
+        if dates_range == [None,None]:
             dates_range = construction_dates_range_np(
                 data_dates
             )  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
@@ -363,6 +363,13 @@ def inversion_core(
             else:
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
 
+        ## you need to change that
+        in_angle = np.where(data[2]=='S1_at',35,-50).reshape(data[2].shape[0])
+        az_angle = np.array([80]*data[2].shape[0])
+        result_dx, result_dy, residu_normx, residu_normy = inversion_3D(
+            A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef, angles=[in_angle,az_angle]
+        )
+
         ##  Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
         if regu == "1accelnotnull":
@@ -384,6 +391,8 @@ def inversion_core(
         else:
             mean_ini = None
             accel = None
+
+
 
         ##  Inversion
         # 87.5 ms ± 668 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)

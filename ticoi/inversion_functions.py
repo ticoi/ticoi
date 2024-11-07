@@ -100,7 +100,7 @@ def construction_dates_range_np(data: np.ndarray) -> np.ndarray:
     return dates
 
 
-@jit(nopython=True)  # use numba
+#@jit(nopython=True)  # use numba
 def construction_a_lf(dates: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
     """
     Construction of the design matrix A in the formulation AX = Y.
@@ -557,7 +557,7 @@ def inversion_one_component(
     return X, residu_norm
 
 
-def inversion_two_components(
+def inversion_3D(
     A: np.ndarray,
     dates_range: np.ndarray,
     v_pos: int,
@@ -568,7 +568,7 @@ def inversion_two_components(
     coef: int = 1,
     ini: None | np.ndarray = None,
     show_L_curve: bool = False,
-    verbose: bool = False,
+    verbose: bool = False, angles=None,
 ):
     """
     Invert the system AX = Y for two component dx and dy at the same time.
@@ -594,19 +594,42 @@ def inversion_two_components(
             print("ill conditioned")
             print("rank A", np.linalg.matrix_rank(A))
 
-    l_dates_range = len(dates_range)
 
-    c = np.concatenate([A, np.zeros(A.shape)], axis=0)
-    A = np.concatenate([c, np.concatenate([np.zeros(A.shape), A], axis=0)], axis=1)
-    dates_range = np.concatenate([dates_range, dates_range])
+    a_angle = angles[1]#azimuth angle
+    i_angle = angles[0]#incidence angle
+    l_dates_range = len(dates_range)
+    c = np.concatenate([A, np.zeros(A.shape), np.zeros(A.shape)], axis=1)
+    A_3D = np.concatenate([c, np.concatenate([np.zeros(A.shape), A, np.zeros(A.shape)], axis=1)], axis=0)
     del c
     F_regu = np.multiply(coef, mu)
     # D_regu = np.zeros(mu.shape[0])
     D_regu = np.ones(mu.shape[0]) * coef
 
-    v = np.concatenate([data[:, 2].T, data[:, 3].T])  # Concatenate vx and vy observations
+    v = np.concatenate([data[:, 0].T, data[:, 1].T])  # Concatenate vx and vy observations
 
-    # del delta, mean
+
+    #for observations along range
+    A_3D[:data.shape[0], :len(dates_range) - 1] = np.array(
+        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * -np.cos(a_angle)[z] * np.sin(i_angle)[z]  for z in
+         range(data.shape[0])])  # estimation of vx #TODO: check the sign here
+
+    A_3D[data.shape[0]:, len(dates_range) - 1:2 * (len(dates_range) - 1)] = np.array(
+        [A_3D[data.shape[0]:, :len(dates_range) - 1][z] * np.sin(a_angle)[z] * np.sin(i_angle)[z] for z in
+         range(data.shape[0])])  # estimation of vy
+
+    A_3D[data.shape[0]:, 2* (len(dates_range) - 1):3 * (len(dates_range) - 1)] = np.array(
+        [A_3D[data.shape[0]:, :len(dates_range) - 1][z] * -np.cos(a_angle)[z] for z in
+         range(data.shape[0])])  # estimation of vz
+
+    #for observation along azimuth
+    A_3D [data.shape[0]:,:len(dates_range) - 1] = np.array([A_3D[data.shape[0]:,:len(dates_range) - 1][z] * np.sin(a_angle)[z] for z in
+         range(data.shape[0])]) #estimation of vx
+    A_3D [data.shape[0]:,len(dates_range) - 1:2 * (len(dates_range) - 1)] = np.array([A_3D[data.shape[0]:,:len(dates_range) - 1][z] * np.cos(a_angle)[z] for z in
+         range(data.shape[0])]) #estimation of vy
+
+    #then you solve the system A_3D X = v, where X could contain estimated vx, vy, and vz in this order, for all the dates in dates_range
+
+# del delta, mean
 
     if solver == "LSMR":
         F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float64")
@@ -666,6 +689,118 @@ def inversion_two_components(
             residu_norm[: X.shape[0] // 2],
             residu_norm[X.shape[0] // 2 :],
         )
+
+def inversion_two_components(
+            A: np.ndarray,
+            dates_range: np.ndarray,
+            v_pos: int,
+            data: np.ndarray,
+            solver: str,
+            Weight: int | np.ndarray,
+            mu: np.ndarray,
+            coef: int = 1,
+            ini: None | np.ndarray = None,
+            show_L_curve: bool = False,
+            verbose: bool = False,
+    ):
+        """
+        Invert the system AX = Y for two component dx and dy at the same time.
+        It allow to constrain the direction of the displacement.
+        :param A: Matrix of the temporal inversion system AX=Y
+        :param dates_range: An array with all the dates included in data, list
+        :param v_pos: Position of the v variable within data
+        :param data: An array where each line is (date1, date2, other elements) for which a velocity is computed
+        :param solver: LS_regu, LS_SVD, LSQR or LSQR_ini
+        :param coef: Coef of Tikhonov regularisation
+        :param Weight:  Weight for the inversion if Weight=1 perform an Ordinary Least Square
+
+        :return result_dx, result_dy: Computed displacements along x and y axis
+        :return residu_normx, residu_norm_y: Norm of the residu along x and y axis (when showing the L curve)
+        """
+
+        if verbose:  # A properties
+            if A.shape[0] < A.shape[1]:  # System is under-determined
+                print("under-determined")
+            elif A.shape[0] >= A.shape[1]:  # System is over-determined
+                print("over-determined")
+            if np.linalg.matrix_rank(A) < A.shape[1]:  # Systeme is ill-conditioned
+                print("ill conditioned")
+                print("rank A", np.linalg.matrix_rank(A))
+
+        l_dates_range = len(dates_range)
+
+        c = np.concatenate([A, np.zeros(A.shape)], axis=0)
+        A = np.concatenate([c, np.concatenate([np.zeros(A.shape), A], axis=0)], axis=1)
+        dates_range = np.concatenate([dates_range, dates_range])
+        del c
+        F_regu = np.multiply(coef, mu)
+        # D_regu = np.zeros(mu.shape[0])
+        D_regu = np.ones(mu.shape[0]) * coef
+
+        v = np.concatenate([data[:, 2].T, data[:, 3].T])  # Concatenate vx and vy observations
+
+        # del delta, mean
+
+        if solver == "LSMR":
+            F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float64")
+            D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float64")
+            F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
+            # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
+            X = sp.linalg.lsmr(F, D)[0]
+
+        elif solver == "LSMR_ini":
+            F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype(
+                "float64"
+            )  # stack ax and regu, and remove rows with only 0
+            D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype(
+                "float64"
+            )  # stack ax and regu, and remove rows with only
+
+            if type(ini) == list:
+                x0 = np.concatenate(ini)
+            elif ini.shape[0] == 2:
+                x0 = np.full(F.shape[1], ini[v_pos - 2], dtype="float64")
+            else:
+                x0 = ini
+            # del ini
+
+            F = sp.csc_matrix(F)
+            X = sp.linalg.lsmr(F, D, x0=x0)[0]
+
+        elif solver == "LS":
+            F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), coef * mu]).astype(
+                "float64")
+            D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), np.zeros(mu.shape[0])]).astype("float64")
+            X = np.linalg.lstsq(F, D, rcond=None)[0]
+
+        elif solver == "LSQR" or solver == "LSQR_ini":
+            F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), coef * mu]).astype(
+                "float64")
+            D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), np.zeros(mu.shape[0])]).astype("float64")
+            F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
+            X, istop, itn, r1norm = sp.linalg.lsqr(F, D)[:4]
+
+        else:
+            raise ValueError("Enter LS, LS_SVD,LSMR, LSQR or LSQR_ini")
+
+        if show_L_curve:
+            R_lcurve = F.dot(X) - D
+            residu_norm = [
+                np.linalg.norm(R_lcurve[: np.multiply(Weight[Weight != 0], v[Weight != 0]).shape[0]], ord=2),
+                np.linalg.norm(R_lcurve[np.multiply(Weight[Weight != 0], v[Weight != 0]).shape[0]:] / coef, ord=2),
+            ]
+        else:
+            residu_norm = None
+
+        if residu_norm == None:
+            return X[: X.shape[0] // 2], X[X.shape[0] // 2:], None, None
+        else:
+            return (
+                X[: X.shape[0] // 2],
+                X[X.shape[0] // 2:],
+                residu_norm[: X.shape[0] // 2],
+                residu_norm[X.shape[0] // 2:],
+            )
 
     # %% ======================================================================== #
     #                             OLD FUNCTION                                    #

@@ -53,13 +53,12 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-cube_AT_name = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/Hispar_disp_AT.nc"  # Path where the Sentinel-2 IGE cubes are stored
-cube_DT_name = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/Hispar_disp_DT.nc"  # Path where the Sentinel-2 IGE cubes are stored
-sar_info_AT = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/sar_info_AT.json"
-sar_info_DT = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/sar_info_DT.json"
-path_save = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/"  # Path where to stored the results
+cube_AT_name = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/Hispar_disp_AT_subset.nc"  # Path where the Sentinel-2 IGE cubes are stored
+cube_DT_name = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/Hispar_disp_DT_subset.nc"  # Path where the Sentinel-2 IGE cubes are stored
+sar_info_AT = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/sar_info_AT.json"
+sar_info_DT = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/sar_info_DT.json"
+path_save = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion"  # Path where to stored the results
 result_fn = "Hala_disp_ticoi_flow_angle_disp_3d_test_1015"  # Name of the netCDF file to be created
-
 
 proj = "EPSG:32643"  # EPSG system of the given coordinates
 
@@ -92,17 +91,21 @@ delete_outlier = "flow_angle"
 apriori_weight = False  # should be false if the error is nor provided in the original observation
 
 preData_kwargs = {
-    "smooth_method": "savgol",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+    "smooth_method": "savgol",
+    # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
     "s_win": 7,  # Size of the spatial window
     "t_win": 90,  # Time window size for 'ewma' smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
-    "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+    "delete_outliers": delete_outlier,
+    # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
+    "regu": regu,
+    # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": solver,  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
-    "velo_or_disp": "disp",  # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
+    "velo_or_disp": "disp",
+    # Type of data contained in the data cube ('disp' for displacements, and 'velo' for velocities)
     "select_baseline": 60,  # Select temporal baselines (in days) to be used for the smoothing
     "verbose": True,  # Print information throughout the filtering process
 }
@@ -116,15 +119,18 @@ inversion_kwargs = {
     "interpolation_load_pixel": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
     "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
-    "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
+    "threshold_it": 0.1,
+    # Threshold to test the stability of the results between each iteration, used to stop the process
     "apriori_weight": apriori_weight,  # If True, use apriori weights
     "apriori_weight_in_second_iteration": False,
-    "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
+    "detect_temporal_decorrelation": True,
+    # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
     "interval_output": 12,
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "redundancy": 6,  # Redundancy in the interpolated time series in number of days, no redundancy if None
-    "result_quality": "X_contribution",  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+    "result_quality": "X_contribution",
+    # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": False,  # Plot results along the way
     "path_save": path_save,  # Path where to store the results
     "verbose": False,  # Print information throughout TICOI processing
@@ -141,7 +147,6 @@ if not os.path.exists(path_save):
 for common_parameter in ["proj", "delete_outliers", "regu", "solver"]:
     inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
-
 # %%========================================================================= #
 #                                 DATA LOADING                                #
 # =========================================================================%% #
@@ -157,12 +162,12 @@ cube.load(cube_AT_name, cube_DT_name, load_kwargs)
 # Prepare interpolation dates
 first_date_AT, last_date_AT = prepare_interpolation_date(cube.at)
 first_date_DT, last_date_DT = prepare_interpolation_date(cube.dt)
-inversion_kwargs.update({"first_date_interpol": max(first_date_AT, first_date_DT), "last_date_interpol": min(last_date_AT, last_date_DT)})
+inversion_kwargs.update(
+    {"first_date_interpol": max(first_date_AT, first_date_DT), "last_date_interpol": min(last_date_AT, last_date_DT)})
 
 stop = [time.time()]
 print(f"[cube_ticoi_demo] Cube of dimension (nz, nx, ny): ({cube.nz}, {cube.nx}, {cube.ny}) ")
 print(f"[cube_ticoi_demo] Data loading took {round(stop[-1] - start[-1], 3)} s")
-
 
 # %%========================================================================= #
 #                                      TICOI                                  #
@@ -184,16 +189,17 @@ start.append(time.time())
 
 # Direct computation of the whole TICOI cube
 if TICOI_process == "direct_process":
-    
+
     # Preprocessing of the data (compute rolling mean for regu='1accelnotnull', delete outliers...)
     obs_filt, flag = cube.filter_cube(preData_kwargs)
-    
+
     if i is not None and j is not None:
         result = process(cube, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
     else:
         # Progression bar
         xy_values = itertools.product(cube.at.ds["x"].values, cube.at.ds["y"].values)
-        xy_values_tqdm = tqdm(xy_values, total=len(cube.at.ds["x"].values) * len(cube.at.ds["y"].values), mininterval=0.5)
+        xy_values_tqdm = tqdm(xy_values, total=len(cube.at.ds["x"].values) * len(cube.at.ds["y"].values),
+                              mininterval=0.5)
 
         # Main processing of the data with TICOI algorithm, individually for each pixel
         result = Parallel(n_jobs=nb_cpu, verbose=0)(
@@ -205,7 +211,6 @@ else:
 
 stop.append(time.time())
 print(f"[cube_ticoi_demo] TICOI processing took {round(stop[-1] - start[-1], 0)} s")
-
 
 # %%========================================================================= #
 #                           INITIALISATION FOR SAVING                         #
@@ -222,7 +227,6 @@ if save:
         )
     stop.append(time.time())
     print(f"[cube_ticoi_demo] Initialisation took {round(stop[-1] - start[-1], 3)} s")
-
 
 # %%========================================================================= #
 #                                WRITING RESULTS                              #
