@@ -31,7 +31,6 @@ import xarray as xr
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 import pyproj
-print(pyproj.datadir.get_data_dir())
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 

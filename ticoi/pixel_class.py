@@ -693,12 +693,11 @@ class pixel_class:
         p1 = ax.plot(
             interp.dataf["date_cori"],
             interp.dataf["vv"],
-            linestyle="",
-            zorder=1,
-            marker="x",
-            markersize=7,
+            linestyle="-",
+            zorder=9,
+            linewidth=2,
             color=colors[2],
-            markeredgewidth=2,
+            alpha=0.85,
             label=label_interp,
         )
 
@@ -726,7 +725,10 @@ class pixel_class:
 
         residuals = np.sqrt(obs.dataf["residux"] ** 2 + obs.dataf["residuy"] ** 2)
         # ax_inset = fig.add_axes([0.5, 0.5, 0.3, 0.3])
-        ax_inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4], zorder=10)
+        if (interp.dataf["vv"] > 150).sum() < 10:
+            ax_inset = ax.inset_axes([0.03, 0.65, 0.4, 0.3], zorder=10)
+        else:
+            ax_inset = ax.inset_axes([0.57, 0.65, 0.4, 0.3], zorder=10)
         sns.stripplot(data=residuals, ax=ax_inset, color="gray", orient="h", size=2, jitter=0.03, zorder=12)
         sns.boxenplot(
             data=residuals,
@@ -734,7 +736,7 @@ class pixel_class:
             orient="h",
             color="steelblue",
             k_depth="proportion",
-            alpha=0.9,
+            alpha=0.85,
             line_kws=dict(linewidth=1.5),
             showfliers=False,
             zorder=10,
