@@ -364,10 +364,8 @@ def inversion_core(
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
 
         ## you need to change that
-        in_angle = np.where(data[2]=='S1_at',35,-50).reshape(data[2].shape[0])
-        az_angle = np.array([80]*data[2].shape[0])
-        result_dx, result_dy, residu_normx, residu_normy = inversion_3D(
-            A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef, angles=[in_angle,az_angle]
+        result_dx, result_dy, result_dz, residu_normx, residu_normy, residu_normz = inversion_3D(
+            A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef,
         )
 
         ##  Initialisation (depending on apriori and solver)
@@ -990,7 +988,6 @@ def process(
         # TODO: to check that!
         if delete_outliers == "median_angle":
             conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-
         result = inversion_core(
             data[0],
             i,

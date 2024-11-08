@@ -53,16 +53,16 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-cube_AT_name = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/Hispar_disp_AT_subset.nc"  # Path where the Sentinel-2 IGE cubes are stored
-cube_DT_name = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/Hispar_disp_DT_subset.nc"  # Path where the Sentinel-2 IGE cubes are stored
-sar_info_AT = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/sar_info_AT.json"
-sar_info_DT = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion/sar_info_DT.json"
-path_save = f"/home/charriel/Documents/Collaborations/Lei/3Dinversion"  # Path where to stored the results
+cube_AT_name = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/Hispar_disp_AT_subset.nc"  # Path where the Sentinel-2 IGE cubes are stored
+cube_DT_name = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/Hispar_disp_DT_subset.nc"  # Path where the Sentinel-2 IGE cubes are stored
+sar_info_AT = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/sar_info_AT.json"
+sar_info_DT = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/sar_info_DT.json"
+path_save = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015"  # Path where to stored the results
 result_fn = "Hala_disp_ticoi_flow_angle_disp_3d_test_1015"  # Name of the netCDF file to be created
 
 proj = "EPSG:32643"  # EPSG system of the given coordinates
 
-solver = "LSMR_ini"  # Solver for the inversion
+solver = "LSMR"  # Solver for the inversion
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion
@@ -154,7 +154,7 @@ for common_parameter in ["proj", "delete_outliers", "regu", "solver"]:
 start = [time.time()]
 # Load the first cube
 cube = cube_3d_class()
-cube.load(cube_AT_name, cube_DT_name, load_kwargs)
+cube.load(cube_AT_name, cube_DT_name, load_kwargs, sar_info_AT, sar_info_DT)
 # align the two cubes, currently there is a bug due to the dimension order
 # cube_AT = cube_AT.align_cube(cube_DT)
 

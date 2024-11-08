@@ -73,7 +73,7 @@ class cube_data_class:
             if sar:
                 self.is_SAR = True
                 self.incidenceAngle = 40
-                self.headingAngle = -20
+                self.azimuthAngle = -20
 
         else:
             self.filedir = cube.filedir
@@ -89,7 +89,7 @@ class cube_data_class:
             self.is_SAR = cube.is_SAR
             if self.is_SAR:
                 self.incidenceAngle = cube.incidenceAngle
-                self.headingAngle = cube.headingAngle
+                self.azimuthAngle = cube.azimuthAngle
 
 
     def update_dimension(self, time_dim: str = "mid_date"):
@@ -738,7 +738,7 @@ class cube_data_class:
 
         :param verbose: [bool] [default is False] --- Print information throughout the process
         """
-        self.__init__()
+        # self.__init__()
 
         time_dim_name = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
@@ -885,8 +885,8 @@ class cube_data_class:
                             raise ValueError("The sar_info file must be a json file.")
                         with open(sar_info) as f:
                             sar_info = json.load(f)
-                            self.incidenceAngle = sar_info["incidenceAngle"]
-                            self.headingAngle = sar_info["headingAngle"]
+                            self.incidenceAngle = float(sar_info["incidenceAngle"])
+                            self.azimuthAngle = float(sar_info["headingAngle"])
                 # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
                 #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
                 #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
@@ -2499,6 +2499,8 @@ class cube_3d_class:
 
         self.resolution = self.at.resolution
         self.is_TICO = self.at.is_TICO
+        self.is_SAR = self.at.is_SAR
+        self.is_3D = True
     
     def load(self,
         filepath_at: list | str,
@@ -2550,9 +2552,11 @@ class cube_3d_class:
         data_at = self.at.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean[0], visual=visual, output_format=output_format)
         data_dt = self.dt.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean[1], visual=visual, output_format=output_format)
         
-        
-        data_at[0].append(np.full((data_at[0][0].shape[0], 1), 'S1_at'))
-        data_dt[0].append(np.full((data_dt[0][0].shape[0], 1), 'S1_dt'))
+        # 为 data_dt[0][1] 增加两列，分别是 incidenceAngle 和 azimuthAngle
+        angles_at = np.full((data_at[0][1].shape[0], 2), [self.at.incidenceAngle, self.at.azimuthAngle])
+        data_at[0][1] = np.hstack((data_at[0][1], angles_at))
+        angles_dt = np.full((data_dt[0][1].shape[0], 2), [self.dt.incidenceAngle, self.dt.azimuthAngle])
+        data_dt[0][1] = np.hstack((data_dt[0][1], angles_dt))
         
         data_values = []
         for i in range(len(data_at[0])):

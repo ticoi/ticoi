@@ -595,13 +595,16 @@ def inversion_3D(
             print("rank A", np.linalg.matrix_rank(A))
 
 
-    a_angle = angles[1]#azimuth angle
-    i_angle = angles[0]#incidence angle
+    a_angle = np.radians(data[:, -1])#azimuth angle
+    i_angle = np.radians(data[:, -2])#incidence angle
     l_dates_range = len(dates_range)
-    c = np.concatenate([A, np.zeros(A.shape), np.zeros(A.shape)], axis=1)
-    A_3D = np.concatenate([c, np.concatenate([np.zeros(A.shape), A, np.zeros(A.shape)], axis=1)], axis=0)
-    del c
-    F_regu = np.multiply(coef, mu)
+    # c = np.concatenate([A, np.zeros(A.shape), np.zeros(A.shape)], axis=1)
+    # A_3D = np.concatenate([c, np.concatenate([np.zeros(A.shape), A, np.zeros(A.shape)], axis=1)], axis=0)
+    c1 = np.concatenate([A, A, A], axis=1)
+    c2 = np.concatenate([A, A, np.zeros(A.shape)], axis=1)
+    A_3D = np.concatenate([c1, c2], axis=0)
+    # del c
+    F_regu = np.multiply(coef, np.concatenate([mu, mu, mu], axis=1))
     # D_regu = np.zeros(mu.shape[0])
     D_regu = np.ones(mu.shape[0]) * coef
 
@@ -610,15 +613,15 @@ def inversion_3D(
 
     #for observations along range
     A_3D[:data.shape[0], :len(dates_range) - 1] = np.array(
-        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * -np.cos(a_angle)[z] * np.sin(i_angle)[z]  for z in
+        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * np.cos(a_angle)[z] * np.sin(i_angle)[z]  for z in
          range(data.shape[0])])  # estimation of vx #TODO: check the sign here
 
-    A_3D[data.shape[0]:, len(dates_range) - 1:2 * (len(dates_range) - 1)] = np.array(
-        [A_3D[data.shape[0]:, :len(dates_range) - 1][z] * np.sin(a_angle)[z] * np.sin(i_angle)[z] for z in
+    A_3D[:data.shape[0], len(dates_range) - 1:2 * (len(dates_range) - 1)] = np.array(
+        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * -np.sin(a_angle)[z] * np.sin(i_angle)[z] for z in
          range(data.shape[0])])  # estimation of vy
 
-    A_3D[data.shape[0]:, 2* (len(dates_range) - 1):3 * (len(dates_range) - 1)] = np.array(
-        [A_3D[data.shape[0]:, :len(dates_range) - 1][z] * -np.cos(a_angle)[z] for z in
+    A_3D[:data.shape[0], 2* (len(dates_range) - 1):3 * (len(dates_range) - 1)] = np.array(
+        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * -np.cos(a_angle)[z] for z in
          range(data.shape[0])])  # estimation of vz
 
     #for observation along azimuth
@@ -632,14 +635,14 @@ def inversion_3D(
 # del delta, mean
 
     if solver == "LSMR":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float64")
+        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A_3D[Weight != 0]), F_regu]).astype("float64")
         D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float64")
         F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
         # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
         X = sp.linalg.lsmr(F, D)[0]
 
     elif solver == "LSMR_ini":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype(
+        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A_3D[Weight != 0]), F_regu]).astype(
             "float64"
         )  # stack ax and regu, and remove rows with only 0
         D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype(
@@ -658,12 +661,12 @@ def inversion_3D(
         X = sp.linalg.lsmr(F, D, x0=x0)[0]
 
     elif solver == "LS":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), coef * mu]).astype("float64")
+        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A_3D[Weight != 0]), coef * mu]).astype("float64")
         D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), np.zeros(mu.shape[0])]).astype("float64")
         X = np.linalg.lstsq(F, D, rcond=None)[0]
 
     elif solver == "LSQR" or solver == "LSQR_ini":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), coef * mu]).astype("float64")
+        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A_3D[Weight != 0]), coef * mu]).astype("float64")
         D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), np.zeros(mu.shape[0])]).astype("float64")
         F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
         X, istop, itn, r1norm = sp.linalg.lsqr(F, D)[:4]
@@ -681,13 +684,15 @@ def inversion_3D(
         residu_norm = None
 
     if residu_norm == None:
-        return X[: X.shape[0] // 2], X[X.shape[0] // 2 :], None, None
+        return X[: X.shape[0] // 3], X[X.shape[0] // 3 : 2 * X.shape[0] // 3],  X[2 * X.shape[0] // 3 :], None, None
     else:
         return (
-            X[: X.shape[0] // 2],
-            X[X.shape[0] // 2 :],
-            residu_norm[: X.shape[0] // 2],
-            residu_norm[X.shape[0] // 2 :],
+            X[: X.shape[0] // 3],
+            X[X.shape[0] // 3 : 2 * X.shape[0] // 3],
+            X[2 * X.shape[0] // 3 :],
+            residu_norm[: X.shape[0] // 3],
+            residu_norm[X.shape[0] // 3 : 2 * X.shape[0] // 3],
+            residu_norm[2 * X.shape[0] // 3 :],
         )
 
 def inversion_two_components(
