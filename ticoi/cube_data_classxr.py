@@ -2610,9 +2610,8 @@ class cube_3d_class:
         # boundary correction
         common_range = [max(np.min(data_at[0][0]), np.min(data_dt[0][0])), min(np.max(data_at[0][0]), np.max(data_dt[0][0]))]
         
-        data_dt[0][0], data_dt[0][1] = self.boundary_correction(data_dt[0][0], data_dt[0][1], common_range=common_range)
         data_at[0][0], data_at[0][1] = self.boundary_correction(data_at[0][0], data_at[0][1], common_range=common_range)
-        
+        data_dt[0][0], data_dt[0][1] = self.boundary_correction(data_dt[0][0], data_dt[0][1], common_range=common_range)
         
         # 为 data_dt[0][1] 增加两列，分别是 incidenceAngle 和 azimuthAngle
         angles_at = np.full((data_at[0][1].shape[0], 2), [self.at.incidenceAngle, self.at.azimuthAngle])
@@ -2623,8 +2622,10 @@ class cube_3d_class:
         data_values = []
         for i in range(len(data_at[0])):
             data_values.append(np.concatenate((data_at[0][i], data_dt[0][i]), axis=0))
-        
-        mean = [data_at[1], data_dt[1]]  # mean[0] for ascending, mean[1] for descending
+        if data_at[1] is not None and data_dt[1] is not None:
+            mean = data_at[1] + data_dt[1] # mean[0] for ascending, mean[1] for descending
+        else:
+            mean = None
         dates_range = [data_at[2], data_dt[2]] # dates_range[0] for ascending, dates_range[1] for descending
         
         if len(data_at) > 3:

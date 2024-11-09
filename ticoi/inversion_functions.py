@@ -556,6 +556,101 @@ def inversion_one_component(
 
     return X, residu_norm
 
+def calc_3d_deformation(los_asc, az_asc, los_desc, az_desc, 
+                       i_angle_asc, a_angle_asc, 
+                       i_angle_desc, a_angle_desc):
+    """
+    Calculate 3D deformation from four SAR observations
+    
+    Parameters
+    ----------
+    los_asc : float or array
+        LOS observation from ascending orbit
+    los_desc : float or array
+        LOS observation from descending orbit
+    az_asc : float or array
+        Azimuth observation from ascending orbit
+    az_desc : float or array
+        Azimuth observation from descending orbit
+    i_angle_asc : float
+        Incidence angle of ascending orbit (in radians)
+    a_angle_asc : float
+        Azimuth angle of ascending orbit (in radians)
+    i_angle_desc : float
+        Incidence angle of descending orbit (in radians)
+    a_angle_desc : float
+        Azimuth angle of descending orbit (in radians)
+    
+    Returns
+    -------
+    Vx, Vy, Vz : float or array
+        3D deformation components (East, North, Up)
+    """
+    a_angle_asc = np.radians(a_angle_asc)
+    i_angle_asc = np.radians(i_angle_asc)
+    a_angle_desc = np.radians(a_angle_desc)
+    i_angle_desc = np.radians(i_angle_desc)
+    # 构建投影矩阵
+    P = np.array([
+        # 升轨LOS
+        [np.cos(a_angle_asc) * np.sin(i_angle_asc),    # Vx
+         -np.sin(a_angle_asc) * np.sin(i_angle_asc),   # Vy
+         -np.cos(i_angle_asc)],                        # Vz
+        
+        # 升轨AZ
+        [np.sin(a_angle_asc),                          # Vx
+         np.cos(a_angle_asc),                          # Vy
+         0],                                           # Vz
+        
+        # 降轨LOS
+        [np.cos(a_angle_desc) * np.sin(i_angle_desc),  # Vx
+         -np.sin(a_angle_desc) * np.sin(i_angle_desc), # Vy
+         -np.cos(i_angle_desc)],                       # Vz
+        
+        # 降轨AZ
+        [np.sin(a_angle_desc),                         # Vx
+         np.cos(a_angle_desc),                         # Vy
+         0]                                            # Vz
+    ])
+    
+    # 观测向量
+    d = np.array([los_asc, az_asc, los_desc, az_desc])
+    
+    # 求解三维形变
+    Vxyz = np.linalg.lstsq(P, d, rcond=None)[0]
+    
+    return Vxyz[0], Vxyz[1], Vxyz[2]  # Vx, Vy, Vz
+
+def calc_disp_from_3d(Vx, Vy, Vz, a_angle, i_angle):
+    """
+    Calculate displacement from 3D deformation
+    
+    Parameters
+    ----------
+    Vx : float or array
+        East component of 3D deformation
+    Vy : float or array
+        North component of 3D deformation
+    Vz : float or array
+        Up component of 3D deformation
+    a_angle : float or array
+        Azimuth angle (in radians)
+    i_angle : float or array
+        Incidence angle (in radians)
+    
+    Returns
+    -------
+    dx, dy : float or array
+        Displacement components (East, North)
+    """
+    a_angle = np.radians(a_angle)
+    i_angle = np.radians(i_angle)
+    
+    dx = - Vx * np.cos(a_angle) * np.sin(i_angle) + Vy * np.sin(a_angle) * np.sin(i_angle) + Vz * np.cos(i_angle)
+    dy = Vx * np.sin(a_angle) + Vy * np.cos(a_angle)
+    
+    return dx, dy
+
 
 def inversion_3D(
     A: np.ndarray,
@@ -568,7 +663,7 @@ def inversion_3D(
     coef: int = 1,
     ini: None | np.ndarray = None,
     show_L_curve: bool = False,
-    verbose: bool = False, angles=None,
+    verbose: bool = False,
 ):
     """
     Invert the system AX = Y for two component dx and dy at the same time.
@@ -594,7 +689,7 @@ def inversion_3D(
             print("ill conditioned")
             print("rank A", np.linalg.matrix_rank(A))
 
-    
+
     a_angle = np.radians(data[:, -1])#azimuth angle
     i_angle = np.radians(data[:, -2])#incidence angle
     l_dates_range = len(dates_range)
@@ -615,7 +710,10 @@ def inversion_3D(
                 ], axis=0)
     F_regu = np.multiply(coef, mu_3D)
     # D_regu = np.zeros(mu.shape[0])
-    D_regu = np.ones(mu_3D.shape[0]) * coef
+    # D_regu = np.ones(mu_3D.shape[0]) * coef
+    # D_regu is the assumed term in the observation matrix, here we assume the acceleration is zero
+    # if we have aprior information (1accelnotnull), it should be D_regu = np.multiply(accel[v_pos - 2], coef)
+    D_regu = np.zeros(mu_3D.shape[0]) # D_regu is the assumed term in the observation matrix, here we assume the acceleration is zero
 
     v = np.concatenate([data[:, 0].T, data[:, 1].T])  # Concatenate vx and vy observations
 

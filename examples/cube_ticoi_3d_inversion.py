@@ -62,7 +62,7 @@ result_fn = "Hala_disp_ticoi_flow_angle_disp_3d_test_1015"  # Name of the netCDF
 
 proj = "EPSG:32643"  # EPSG system of the given coordinates
 
-solver = "LSMR"  # Solver for the inversion
+solver = "LSMR_ini"  # Solver for the inversion
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion

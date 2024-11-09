@@ -46,6 +46,8 @@ from ticoi.inversion_functions import (
     inversion_two_components,inversion_3D,
     mu_regularisation,
     weight_for_inversion,
+    calc_3d_deformation,
+    calc_disp_from_3d,
 )
 from ticoi.pixel_class import pixel_class
 
@@ -63,8 +65,7 @@ def inversion_iteration(
     solver: str,
     coef: int,
     Weight: np.ndarray,
-    result_dx: np.ndarray,
-    result_dy: np.ndarray,
+    results: list[np.ndarray],
     mu: np.ndarray,
     regu: int | str = 1,
     accel: np.ndarray | None = None,
@@ -72,7 +73,7 @@ def inversion_iteration(
     result_quality: list | str | None = None,
     ini: np.ndarray | None = None,
     verbose: bool = False,
-) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None):
+) -> (list[np.ndarray], list[np.ndarray], list[np.ndarray | None]):
 
     """
     Compute an iteration of the inversion : update the weights using the weights from the previous iteration and the studentized residual, update the results in consequence
@@ -102,6 +103,24 @@ def inversion_iteration(
     def compute_residual(A: np.ndarray, v: np.ndarray, X: np.ndarray) -> np.ndarray:
         Residu = v - A.dot(X)
         return Residu
+    
+    def compute_residual_3D(A: np.ndarray, v: np.ndarray, dX: np.ndarray, dY: np.ndarray, dZ: np.ndarray) -> np.ndarray:
+        i_angles, i_idx = np.unique(data[:, -2], return_index=True)
+        a_angles, a_idx = np.unique(data[:, -1], return_index=True)
+        
+        result_dx_at, result_dy_at = calc_disp_from_3d(dX, dY, dZ, i_angles[0], a_angles[0])
+        result_dx_dt, result_dy_dt = calc_disp_from_3d(dX, dY, dZ, i_angles[1], a_angles[1])
+        
+        Residu_dx_at = v[:i_idx[1], 0] - A[:i_idx[1], :].dot(result_dx_at)
+        Residu_dy_at = v[:i_idx[1], 0] - A[:i_idx[1], :].dot(result_dy_at)
+        Residu_dx_dt = v[i_idx[1]:, 1] - A[i_idx[1]:, :].dot(result_dx_dt)
+        Residu_dy_dt = v[i_idx[1]:, 1] - A[i_idx[1]:, :].dot(result_dy_dt)
+        
+        Residu_dx = np.concatenate([Residu_dx_at, Residu_dx_dt])
+        Residu_dy = np.concatenate([Residu_dy_at, Residu_dy_dt])
+        
+        return Residu_dx, Residu_dy
+        
 
     def weightf(residu: np.ndarray, Weight: np.ndarray) -> np.ndarray:
 
@@ -123,8 +142,15 @@ def inversion_iteration(
 
         return weight
 
-    weightx = weightf(compute_residual(A, data[:, 0], result_dx), Weight[0])
-    weighty = weightf(compute_residual(A, data[:, 1], result_dy), Weight[1])
+    if len(results) == 2:
+        result_dx, result_dy = results
+        weightx = weightf(compute_residual(A, data[:, 0], result_dx), Weight[0])
+        weighty = weightf(compute_residual(A, data[:, 1], result_dy), Weight[1])
+    elif len(results) == 3:
+        result_dx, result_dy, result_dz = results
+        residu_dx, residu_dy = compute_residual_3D(A, data[:, 0:2], result_dx, result_dy, result_dz)
+        weightx = weightf(residu_dx, Weight[0])
+        weighty = weightf(residu_dy, Weight[1])
 
     if A.shape[0] < A.shape[1]:
         if verbose:
@@ -150,7 +176,20 @@ def inversion_iteration(
             result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(
                 A, dates_range, 0, data, solver, np.concatenate([weightx, weighty]), mu, coef=coef
             )
-
+        results_d = [result_dx, result_dy]
+        results_norm = [residu_normx, residu_normy]
+    if result_dz is not None:
+        if solver == "LSMR_ini":
+            result_dx, result_dy, result_dz, residu_normx, residu_normy, residu_normz = inversion_3D(
+                A, dates_range, 0, data, solver, np.concatenate([weightx, weighty]), mu, coef=coef,
+                ini=np.concatenate([result_dx, result_dy, result_dz]),
+            )
+        else:
+            result_dx, result_dy, result_dz, residu_normx, residu_normy, residu_normz = inversion_3D(
+                A, dates_range, 0, data, solver, np.concatenate([weightx, weighty]), mu, coef=coef
+            )
+        results_d = [result_dx, result_dy, result_dz]
+        results_norm = [residu_normx, residu_normy, residu_normz]
     elif solver == "LSMR_ini":
         if ini == None:  # Initialization with the result from the previous inversion
             result_dx, residu_normx = inversion_one_component(
@@ -214,7 +253,8 @@ def inversion_iteration(
                 accel=accel,
                 linear_operator=linear_operator,
             )
-
+        results_d = [result_dx, result_dy]
+        results_norm = [residu_normx, residu_normy]
     else:  # No initialization
         result_dx, residu_normx = inversion_one_component(
             A,
@@ -244,8 +284,11 @@ def inversion_iteration(
             accel=accel,
             linear_operator=linear_operator,
         )
+        results_d = [result_dx, result_dy]
+        results_norm = [residu_normx, residu_normy]
+    weights = [weightx, weighty]
 
-    return result_dx, result_dy, weightx, weighty, residu_normx, residu_normy
+    return results_d, weights, results_norm
 
 
 def inversion_core(
@@ -306,7 +349,9 @@ def inversion_core(
             data_dates, data_values, data_str = data
         else:
             data_dates, data_values = data
-
+        if data_values.shape[1] > 5:
+            flag_3d = True
+        
         if dates_range == [None,None]:
             dates_range = construction_dates_range_np(
                 data_dates
@@ -362,23 +407,6 @@ def inversion_core(
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
             else:
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
-
-        ## you need to change that
-        result_dx, result_dy, result_dz, residu_normx, residu_normy, residu_normz = inversion_3D(
-            A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef,
-        )
-        delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
-        result_vx = result_dx / delta_t
-        result_vy = result_dy / delta_t
-        result_vz = result_dz / delta_t
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-        ax.plot(dates_range[:-1], result_vx, label="vx", linestyle='--', marker="o")
-        ax.plot(dates_range[:-1], result_vy, label="vy", linestyle='--', marker="*")
-        ax.plot(dates_range[:-1], result_vz, label="vz", linestyle='--', marker="+")
-        ax.legend()
-        fig.savefig("test1.png")
-        
         
         
         ##  Initialisation (depending on apriori and solver)
@@ -395,10 +423,19 @@ def inversion_core(
         elif (
             mean is not None and solver == "LSMR_ini"
         ):  # initialization is set according the average of the whole time series
-            mean_ini = [
-                np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, "D") / unit) for i in range(len(mean))
-            ]
-            accel = None
+            if flag_3d:
+                mean_v4 = [
+                    np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, "D")) for i in range(len(mean))
+                ]
+                i_angles, a_angles = np.unique(data_values[:, -2]), np.unique(data_values[:, -1])
+                mean_iniX, mean_iniY, mean_iniZ = calc_3d_deformation(mean_v4[0], mean_v4[1], mean_v4[2], mean_v4[3], i_angles[0], a_angles[0], i_angles[1], a_angles[1])
+                mean_ini = [mean_iniX, mean_iniY, mean_iniZ]
+                accel = None
+            else:
+                mean_ini = [
+                    np.multiply(mean[i], np.diff(dates_range) / np.timedelta64(1, "D") / unit) for i in range(len(mean))
+                ]
+                accel = None
         else:
             mean_ini = None
             accel = None
@@ -411,6 +448,24 @@ def inversion_core(
             result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(
                 A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef, ini=mean_ini
             )
+            results_d = [result_dx, result_dy]
+        elif flag_3d:  # If the data has a third component, it is a 3D inversion
+            ## you need to change that
+            result_dx, result_dy, result_dz, residu_normx, residu_normy, residu_normz = inversion_3D(
+                A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef, ini=mean_ini
+            )
+            results_d = [result_dx, result_dy, result_dz]
+            delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
+            result_vx = result_dx / delta_t
+            result_vy = result_dy / delta_t
+            result_vz = result_dz / delta_t
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            ax.plot(dates_range[:-1], result_vx, label="vx", linestyle='--', marker="o")
+            ax.plot(dates_range[:-1], result_vy, label="vy", linestyle='--', marker="*")
+            ax.plot(dates_range[:-1], result_vz, label="vz", linestyle='--', marker="+")
+            ax.legend()
+            fig.savefig("test2.png")
         else:
             result_dx, residu_normx = inversion_one_component(
                 A,
@@ -442,7 +497,7 @@ def inversion_core(
                 linear_operator=linear_operator,
                 accel=accel,
             )
-
+            results_d = [result_dx, result_dy]
         if not visual:
             del Weighty, Weightx
 
@@ -465,15 +520,14 @@ def inversion_core(
             else:
                 Weightx2, Weighty2 = None, None
 
-            result_dx_i, result_dy_i, weight_2x, weight_2y, residu_normx, residu_normy = inversion_iteration(
+            results_d_i, weights_i, results_norm_i = inversion_iteration(
                 data_values,
                 A,
                 dates_range,
                 solver,
                 coef,
                 [Weightx2, Weighty2],
-                result_dx,
-                result_dy,
+                results_d,
                 mu=mu,
                 verbose=verbose,
                 regu=regu,
@@ -482,23 +536,23 @@ def inversion_core(
                 accel=accel,
                 result_quality=result_quality,
             )
+            # result_dx_i, result_dy_i, weight_2x, weight_2y, residu_normx, residu_normy
             # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             i = 2
             while (
-                np.mean(abs(result_dx_i - result_dx)) > threshold_it
-                or np.mean(abs(result_dy_i - result_dy)) > threshold_it
+                np.mean(abs(results_d_i[0] - results_d[0])) > threshold_it
+                or np.mean(abs(results_d_i[1] - results_d[1])) > threshold_it
             ) and i < nb_max_iteration:
-                result_dx = result_dx_i
-                result_dy = result_dy_i
-                result_dx_i, result_dy_i, weight_ix, weight_iy, residu_normx, residu_normy = inversion_iteration(
+                results_d = results_d_i
+                
+                results_d_i, weights_i, results_norm_i = inversion_iteration(
                     data_values,
                     A,
                     dates_range,
                     solver,
                     coef,
                     [Weightx2, Weighty2],
-                    result_dx,
-                    result_dy,
+                    results_d,
                     mu,
                     verbose=verbose,
                     regu=regu,
@@ -515,18 +569,18 @@ def inversion_core(
                         "[Inversion] ",
                         i,
                         "dx",
-                        np.mean(abs(result_dx_i - result_dx)),
+                        np.mean(abs(results_d_i[0] - results_d[0])),
                         "dy",
-                        np.mean(abs(result_dy_i - result_dy)),
+                        np.mean(abs(results_d_i[1] - results_d[1])),
                     )
 
             if verbose:
-                print("[Inversion] End loop", i, np.mean(abs(result_dy_i - result_dy)))
+                print("[Inversion] End loop", i, np.mean(abs(results_d_i[1] - results_d[1])))
                 print("[Inversion] Nb iteration", i)
 
             if i == 2:
-                weight_iy = weight_2y
-                weight_ix = weight_2x
+                weight_iy = weights_i[0]
+                weight_ix = weights_i[1]
 
             del result_dx, result_dy
             if not visual and not "Error_propagation" in result_quality:
