@@ -60,6 +60,8 @@ sar_info_DT = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015/sar_inf
 path_save = f"/media/tristan/Data3/Hispar_3D_dH/3D_inversion/test_1015"  # Path where to stored the results
 result_fn = "Hala_disp_ticoi_flow_angle_disp_3d_test_1015"  # Name of the netCDF file to be created
 
+# subset extent: (x=slice(520000, 530000), y=slice(3996600, 3990100))
+
 proj = "EPSG:32643"  # EPSG system of the given coordinates
 
 solver = "LSMR_ini"  # Solver for the inversion
@@ -68,7 +70,8 @@ solver = "LSMR_ini"  # Solver for the inversion
 #   - 'invert' for the results of the inversion
 #   - 'interp' for the results of the interpolation
 returned = ["invert", "interp"]
-i, j = 527460, 3993660
+# i, j = 527460, 3993660
+i, j = 522256, 3994350
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},

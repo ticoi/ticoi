@@ -646,7 +646,7 @@ def calc_disp_from_3d(Vx, Vy, Vz, a_angle, i_angle):
     a_angle = np.radians(a_angle)
     i_angle = np.radians(i_angle)
     
-    dx = - Vx * np.cos(a_angle) * np.sin(i_angle) + Vy * np.sin(a_angle) * np.sin(i_angle) + Vz * np.cos(i_angle)
+    dx = Vx * np.cos(a_angle) * np.sin(i_angle) + -1 * Vy * np.sin(a_angle) * np.sin(i_angle) + -1 * Vz * np.cos(i_angle)
     dy = Vx * np.sin(a_angle) + Vy * np.cos(a_angle)
     
     return dx, dy
@@ -689,27 +689,21 @@ def inversion_3D(
             print("ill conditioned")
             print("rank A", np.linalg.matrix_rank(A))
 
-
     a_angle = np.radians(data[:, -1])#azimuth angle
     i_angle = np.radians(data[:, -2])#incidence angle
-    l_dates_range = len(dates_range)
-    # c = np.concatenate([A, np.zeros(A.shape), np.zeros(A.shape)], axis=1)
-    # A_3D = np.concatenate([c, np.concatenate([np.zeros(A.shape), A, np.zeros(A.shape)], axis=1)], axis=0)
+
     c1 = np.concatenate([A, A, A], axis=1)
     c2 = np.concatenate([A, A, np.zeros(A.shape)], axis=1)
     A_3D = np.concatenate([c1, c2], axis=0)
+    del c1, c2
     
-    # temporal_baseline = np.concatenate([data[:, 2].T, data[:, 2].T], axis=0) / 365
-    # A_3D = A_3D * temporal_baseline[:, np.newaxis]  # Multiply each row by the temporal baseline
-    
-    # del c
     mu_3D = np.concatenate([
                     np.concatenate([mu, np.zeros_like(mu), np.zeros_like(mu)], axis=1),
                     np.concatenate([np.zeros_like(mu), mu, np.zeros_like(mu)], axis=1),
                     np.concatenate([np.zeros_like(mu), np.zeros_like(mu), mu], axis=1)
                 ], axis=0)
     F_regu = np.multiply(coef, mu_3D)
-    # D_regu = np.zeros(mu.shape[0])
+
     # D_regu = np.ones(mu_3D.shape[0]) * coef
     # D_regu is the assumed term in the observation matrix, here we assume the acceleration is zero
     # if we have aprior information (1accelnotnull), it should be D_regu = np.multiply(accel[v_pos - 2], coef)
@@ -717,25 +711,16 @@ def inversion_3D(
 
     v = np.concatenate([data[:, 0].T, data[:, 1].T])  # Concatenate vx and vy observations
 
-
     #for observations along range
-    A_3D[:data.shape[0], :len(dates_range) - 1] = np.array(
-        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * np.cos(a_angle)[z] * np.sin(i_angle)[z]  for z in
-         range(data.shape[0])])  # estimation of vx #TODO: check the sign here
+    n = len(dates_range) - 1
+    # LOS
+    A_3D[:data.shape[0], :n] *= np.cos(a_angle)[:, np.newaxis] * np.sin(i_angle)[:, np.newaxis]    # Vx
+    A_3D[:data.shape[0], n:2*n] *= -np.sin(a_angle)[:, np.newaxis] * np.sin(i_angle)[:, np.newaxis]  # Vy
+    A_3D[:data.shape[0], 2*n:3*n] *= -np.cos(i_angle)[:, np.newaxis]                                 # Vz
 
-    A_3D[:data.shape[0], len(dates_range) - 1:2 * (len(dates_range) - 1)] = np.array(
-        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * -np.sin(a_angle)[z] * np.sin(i_angle)[z] for z in
-         range(data.shape[0])])  # estimation of vy
-
-    A_3D[:data.shape[0], 2* (len(dates_range) - 1):3 * (len(dates_range) - 1)] = np.array(
-        [A_3D[:data.shape[0], :len(dates_range) - 1][z] * -np.cos(i_angle)[z] for z in
-         range(data.shape[0])])  # estimation of vz
-
-    #for observation along azimuth
-    A_3D [data.shape[0]:,:len(dates_range) - 1] = np.array([A_3D[data.shape[0]:,:len(dates_range) - 1][z] * np.sin(a_angle)[z] for z in
-         range(data.shape[0])]) #estimation of vx
-    A_3D [data.shape[0]:,len(dates_range) - 1:2 * (len(dates_range) - 1)] = np.array([A_3D[data.shape[0]:,:len(dates_range) - 1][z] * np.cos(a_angle)[z] for z in
-         range(data.shape[0])]) #estimation of vy
+    # AZ
+    A_3D[data.shape[0]:, :n] *= np.sin(a_angle)[:, np.newaxis]                # Vx
+    A_3D[data.shape[0]:, n:2*n] *= np.cos(a_angle)[:, np.newaxis]            # Vy
 
     #then you solve the system A_3D X = v, where X could contain estimated vx, vy, and vz in this order, for all the dates in dates_range
 
