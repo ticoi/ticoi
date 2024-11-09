@@ -2533,6 +2533,61 @@ class cube_3d_class:
         
         return obs_filt, regu
     
+    def boundary_correction(self, data_dates, data_values, common_range=None):
+        """
+        Apply boundary correction to make sure the data has the same time range.
+        
+        Parameters
+        ----------
+        data_dates : date of the image pairs
+        data_values : array that contains the multiple values
+        common_range : list[start_time, end_time]
+        
+        Returns
+        -------
+        data_corrected : list
+        """
+        
+        if common_range is None:
+            return [data_dates, data_values]
+        
+        mask = (data_dates[:,1] >= common_range[0]) & (data_dates[:,0] <= common_range[1])
+        idx = np.where(mask)[0]
+        
+        data_values = data_values[idx, :]
+        data_dates = data_dates[idx, :]
+        
+        # only apply boundary correction to the columns that are not weights
+        total_columns = data_values.shape[1]
+        columns_to_modify = [i for i in range(total_columns) if i not in [2, 3]]
+        
+        # 2. 计算边界校正系数
+        # 左边界
+        mask_left = data_dates[:,0] < common_range[0]
+        idx_left = np.where(mask_left)[0]
+        if idx_left.shape[0] > 0:
+            frac_left = (data_dates[idx_left, 1] - common_range[0]) / \
+                    (data_dates[idx_left, 1] - data_dates[idx_left, 0])
+            
+            # 应用左边界校正
+            data_dates[idx_left, 0] = common_range[0]
+            frac_left = frac_left[:, np.newaxis]
+            data_values[np.ix_(idx_left, columns_to_modify)] *= frac_left
+        
+        # 右边界
+        mask_right = data_dates[:,1] > common_range[1]
+        idx_right = np.where(mask_right)[0]
+        if idx_right.shape[0] > 0:
+            frac_right = (common_range[1] - data_dates[idx_right, 0]) / \
+                        (data_dates[idx_right, 1] - data_dates[idx_right, 0])
+            
+            data_dates[idx_right, 1] = common_range[1]
+            frac_right = frac_right[:, np.newaxis]
+            data_values[np.ix_(idx_right, columns_to_modify)] *= frac_right
+
+            
+        return data_dates, data_values
+    
     def load_pixel(
         self,
         i: int | float,
@@ -2551,6 +2606,13 @@ class cube_3d_class:
 
         data_at = self.at.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean[0], visual=visual, output_format=output_format)
         data_dt = self.dt.load_pixel(i, j, unit=unit, regu=regu, coef=coef, flag=flag, solver=solver, interp=interp, proj=proj, rolling_mean=rolling_mean[1], visual=visual, output_format=output_format)
+        
+        # boundary correction
+        common_range = [max(np.min(data_at[0][0]), np.min(data_dt[0][0])), min(np.max(data_at[0][0]), np.max(data_dt[0][0]))]
+        
+        data_dt[0][0], data_dt[0][1] = self.boundary_correction(data_dt[0][0], data_dt[0][1], common_range=common_range)
+        data_at[0][0], data_at[0][1] = self.boundary_correction(data_at[0][0], data_at[0][1], common_range=common_range)
+        
         
         # 为 data_dt[0][1] 增加两列，分别是 incidenceAngle 和 azimuthAngle
         angles_at = np.full((data_at[0][1].shape[0], 2), [self.at.incidenceAngle, self.at.azimuthAngle])

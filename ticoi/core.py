@@ -367,7 +367,20 @@ def inversion_core(
         result_dx, result_dy, result_dz, residu_normx, residu_normy, residu_normz = inversion_3D(
             A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef,
         )
-
+        delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
+        result_vx = result_dx / delta_t
+        result_vy = result_dy / delta_t
+        result_vz = result_dz / delta_t
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.plot(dates_range[:-1], result_vx, label="vx", linestyle='--', marker="o")
+        ax.plot(dates_range[:-1], result_vy, label="vy", linestyle='--', marker="*")
+        ax.plot(dates_range[:-1], result_vz, label="vz", linestyle='--', marker="+")
+        ax.legend()
+        fig.savefig("test1.png")
+        
+        
+        
         ##  Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
         if regu == "1accelnotnull":
