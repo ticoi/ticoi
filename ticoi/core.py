@@ -87,22 +87,28 @@ def compute_residual(
             )
 
         i_angles, i_idx = np.unique(i_angles, return_index=True)
+        if i_idx[0] > i_idx[1]:
+            i_angles, i_idx = i_angles[::-1], i_idx[::-1]
         a_angles, a_idx = np.unique(a_angles, return_index=True)
-
+        if a_idx[0] > a_idx[1]:
+            a_angles, a_idx = a_angles[::-1], a_idx[::-1]
+        
+        Vx = A.dot(X[0])
+        Vy = A.dot(X[1])
+        Vz = A.dot(X[2])
+        
         result_dx_at, result_dy_at = calc_disp_from_3d(
-            X[0], X[1], X[2], i_angles[0], a_angles[0]
+            Vx[:i_idx[1]], Vy[:i_idx[1]], Vz[:i_idx[1]], i_angles[0], a_angles[0]
         )
         result_dx_dt, result_dy_dt = calc_disp_from_3d(
-            X[0], X[1], X[2], i_angles[1], a_angles[1]
+            Vx[i_idx[1]:], Vy[i_idx[1]:], Vz[i_idx[1]:], i_angles[1], a_angles[1]
         )
-
-        Residu_dx_at = v[: i_idx[1], 0] - A[: i_idx[1], :].dot(result_dx_at)
-        Residu_dy_at = v[: i_idx[1], 0] - A[: i_idx[1], :].dot(result_dy_at)
-        Residu_dx_dt = v[i_idx[1] :, 1] - A[i_idx[1] :, :].dot(result_dx_dt)
-        Residu_dy_dt = v[i_idx[1] :, 1] - A[i_idx[1] :, :].dot(result_dy_dt)
-
-        Residu_dx = np.concatenate([Residu_dx_at, Residu_dx_dt])
-        Residu_dy = np.concatenate([Residu_dy_at, Residu_dy_dt])
+        
+        Residu_dx = np.concatenate([v[:i_idx[1], 0] - result_dx_at,    # 升轨LOS残差
+                                v[i_idx[1]:, 0] - result_dx_dt])     # 降轨LOS残差
+        Residu_dy = np.concatenate([v[:i_idx[1], 1] - result_dy_at,     # 升轨方位向残差
+                                v[i_idx[1]:, 1] - result_dy_dt])      # 降轨方位向残差
+        
         return Residu_dx, Residu_dy
 
 
@@ -181,6 +187,9 @@ def inversion_iteration(
         residu_dx, residu_dy = compute_residual(
             A, data[:, 0:2], [result_dx, result_dy, result_dz], data[:,-2], data[:,-1]
         )
+        # residu_dx, residu_dy = compute_residual_3D(
+        #     A, data[:, 0:2], result_dx, result_dy, result_dz
+        # )
         weightx = weightf(residu_dx, Weight[0])
         weighty = weightf(residu_dy, Weight[1])
 
@@ -443,7 +452,7 @@ def inversion_core(
         # Set a weight of 0, for large temporal baseline in the first inversion
         # 115 µs ± 1.2 µs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
         weight_temporal_decorrelation = (
-            np.where(data_values[:, 4] > 200, 0, 1)
+            np.where(data_values[:, 4] > 36, 0, 1)
             if detect_temporal_decorrelation
             else None
         )
@@ -544,6 +553,7 @@ def inversion_core(
                 ini=mean_ini,
             )
             results_d = [result_dx, result_dy]
+            results_norm = [residu_normx, residu_normy]
         elif flag_3d:  # If the data has a third component, it is a 3D inversion
             ## you need to change that
             (
@@ -565,6 +575,7 @@ def inversion_core(
                 ini=mean_ini,
             )
             results_d = [result_dx, result_dy, result_dz]
+            results_norm = [residu_normx, residu_normy, residu_normz]
             delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
             result_vx = result_dx / delta_t
             result_vy = result_dy / delta_t
@@ -609,6 +620,7 @@ def inversion_core(
                 accel=accel,
             )
             results_d = [result_dx, result_dy]
+            results_norm = [residu_normx, residu_normy]
         if not visual:
             del Weighty, Weightx
 
@@ -657,6 +669,19 @@ def inversion_core(
                 accel=accel,
                 result_quality=result_quality,
             )
+            result_dx, result_dy, result_dz = results_d_i
+            delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
+            result_vx = result_dx / delta_t
+            result_vy = result_dy / delta_t
+            result_vz = result_dz / delta_t
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots()
+            ax.plot(dates_range[:-1], result_vx, label="vx", linestyle="--", marker="o")
+            ax.plot(dates_range[:-1], result_vy, label="vy", linestyle="--", marker="*")
+            ax.plot(dates_range[:-1], result_vz, label="vz", linestyle="--", marker="+")
+            ax.legend()
+            fig.savefig("test3.png")
             # result_dx_i, result_dy_i, weight_2x, weight_2y, residu_normx, residu_normy
             # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             i = 2
@@ -665,6 +690,7 @@ def inversion_core(
                 or np.mean(abs(results_d_i[1] - results_d[1])) > threshold_it
             ) and i < nb_max_iteration:
                 results_d = results_d_i
+                results_norm = results_norm_i
 
                 results_d_i, weights_i, results_norm_i = inversion_iteration(
                     data_values,
@@ -713,6 +739,7 @@ def inversion_core(
 
         else:  # If not iteration
             results_d_i = results_d
+            results_norm_i = results_norm
 
         if np.isnan(results_d_i[0]).all():  # no results
             return None, None, None
@@ -734,11 +761,35 @@ def inversion_core(
                     "float32"
                 )
                 if pos == 0:
-                    Residu = data_values[:, pos] - F @ results_d_i[0]
+                    if len(results_d_i) == 3:
+                        i_angles, i_idx = np.unique(data[:, -2], return_index=True)
+                        a_angles, a_idx = np.unique(data[:, -1], return_index=True)
+                        dx_at = (results_d_i[0] * np.cos(a_angles[0]) * np.sin(i_angles[0]) + 
+                                -1 * results_d_i[1] * np.sin(a_angles[0]) * np.sin(i_angles[0]) + 
+                                -1 * results_d_i[2] * np.cos(i_angles[0]))
+                        # 降轨部分
+                        dx_dt = (results_d_i[0] * np.cos(a_angles[1]) * np.sin(i_angles[1]) + 
+                                -1 * results_d_i[1] * np.sin(a_angles[1]) * np.sin(i_angles[1]) + 
+                                -1 * results_d_i[2] * np.cos(i_angles[1]))
+                        dx = np.concatenate([dx_at[:i_idx, :], dx_dt[i_idx:, :]])
+                        Residu = data_values[:, pos] - F @ dx
+                    else:
+                        Residu = data_values[:, pos] - F @ results_d_i[0]
                 elif pos == 1:
-                    Residu = data_values[:, pos] - F @ results_d_i[1]
+                    if len(results_d_i) == 3:
+                        i_angles, i_idx = np.unique(data[:, -2], return_index=True)
+                        a_angles, a_idx = np.unique(data[:, -1], return_index=True)
+                        dy_at = (results_d_i[0] * np.sin(a_angles[0]) + 
+                                results_d_i[1] * np.cos(a_angles[0]))
+                        dy_dt = (results_d_i[0] * np.sin(a_angles[1]) + 
+                                results_d_i[1] * np.cos(a_angles[1]))
+                        dy = np.concatenate([dy_at[:i_idx], dy_dt[i_idx:]])
+                        Residu = data_values[:, pos] - F @ dy
+                    else:
+                        Residu = data_values[:, pos] - F @ results_d_i[1]
 
-                prop_wieght_diag = np.diag(np.linalg.inv(F.T @ F))
+                # TODO: is this correct for 3D?
+                prop_wieght_diag = np.diag(np.linalg.inv(F.T @ F)) 
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
 
                 # def Prop_weight(weight, Residu, error):
@@ -764,6 +815,18 @@ def inversion_core(
             # Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
             # # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 4]* data_values[:, -1] / unit)**2))
             # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
+            if len(results_d_i) == 3:
+                c1 = np.concatenate([A, A, A], axis=1)
+                c2 = np.concatenate([A, A, np.zeros(A.shape)], axis=1)
+                A = np.concatenate([c1, c2], axis=0)
+                del c1, c2
+                mu = np.concatenate([
+                                np.concatenate([mu, np.zeros_like(mu), np.zeros_like(mu)], axis=1),
+                                np.concatenate([np.zeros_like(mu), mu, np.zeros_like(mu)], axis=1),
+                                np.concatenate([np.zeros_like(mu), np.zeros_like(mu), mu], axis=1)
+                            ], axis=0)
+                F_regu = np.multiply(coef, mu)
+
             A = sp.csc_matrix(A, dtype="float32")
             F_regu = np.multiply(coef, mu)
             prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, pos=0)
@@ -773,8 +836,9 @@ def inversion_core(
         if visual:
             vx = data_values[:, 0] / data_values[:, -1] * unit
             vy = data_values[:, 1] / data_values[:, -1] * unit
-            Residux = data_values[:, 0] - A.dot(results_d_i[0])
-            Residuy = data_values[:, 1] - A.dot(results_d_i[1])
+            Residux, Residuy = compute_residual(A, data_values[:, :2], results_d_i, data_values[:,-2], data_values[:,-1])
+            # Residux = data_values[:, 0] - A.dot(results_d_i[0])
+            # Residuy = data_values[:, 1] - A.dot(results_d_i[1])
             dataf = pd.DataFrame(
                 {
                     "date1": data_dates[:, 0],
@@ -796,10 +860,17 @@ def inversion_core(
             if (
                 residu_normx is not None
             ):  # save the L2-norm from the last inversion, of the term AXY and the regularization term for the x- and y-component
-                NormR = np.zeros(data_values.shape[0])
-                NormR[:4] = np.hstack(
-                    [residu_normx, residu_normy]
-                )  # the order is: AXY and regularization term L2-norm for x-component, and AXY and regularization term L2-norm for y-component
+                
+                if len(results_d_i) == 3:
+                    NormR = np.zeros(results_d_i[0].shape[0])
+                    NormR[:6] = np.hstack(
+                        [results_norm[0], results_norm[1], results_norm[2]]
+                    )
+                else:
+                    NormR = np.zeros(data_values.shape[0])
+                    NormR[:4] = np.hstack(
+                        [results_norm[0], results_norm[1]]
+                    )  # the order is: AXY and regularization term L2-norm for x-component, and AXY and regularization term L2-norm for y-component
                 dataf["NormR"] = NormR
                 del NormR
         else:
@@ -815,12 +886,15 @@ def inversion_core(
         {
             "date1": dates_range[:-1],
             "date2": dates_range[1:],
-            "result_dx": results_d,
-            "result_dy": result_dy_i,
+            "result_dx": results_d[0],
+            "result_dy": results_d[1],
             "xcount_x": xcount_x,
             "xcount_y": xcount_y,
         }
     )
+    if flag_3d:
+        result["result_dz"] = results_d[2]
+        
     if residu_normx is not None:  # add the norm of the residual
         normr = np.zeros(result.shape[0])
         if normr.shape[0] > 3:

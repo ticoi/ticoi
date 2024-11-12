@@ -621,7 +621,7 @@ def calc_3d_deformation(los_asc, az_asc, los_desc, az_desc,
     
     return Vxyz[0], Vxyz[1], Vxyz[2]  # Vx, Vy, Vz
 
-def calc_disp_from_3d(Vx, Vy, Vz, a_angle, i_angle):
+def calc_disp_from_3d(Vx, Vy, Vz, i_angle, a_angle):
     """
     Calculate displacement from 3D deformation
     
