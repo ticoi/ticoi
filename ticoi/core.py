@@ -166,7 +166,6 @@ def inversion_iteration(
 
         :return weight: [np array] Weight for the inversion
         """
-
         r_std = residu / (stats.median_abs_deviation(residu) / 0.6745)
         if (
             Weight is not None
@@ -177,7 +176,7 @@ def inversion_iteration(
             weight = TukeyBiweight((r_std), 4.685)
 
         return weight
-
+    
     if len(results) == 2:
         result_dx, result_dy = results
         weightx = weightf(compute_residual(A, data[:, 0], result_dx), Weight[0])
@@ -187,11 +186,16 @@ def inversion_iteration(
         residu_dx, residu_dy = compute_residual(
             A, data[:, 0:2], [result_dx, result_dy, result_dz], data[:,-2], data[:,-1]
         )
-        # residu_dx, residu_dy = compute_residual_3D(
-        #     A, data[:, 0:2], result_dx, result_dy, result_dz
-        # )
-        weightx = weightf(residu_dx, Weight[0])
-        weighty = weightf(residu_dy, Weight[1])
+        # the weight should be updated for each direction?
+        # TODO: check this part, is it correct for 3D inversion?
+        # the weight and updated results are very strange, the residual becomes very large
+        i_idx = np.where(data[:, -2] == np.unique(data[:, -2])[1])[0][0]
+        weight_los_asc = weightf(residu_dx[:i_idx], Weight[0][:i_idx] if Weight[0] is not None else None)
+        weight_az_asc = weightf(residu_dy[:i_idx], Weight[1][:i_idx] if Weight[1] is not None else None)
+        weight_los_desc = weightf(residu_dx[i_idx:], Weight[0][i_idx:] if Weight[0] is not None else None)
+        weight_az_desc = weightf(residu_dy[i_idx:], Weight[1][i_idx:] if Weight[1] is not None else None)
+        weightx = np.concatenate([weight_los_asc, weight_los_desc])
+        weighty = np.concatenate([weight_az_asc, weight_az_desc])
 
     if A.shape[0] < A.shape[1]:
         if verbose:
@@ -734,8 +738,8 @@ def inversion_core(
                 weight_ix = weights_i[1]
 
             del result_dx, result_dy
-            if not visual and not "Error_propagation" in result_quality:
-                del data_values, data_dates
+            # if not visual and not "Error_propagation" in result_quality:
+            #     del data_values, data_dates
 
         else:  # If not iteration
             results_d_i = results_d
@@ -777,8 +781,12 @@ def inversion_core(
                         Residu = data_values[:, pos] - F @ results_d_i[0]
                 elif pos == 1:
                     if len(results_d_i) == 3:
-                        i_angles, i_idx = np.unique(data[:, -2], return_index=True)
-                        a_angles, a_idx = np.unique(data[:, -1], return_index=True)
+                        i_angles, i_idx = np.unique(i_angles, return_index=True)
+                        if i_idx[0] > i_idx[1]:
+                            i_angles, i_idx = i_angles[::-1], i_idx[::-1]
+                        a_angles, a_idx = np.unique(a_angles, return_index=True)
+                        if a_idx[0] > a_idx[1]:
+                            a_angles, a_idx = a_angles[::-1], a_idx[::-1]
                         dy_at = (results_d_i[0] * np.sin(a_angles[0]) + 
                                 results_d_i[1] * np.cos(a_angles[0]))
                         dy_dt = (results_d_i[0] * np.sin(a_angles[1]) + 
@@ -1275,198 +1283,6 @@ def process(
         # TODO: to check that!
         if delete_outliers == "median_angle":
             conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-        result = inversion_core(
-            data[0],
-            i,
-            j,
-            dates_range=data[2],
-            solver=solver,
-            coef=coef,
-            apriori_weight=apriori_weight,
-            apriori_weight_in_second_iteration=apriori_weight_in_second_iteration,
-            unit=unit,
-            conf=conf,
-            regu=regu,
-            mean=data[1],
-            iteration=iteration,
-            threshold_it=threshold_it,
-            detect_temporal_decorrelation=detect_temporal_decorrelation,
-            linear_operator=linear_operator,
-            result_quality=result_quality,
-            nb_max_iteration=nb_max_iteration,
-            visual=visual,
-            verbose=verbose,
-        )
-
-        if "invert" in returned:
-            if result[1] is not None:
-                returned_list.append(result[1])
-            else:
-                if result_quality is not None and "X_contribution" in result_quality:
-                    variables = ["result_dx", "result_dy", "xcount_x", "xcount_y"]
-                else:
-                    variables = ["result_dx", "result_dy"]
-                returned_list.append(
-                    pd.DataFrame(
-                        {"date1": [], "date2": [], **{col: [] for col in variables}}
-                    )
-                )
-
-        if "interp" in returned:
-            # Interpolation
-            if result[1] is not None:  # If inversion have been performed
-                dataf_list = interpolation_core(
-                    result[1],
-                    interval_output,
-                    option_interpol=option_interpol,
-                    first_date_interpol=first_date_interpol,
-                    last_date_interpol=last_date_interpol,
-                    unit=unit,
-                    redundancy=redundancy,
-                    result_quality=result_quality,
-                )
-
-                if result_quality is not None and "Norm_residual" in result_quality:
-                    dataf_list["NormR"] = result[1][
-                        "NormR"
-                    ]  # Store norm of the residual from the inversion
-                returned_list.append(dataf_list)
-            else:
-                if result_quality is not None and "Norm_residual" in result_quality:
-                    returned_list.append(
-                        pd.DataFrame(
-                            {
-                                "date1": [],
-                                "date2": [],
-                                "vx": [],
-                                "vy": [],
-                                "xcount_x": [],
-                                "xcount_y": [],
-                                "NormR": [],
-                            }
-                        )
-                    )
-                else:
-                    returned_list.append(
-                        pd.DataFrame(
-                            {
-                                "date1": [],
-                                "date2": [],
-                                "vx": [],
-                                "vy": [],
-                                "xcount_x": [],
-                                "xcount_y": [],
-                            }
-                        )
-                    )
-
-    if len(returned_list) == 1:
-        return returned_list[0]
-    return returned_list if len(returned_list) > 0 else None
-
-
-def process_3d(
-    cube_at: cube_data_class,
-    cube_dt: cube_data_class,
-    i: float | int,
-    j: float | int,
-    path_save,
-    solver: str = "LSMR",
-    regu: int | str = 1,
-    coef: int = 100,
-    flag: xr.Dataset | None = None,
-    apriori_weight: bool = False,
-    apriori_weight_in_second_iteration: bool = False,
-    returned: list | str = "interp",
-    obs_filt: xr.Dataset | None = None,
-    interpolation_load_pixel: str = "nearest",
-    iteration: bool = True,
-    interval_output: int = 1,
-    first_date_interpol: np.datetime64 | None = None,
-    last_date_interpol: np.datetime64 | None = None,
-    proj="EPSG:4326",
-    threshold_it: float = 0.1,
-    conf: bool = True,
-    option_interpol: str = "spline",
-    redundancy: int | None = None,
-    detect_temporal_decorrelation: bool = True,
-    unit: int = 365,
-    result_quality: list | str | None = None,
-    nb_max_iteration: int = 10,
-    delete_outliers: int | str | None = None,
-    linear_operator: bool = False,
-    visual: bool = False,
-    verbose: bool = False,
-):
-    """
-    :params i, j: [float | int] --- Coordinates of the point in pixel
-    :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
-    :param regu: [int | str] [default is 1] --- Type of regularization
-    :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
-    :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-    :param apriori_weight: [bool] [default is False] --- If True use of aprori weight
-    :param returned: [list | str] [default is 'interp'] --- What results must be returned ('raw', 'invert' and/or 'interp')
-    :param obs_filt: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
-    :param interpolation_load_pixel: [str] [default is 'nearest'] --- Type of interpolation to load the previous pixel in the temporal interpolation ('nearest' or 'linear')
-    :param iteration: [bool] [default is True] --- If True, use of iterations
-    :param interval_output: [int] [default is 1] --- Temporal sampling of the leap frog time series
-    :param first_date_interpol: [np.datetime64 | None] --- First date at which the time series are interpolated
-    :param last_date_interpol: [np.datetime64 | None] --- Last date at which the time series are interpolated
-    :param proj: [str] [default is 'EPSG:4326'] --- Projection of the cube
-    :param threshold_it: [float] [default is 0.1] --- Threshold to test the stability of the results between each iteration, use to stop the process
-    :param conf: [bool] [default is False] --- If True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
-    :param option_interpol: [str] [default is 'spline'] --- Type of interpolation, it can be 'spline', 'spline_smooth' or 'nearest'
-    :param redundancy: [int | None] [default is None] --- If None there is no redundancy between two velocity in the interpolated time-series, else the overlap between two velocities is redundancy days
-    :param detect_temporal_decorrelation: [bool] [default is True] --- If True the first inversion is solved using only velocity observations with small temporal baselines, to detect temporal decorelation
-    :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
-    :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
-    :param nb_max_iteration: [int] [default is 10] --- Maximum number of iterations
-    :param delete_outliers: [int | str | None] [default is None] --- Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
-    :param linear_operator: [bool] [default is False] --- If linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
-    :param visual: [bool] [default is False] --- Keep the weights for future plots
-    :param verbose: [bool] [default is False] --- Print information along the way
-
-    :return dataf_list: [pd dataframe] Result of the temporal inversion + interpolation at point (i, j) if inversion was successful, an empty dataframe if not
-    """
-
-    returned_list = []
-
-    # Loading data at pixel location
-    data_at = cube_at.load_pixel(
-        i,
-        j,
-        proj=proj,
-        interp=interpolation_load_pixel,
-        solver=solver,
-        coef=coef,
-        regu=regu,
-        rolling_mean=obs_filt,
-        flag=flag,
-    )
-    data_dt = cube_dt.load_pixel(
-        i,
-        j,
-        proj=proj,
-        interp=interpolation_load_pixel,
-        solver=solver,
-        coef=coef,
-        regu=regu,
-        rolling_mean=obs_filt,
-        flag=flag,
-    )
-
-    if "raw" in returned:  # return the raw data
-        returned_list.append(data)
-
-    if "invert" in returned or "interp" in returned:
-        if flag is not None:  # set regu and coef for every flags
-            regu, coef = data[3], data[4]
-
-        # Inversion
-        # TODO: to check that!
-        if delete_outliers == "median_angle":
-            conf = True  # Set conf to True, because the errors have been replaced by confidence indicators based on the cos of the angle between the vector of each observation and the median vector
-
         result = inversion_core(
             data[0],
             i,
