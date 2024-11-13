@@ -120,7 +120,7 @@ inversion_kwargs = {
     "solver": solver,  # Solver for the inversion
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "interpolation_load_pixel": "nearest",  # Interpolation method used to load the pixel when it is not in the dataset
-    "iteration": False,  # Allow the inversion process to make several iterations
+    "iteration": True,  # Allow the inversion process to make several iterations
     "nb_max_iteration": 10,  # Maximum number of iteration during the inversion process
     "threshold_it": 0.1,
     # Threshold to test the stability of the results between each iteration, used to stop the process
@@ -132,7 +132,7 @@ inversion_kwargs = {
     "interval_output": 12,
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "redundancy": 6,  # Redundancy in the interpolated time series in number of days, no redundancy if None
-    "result_quality": "X_contribution",
+    "result_quality": "None", #"X_contribution",
     # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
     "visual": False,  # Plot results along the way
     "path_save": path_save,  # Path where to store the results
