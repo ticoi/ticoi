@@ -1321,6 +1321,7 @@ def visualization_core(
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
         "invert_weight": (lambda pix: pix.plot_weights_inversion()),
+        "invert_interp_obs_residual": (lambda pix: pix.plot_invert_interp_obs_residual()),
     }
 
     for option in option_visual:

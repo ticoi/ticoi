@@ -16,7 +16,7 @@ import pandas as pd
 import scipy.ndimage as ndi
 from numba import jit
 from scipy import interpolate
-from numba import jit
+
 from ticoi.pixel_class import pixel_class
 
 
@@ -41,6 +41,7 @@ def prepare_interpolation_date(
     last_date_interpol = np.max(cube.date2_())
 
     return first_date_interpol, last_date_interpol
+
 
 def reconstruct_common_ref(
     result: pd.DataFrame,
@@ -236,7 +237,7 @@ def visualisation_interpolation(
 
     pixel_object = pixel_class()
     pixel_object.load(
-        list_dataf, save=save, show=show, path_save=path_save, type_data=["obs", "interp"], figsize=figsize
+        list_dataf, save=save, show=show, path_save=path_save, type_data=["obs", "invert", "interp"], figsize=figsize
     )
 
     dico_visual = {
@@ -253,8 +254,10 @@ def visualisation_interpolation(
             lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
         ),
         "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp")),
+        "invert_interp_obs_residual": (lambda pix: pix.plot_invert_interp_obs_residual()),
     }
 
     for option in option_visual:
         if option in dico_visual.keys():
-            dico_visual[option](pixel_object)
+            ax, fig = dico_visual[option](pixel_object)
+    return ax, fig

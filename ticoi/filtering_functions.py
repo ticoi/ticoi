@@ -18,6 +18,7 @@ from scipy.interpolate import BSpline, make_lsq_spline
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 from scipy.stats import median_abs_deviation
+
 from pykalman import KalmanFilter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -367,30 +368,6 @@ def bspline_smooth(
         return series_smooth
     except:
         return np.zeros(len(t_out))
-
-
-# def alps_smooth(
-#     series: np.ndarray,
-#     t_obs: np.ndarray,
-#     t_interp: np.ndarray,
-#     t_out: np.ndarray,
-#     t_win: int = 90,
-#     sigma: int = 3,
-#     order: int | None = 3,
-# ) -> np.ndarray:
-#
-#     t_obs = t_obs[~np.isnan(series)]
-#     series = series[~np.isnan(series)]
-#     try:
-#         data, out = Outlier(np.column_stack((series, t_obs)), thresh1=3, thresh2=1.5)
-#         series_smooth, t_obs_smooth = data[:,0], data[:,1]
-#         series_interp = np.interp(t_interp, t_obs_smooth, series_smooth)
-#         series_smooth = savgol_filter(series_interp, window_length=90, polyorder=order, axis=-1)
-#
-#         return series_smooth[t_out]
-#     except:
-#         return np.zeros(len(t_out))
-
 
 def smoothing_cubic_spline_smooth(
     series: np.ndarray,
@@ -778,6 +755,7 @@ def dask_smooth_wrapper(
     )  # Time stamps for interpolated velocity, here every day
 
     # Apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
+
     filt_func = {
         "gaussian": gaussian_smooth,
         "ewma": ewma_smooth,
@@ -790,21 +768,7 @@ def dask_smooth_wrapper(
         "smoothing_spline": smoothing_cubic_spline_smooth,
         "ridge_regression": ridge_regression_smooth,"lowess": lowess_smooth, "kalman":kalman_smooth, "ewma":ewma_smooth
     }
-
-    # filt_func = {
-    #     "gaussian": gaussian_smooth,
-    #     "ewma": ewma_smooth,
-    #     "median": median_smooth,
-    #     "savgol": savgol_smooth,
-    #     "ICA": ica_denoise,
-    #     "lowess": lowess_smooth,
-    #     "pwlf": pwlf_smooth,
-    #     "bspline": bspline_smooth,
-    #     "alps": alps_smooth,
-    #     "savgol_non_uniform": savgol_non_uniform_smooth,
-    #     "smoothing_spline": smoothing_cubic_spline_smooth,
-    #     "ridge_regression": ridge_regression_smooth,
-    # }
+    
     da_smooth = dask_array.map_blocks(
         dask_smooth,
         filt_func=filt_func[smooth_method],

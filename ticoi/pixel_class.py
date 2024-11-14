@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
 import copy
 from typing import List, Optional, Union
 
 import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -243,13 +246,13 @@ class pixel_class:
             raise ValueError("Please load at least one dataframe")
         else: #else
             if type_data == "invert":
-                return self.datainvert, "Results from the inversion"
+                return self.datainvert, "Inverted results"
             elif type_data == "obs":
                 return self.dataobs, "Observations"
             elif type_data == "obs_filt":
                 return self.dataobsfilt, "Observations filtered"
             else:
-                return self.datainterp, "Results from TICOI"
+                return self.datainterp, "TICOI results"
 
     def get_conversion(self):
 
@@ -661,6 +664,113 @@ class pixel_class:
 
         return ax, fig
 
+    def plot_invert_interp_obs_residual(
+        self, colors: List[str] = ["gray", "steelblue", "#ec8559"], type_data: str = "invert", block_plot: bool = True
+    ):
+
+        # obs, label_obs = self.get_dataf_invert_or_obs_or_interp("obs")
+        invert, label_invert = self.get_dataf_invert_or_obs_or_interp("invert")
+        interp, label_interp = self.get_dataf_invert_or_obs_or_interp("interp")
+        obs, label_obs = self.get_dataf_invert_or_obs_or_interp("obs")
+
+        plt.rcParams["font.family"] = "Arial"
+
+        ax, fig = self.plot_vv(color=".6", type_data="obs")
+
+        p = ax.plot(
+            invert.dataf["date_cori"],
+            invert.dataf["vv"],
+            linestyle="",
+            zorder=8,
+            marker="o",
+            lw=0.7,
+            markersize=8,
+            color=colors[1],
+            markeredgecolor="0.2",
+            markeredgewidth=0.7,
+            label=label_invert,
+        )
+
+        ax.errorbar(
+            invert.dataf["date_cori"],
+            invert.dataf["vv"],
+            xerr=invert.dataf["offset_bar"],
+            color=colors[1],
+            alpha=0.7,
+            linewidth=1.5,
+            fmt=",",
+            zorder=5,
+        )
+
+        p1 = ax.plot(
+            interp.dataf["date_cori"],
+            interp.dataf["vv"],
+            linestyle="",
+            zorder=1,
+            marker="x",
+            markersize=7,
+            color=colors[2],
+            markeredgewidth=2,
+            label=label_interp,
+        )
+
+        ax.legend(
+            loc="upper left", bbox_to_anchor=(0.001, 0.999), fontsize=14, frameon=False, handlelength=1, handletextpad=1
+        )
+        ax.tick_params(axis="both", labelsize=12)
+        for label in ax.get_yticklabels():
+            if label.get_text() and int(label.get_text().replace(",", "")) >= 1000:
+                label.set_fontsize(10)  # 缩小字体大小
+            else:
+                label.set_fontsize(12)  # 正常字体大小
+        if ax.get_ylim()[1] < 100:
+            ax.set_ylim(ax.set_ylim()[0], 110)
+
+        if ax.get_ylim()[1] - max(ax.get_yticks()) < 0.05 * ax.get_ylim()[1]:
+            ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] + 0.05 * ax.get_ylim()[1])
+
+        # ax.set_yticklabels(fontsize=12)
+        # fig.suptitle(
+        #     f"Magnitude of inverted results, along with raw data magnitude",
+        #     y=0.95,
+        #     fontsize=16,
+        # )
+
+        residuals = np.sqrt(obs.dataf["residux"] ** 2 + obs.dataf["residuy"] ** 2)
+        # ax_inset = fig.add_axes([0.5, 0.5, 0.3, 0.3])
+        ax_inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4], zorder=10)
+        sns.stripplot(data=residuals, ax=ax_inset, color="gray", orient="h", size=2, jitter=0.03, zorder=12)
+        sns.boxenplot(
+            data=residuals,
+            ax=ax_inset,
+            orient="h",
+            color="steelblue",
+            k_depth="proportion",
+            alpha=0.9,
+            line_kws=dict(linewidth=1.5),
+            showfliers=False,
+            zorder=10,
+        )
+        # sns.violinplot(data=residuals, ax=ax_inset, orient='h', alpha=0.5, inner='box', linewidth=1.5)
+        # sns.kdeplot(residuals, ax=ax_inset, linewidth=1, fill=True, bw_adjust=0.5, alpha=0.9, color='orange')
+        # sns.stripplot(data=residuals, ax=ax_inset, color='gray', orient='h', size=1)
+        ax_inset.set_xlabel("Residuals [m/y]", fontsize=14)
+        ax_inset.set_xlim(0, np.percentile(residuals, 99))
+        ax_inset.tick_params(axis="both", labelsize=12)
+        # ax_inset.set_xlim(0, 50)
+        ax_inset.set_yticks([])
+        ax_inset.patch.set_alpha(0.5)
+        # ax2 = ax_inset.inset_axes([0, 0.2, 1, 0.25])
+
+        # ax2.axis('off')
+        if self.show:
+            plt.show(block=block_plot)
+        if self.save:
+
+            fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
+
+        return ax, fig
+
     def plot_vv(self, color: str = "orange", type_data: str = "invert", block_plot: bool = True):
 
         """
@@ -675,7 +785,8 @@ class pixel_class:
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
-        fig, ax = plt.subplots(figsize=self.figsize)
+        # fig, ax = plt.subplots(figsize=self.figsize)
+        fig, ax = plt.subplots(figsize=(6, 3.5))
         ax.set_ylim(data.vvymin, data.vvymax)
         ax.set_ylabel(f"Velocity magnitude  [{self.unit}]", fontsize=14)
         p = ax.plot(
@@ -685,24 +796,25 @@ class pixel_class:
             zorder=1,
             marker="o",
             lw=0.7,
-            markersize=2,
+            markersize=5,
             color=color,
             label=label,
+            alpha=0.5,
         )
         ax.errorbar(
             data.dataf["date_cori"],
             data.dataf["vv"],
             xerr=data.dataf["offset_bar"],
             color=color,
-            alpha=0.2,
+            alpha=0.4,
             fmt=",",
             zorder=1,
         )
-        plt.subplots_adjust(bottom=0.2)
+        # plt.subplots_adjust(bottom=0.2)
         ax.legend(loc="lower left", bbox_to_anchor=(0.02, -0.2), fontsize=14)
-        ax.set_xlabel("Central dates", fontsize=14)
+        ax.set_xlabel("Central date", fontsize=14)
 
-        fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
+        # fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
 
         if self.show:
             plt.show(block=block_plot)
