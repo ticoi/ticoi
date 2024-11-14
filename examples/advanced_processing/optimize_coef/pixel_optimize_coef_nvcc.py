@@ -229,7 +229,7 @@ print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cu
 
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
 start.append(time.time())
-obs_filt, flag = cube.filter_cube(**preData_kwargs)
+obs_filt, flag = cube.filter_cube_before_inversion(**preData_kwargs)
 stop.append(time.time())
 print(f"[Data filtering] Loading the pixel took {round((stop[1] - start[1]), 4)} s")
 

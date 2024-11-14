@@ -52,7 +52,7 @@ async def process_block(cube,
     xy_values_tqdm = tqdm(xy_values, total=len(xy_values))
 
     # Filter cube
-    obs_filt, flag_block = block.filter_cube(**preData_kwargs, flag=flag)
+    obs_filt, flag_block = block.filter_cube_before_inversion(**preData_kwargs, flag=flag)
 
     # Optimization of the coefficient for every pixels of the block
     #    (faster using parallelization here and sequential processing in optimize_coef)

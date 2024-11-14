@@ -48,13 +48,14 @@ class dataframe_data:
         :param conversion: [int] [default is 365] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
         """
 
-        if type_data == "invert":
-            self.dataf["result_dx"] = self.dataf["result_dx"] / self.dataf["temporal_baseline"] * conversion
-            self.dataf["result_dy"] = self.dataf["result_dy"] / self.dataf["temporal_baseline"] * conversion
-            self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
-        else:
-            self.dataf["vx"] = self.dataf["vx"] / self.dataf["temporal_baseline"] * conversion
-            self.dataf["vy"] = self.dataf["vy"] / self.dataf["temporal_baseline"] * conversion
+        if "result_dx" in self.dataf.columns: self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
+        self.dataf["vx"] = self.dataf["vx"] / self.dataf["temporal_baseline"] * conversion
+        self.dataf["vy"] = self.dataf["vy"] / self.dataf["temporal_baseline"] * conversion
+
+    def set_vx_vy_my(self,type_data: str = "obs_filt", conversion: int = 365):
+        if "result_dx" in self.dataf.columns: self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
+        self.dataf["vx"] = self.dataf["vx"] * conversion
+        self.dataf["vy"] = self.dataf["vy"]  * conversion
 
     def set_vv(self):
 
@@ -134,24 +135,30 @@ class pixel_class:
 
         if type_data == "invert":
             self.datainvert = dataframe_data(dataf_ilf)
+            self.datainvert.dataf=self.datainvert.dataf.rename(columns={'error_x': 'errorx', 'error_y': 'errory'})
             datatemp = self.datainvert
         elif type_data == "interp":
             self.datainterp = dataframe_data(dataf_ilf)
             datatemp = self.datainterp
-        elif type_data == "obs" or type_data == "obs_filt":
+        elif type_data == "obs" :
             self.dataobs = dataframe_data(dataf_ilf)
             datatemp = self.dataobs
+        elif type_data == "obs_filt":
+            self.dataobsfilt = dataframe_data(dataf_ilf)
+            datatemp = self.dataobsfilt
         else:
             raise ValueError(
-                "Please enter 'invert' for inverted results, 'interp' for ineterpolated results or 'obs' for observation"
+                "Please enter 'invert' for inverted results, 'interp' for ineterpolated results, 'obs' for observation or 'obs_filt' for filtered observations"
             )
 
         datatemp.set_temporal_baseline_central_date_offset_bar()  # Set the temporal baseline,
-        if type_data == "invert" or type_data == "obs_filt":
+        if type_data == "invert" :
             datatemp.set_vx_vy_invert(type_data=type_data, conversion=conversion)  # Convert displacement in vx and vy
+        elif type_data == "obs_filt":
+            datatemp.set_vx_vy_my(type_data=type_data, conversion=conversion)
         if "vv" in variables:
-            datatemp.set_vv()
-        datatemp.set_minmax()
+            datatemp.set_vv()#set velocity magnitude
+        datatemp.set_minmax() #set min and max, for figures plots
 
     def load(
         self,
@@ -223,19 +230,24 @@ class pixel_class:
         :return [str] --- Label used in the legend of the figures
         """
 
-        if self.dataobs is None and self.datainterp is None:
+        #Get data when there is only dataframe loaded
+        if self.dataobs is None and self.datainterp is None and self.dataobsfilt is None:
             return self.datainvert, "Results from the inversion"
-        elif self.datainvert is None and self.datainterp is None:
+        elif self.datainvert is None and self.datainterp is None and self.dataobsfilt is None:
             return self.dataobs, "Observations"
-        elif self.datainvert is None and self.dataobs is None:
+        elif self.datainvert is None and self.dataobs is None and self.dataobsfilt is None:
             return self.datainterp, "Results from TICOI"
-        elif self.datainvert is None and self.dataobs is None and self.datainterp is None:
+        elif self.datainvert is None and self.dataobs is None and self.datainter is None:
+            return self.dataobsfilt, "Observations filtered"
+        elif self.datainvert is None and self.dataobs is None and self.datainterp is None and self.dataobsfilt is None:
             raise ValueError("Please load at least one dataframe")
-        else:
+        else: #else
             if type_data == "invert":
                 return self.datainvert, "Results from the inversion"
             elif type_data == "obs":
                 return self.dataobs, "Observations"
+            elif type_data == "obs_filt":
+                return self.dataobsfilt, "Observations filtered"
             else:
                 return self.datainterp, "Results from TICOI"
 
@@ -763,14 +775,100 @@ class pixel_class:
             else:
                 fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
 
+        # # condi = ((data.dataf["xcount_x"]>10)&(data.dataf["xcount_y"]>10))
+        # condi = ((data.dataf["xcount_x"]>10)&(data.dataf["xcount_y"]>10))
+        # show = copy.copy(self.show)
+        # save = copy.copy(self.save)
+        # self.show, self.save = False, False
+        # ax, fig = self.plot_vv(color=colors[0], type_data="obs")
+        # self.show, self.save = show, save
+        #
+        # if zoom_on_results:
+        #     ax.set_ylim(data.vvymin, data.vvymax)
+        # p = ax.plot(
+        #     data.dataf["date_cori"][condi],
+        #     data.dataf["vv"][condi],
+        #     linestyle="",
+        #     zorder=1,
+        #     marker="o",
+        #     lw=0.7,
+        #     markersize=2,
+        #     color=colors[1],
+        #     label=f"Results from the inversion",
+        # )
+        # ax.errorbar(
+        #     data.dataf["date_cori"][condi],
+        #     data.dataf["vv"][condi],
+        #     xerr=data.dataf["offset_bar"][condi],
+        #     color=colors[1],
+        #     alpha=0.2,
+        #     fmt=",",
+        #     zorder=1,
+        # )
+        # ax.legend(loc="lower left", bbox_to_anchor=(0, -0.3), fontsize=14)
+        # fig.suptitle(
+        #     f"Magnitude of {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data magnitude",
+        #     y=0.95,
+        #     fontsize=16,
+        # )
+        #
+        # if self.show:
+        #     plt.show(block=block_plot)
+        # if self.save:
+        #     if zoom_on_results:
+        #         fig.savefig(f"{self.path_save}/vv_overlaid_zoom_on_results_{type_data}.png")
+        #     else:
+        #         fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
+
         return ax, fig
 
-    def plot_vx_vy_quality(self, cmap: str = "rainbow", type_data: str = "obs", block_plot: bool = True):
+    def plot_vv_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
 
         """
         Plot error on top of velocity vx and vy.
 
-        :param cmap: [str] [default is 'rainbow''] --- Color map used to mark the errors in the plots
+        :param cmap: [str] [default is 'viridis''] --- Color map used to mark the errors in the plots
+        :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting
+
+        :return ax, fig: Axis and Figure of the plots
+        """
+
+        assert (
+            "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns
+        ), "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
+
+        data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
+
+        qualityx = data.dataf["errorx"]
+        qualityy = data.dataf["errory"]
+        qualityv = np.sqrt(
+            (qualityx / data.dataf['vx'] * qualityx) ** 2 + (qualityy / data.dataf['vy'] * qualityy) ** 2)
+
+        fig, ax = plt.subplots(figsize=self.figsize)
+        # First subplot
+        ax.set_ylabel(f"Vx [{self.unit}]", fontsize=14)
+        scat = ax.scatter(data.dataf["date_cori"], data.dataf["vv"], c=qualityv, s=5, cmap=cmap)
+        cbar = fig.colorbar(scat, ax=ax, orientation='horizontal', pad=0.2)  # Increased pad for spacing
+        cbar.set_label('Errors [m/y]', fontsize=14)
+        # Adjustments
+        plt.subplots_adjust(hspace=0.5, bottom=0.3)  # Increase hspace and bottom padding
+        fig.suptitle("Error associated to the velocity data", y=0.98, fontsize=16)  # Adjusted title position
+        # Use tight layout
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        if self.show:
+            plt.show(block=block_plot)
+        if self.save:
+            fig.savefig(f"{self.path_save}/vxvy_quality_bas_{type_data}.png")
+
+        return ax, fig
+
+    def plot_vx_vy_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
+
+        """
+        Plot error on top of velocity magnitude vv
+
+        :param cmap: [str] [default is 'viridis''] --- Color map used to mark the errors in the plots
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting
 
@@ -787,22 +885,24 @@ class pixel_class:
         qualityy = data.dataf["errory"]
 
         fig, ax = plt.subplots(2, 1, figsize=self.figsize)
+        # First subplot
         ax[0].set_ylabel(f"Vx [{self.unit}]", fontsize=14)
         scat = ax[0].scatter(data.dataf["date_cori"], data.dataf["vx"], c=qualityx, s=5, cmap=cmap)
+        cbar = fig.colorbar(scat, ax=ax[0], orientation='horizontal', pad=0.2)  # Increased pad for spacing
+        cbar.set_label('Errors [m/y]', fontsize=14)
+
+        # Second subplot
         ax[1].set_ylabel(f"Vy [{self.unit}]", fontsize=14)
         scat = ax[1].scatter(data.dataf["date_cori"], data.dataf["vy"], c=qualityy, s=5, cmap=cmap)
-        legend1 = ax[1].legend(
-            *scat.legend_elements(num=5),
-            loc="lower left",
-            bbox_to_anchor=(-0.03, -0.7),
-            ncol=10,
-            title=f"Error [{self.unit}]",
-            fontsize=14,
-        )
-        ax[1].add_artist(legend1)
-        plt.subplots_adjust(bottom=0.22)
-        ax[1].set_xlabel("Central dates", fontsize=14)
-        fig.suptitle("Error associated to the velocity data", y=0.95, fontsize=16)
+        cbar = fig.colorbar(scat, ax=ax[1], orientation='horizontal', pad=0.2)  # Increased pad for spacing
+        cbar.set_label('Errors [m/y]', fontsize=14)
+
+        # Adjustments
+        plt.subplots_adjust(hspace=0.5, bottom=0.3)  # Increase hspace and bottom padding
+        fig.suptitle("Error associated to the velocity data", y=0.98, fontsize=16)  # Adjusted title position
+
+        # Use tight layout
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
         if self.show:
             plt.show(block=block_plot)

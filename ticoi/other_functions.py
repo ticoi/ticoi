@@ -97,7 +97,7 @@ def find_granule_by_point(input_dict, input_point):  # [lon,lat]
 
 def points_of_shp_line(shp_file, proj="EPSG:4326", distance=50, nb_points=None, select=None):
     geolns = gpd.read_file(shp_file)
-    if geolns.geom_type.describe()["top"] != "LineString":
+    if geolns.geom_type.describe()["top"] not in ["LineString","MultiLineString"]:
         raise ValueError("The shp geometries must be a LineString.")
 
     # The selection is given in kilometers -> convert it to meters

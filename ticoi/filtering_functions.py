@@ -18,6 +18,8 @@ from scipy.interpolate import BSpline, make_lsq_spline
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import savgol_filter
 from scipy.stats import median_abs_deviation
+from pykalman import KalmanFilter
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
@@ -70,15 +72,16 @@ def ewma_smooth(
 
     :return: The smoothed series at the specified time points
     """
-
+    # t_win = int(t_win/3)
+    t_win = 10
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
-        series_interp = np.interp(t_interp, t_obs, series)
-        series_smooth = numpy_ewma_vectorized(series_interp, halflife=t_win)
+        series_smooth = numpy_ewma_vectorized(series, halflife=t_win)
+        series_interp = np.interp(t_interp, t_obs, series_smooth)
     except:  # If there is only nan
         return np.zeros(len(t_out))
-    return series_smooth[t_out]
+    return series_interp[t_out]
 
 
 def gaussian_smooth(
@@ -231,43 +234,30 @@ def non_uniform_savgol(x, y, window, polynom):
     return y_smoothed
 
 
-# from statsmodels.nonparametric.smoothers_lowess import lowess
-#
-# def lowess_smooth(
-#     series: np.ndarray,
-#     t_obs: np.ndarray,
-#     t_interp: np.ndarray,
-#     t_out: np.ndarray,
-#     t_win: int = 90,
-#     sigma: int = 3,
-#     order: int | None = 3,
-# ) -> np.ndarray:
-#
-#     try:
-#         frac = 180 / len(t_interp)
-#
-#         not_nan = ~np.isnan(series)
-#         series, t_obs = series[not_nan], t_obs[not_nan]
-#         # dy = np.gradient(series, t_obs)
-#         # smoothed_dy = lowess(dy, t_obs, frac=frac, return_sorted=False)
-#         # y_smooth = np.zeros_like(t_obs)
-#         # y_smooth[0] = series[0]
-#
-#         # # 对于每个点，使用梯形规则累加积分
-#         # for i in range(1, len(t_obs)):
-#         #     delta_x = t_obs[i] - t_obs[i - 1]
-#         #     # 使用梯度（变化率）直接更新Y值
-#         #     y_smooth[i] = y_smooth[i - 1] + smoothed_dy[i - 1] * delta_x
-#
-#         # # 插值到指定的输出时间点
-#         # series_interp = np.interp(t_interp, t_obs, y_smooth)
-#         # return series_interp[t_out]
-#
-#         series_smooth = lowess(series, t_obs, frac=frac, return_sorted=False)
-#         series_interp = np.interp(t_interp, t_obs, series_smooth)
-#         return series_interp[t_out]
-#     except:
-#         return np.zeros(len(t_out))
+
+
+
+def lowess_smooth(
+    series: np.ndarray,
+    t_obs: np.ndarray,
+    t_interp: np.ndarray,
+    t_out: np.ndarray,
+    t_win: int = 90,
+    sigma: int = 3,
+    order: int | None = 3,
+) -> np.ndarray:
+
+    try:
+        t_win = 60
+        frac = t_win / len(t_interp)
+
+        not_nan = ~np.isnan(series)
+        series, t_obs = series[not_nan], t_obs[not_nan]
+        series_smooth = lowess(series, t_obs, frac=frac, return_sorted=False)
+        series_interp = np.interp(t_interp, t_obs, series_smooth)
+        return series_interp[t_out]
+    except:
+        return np.zeros(len(t_out))
 
 import numpy as np
 from sklearn.decomposition import FastICA
@@ -438,11 +428,11 @@ def smoothing_cubic_spline_smooth(
         # series_interp = smoothing_spline(t_out)
 
         # With outliers detetection
-        smoothing_spline = splrep(t_obs, series, s=len(t_obs) * 100)
+        smoothing_spline = splrep(t_obs, series, s=len(t_obs)*100)
         series_interp = BSpline(*smoothing_spline, extrapolate=False)(t_obs)
         t_obs_filtered = t_obs[abs(series_interp - series) / series_interp * 100 < 50]
         series_filtered = series[abs(series_interp - series) / series_interp * 100 < 50]
-        smoothing_spline = splrep(t_obs_filtered, series_filtered, s=len(t_obs_filtered) * 100)
+        smoothing_spline = splrep(t_obs_filtered, series_filtered, s=len(t_obs_filtered)*100)
         series_interp = BSpline(*smoothing_spline, extrapolate=False)(t_out)
 
         # noinspection PyTypeChecker
@@ -542,7 +532,6 @@ def median_smooth(
 
     return series_smooth[t_out]
 
-
 def savgol_smooth(
     series: np.ndarray,
     t_obs: np.ndarray,
@@ -567,6 +556,14 @@ def savgol_smooth(
     """
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
+    #
+    # from scipy.signal import savgol_filter
+    # from scipy.interpolate import CubicSpline
+    #
+    # smoothed_series = savgol_filter(series, window_length=t_win, polyorder=order)
+    # series_interp = np.interp( t_interp, t_obs, smoothed_series)
+    #
+    # return series_interp[t_out]
     try:
         series_interp = np.interp(t_interp, t_obs, series)
         series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
@@ -574,6 +571,78 @@ def savgol_smooth(
         return np.zeros(len(t_out))
 
     return series_smooth[t_out]
+
+def savgol_smooth_reverse(
+    series: np.ndarray,
+    t_obs: np.ndarray,
+    t_interp: np.ndarray,
+    t_out: np.ndarray,
+    t_win: int = 90,
+    sigma: int = 3,
+    order: int | None = 3,
+) -> np.ndarray:
+
+    """
+    Perform Savitzky-Golay smoothing on a time series.
+
+    :param series: Input time series to be smoothed
+    :param t_obs: Observed time points corresponding to the input series
+    :param t_interp: Time points for interpolation
+    :param t_out: Time points to extract the smoothed values for
+    :param t_win: Smoothing window size (default is 90)
+    :param order: Order of the polynomial used in the smoothing (default is 3)
+
+    :return: The smoothed time series at the specified output time points
+    """
+    t_win = 20
+    t_obs = t_obs[~np.isnan(series)]
+    series = series[~np.isnan(series)]
+
+    from scipy.signal import savgol_filter
+    from scipy.interpolate import CubicSpline
+
+    smoothed_series = savgol_filter(series, window_length=t_win, polyorder=order)
+    series_interp = np.interp( t_interp, t_obs, smoothed_series)
+
+    return series_interp[t_out]
+    # try:
+    #     series_interp = np.interp(t_interp, t_obs, series)
+    #     series_smooth = savgol_filter(series_interp, window_length=t_win, polyorder=order, axis=-1)
+    # except:
+    #     return np.zeros(len(t_out))
+    #
+    # return series_smooth[t_out]
+
+def kalman_smooth(
+    series: np.ndarray,
+    t_obs: np.ndarray,
+    t_interp: np.ndarray,
+    t_out: np.ndarray,
+    t_win: int = 90,
+    sigma: int = 3,
+    order: int | None = 3,
+) -> np.ndarray:
+
+    """
+    Perform Savitzky-Golay smoothing on a time series.
+
+    :param series: Input time series to be smoothed
+    :param t_obs: Observed time points corresponding to the input series
+    :param t_interp: Time points for interpolation
+    :param t_out: Time points to extract the smoothed values for
+    :param t_win: Smoothing window size (default is 90)
+    :param order: Order of the polynomial used in the smoothing (default is 3)
+
+    :return: The smoothed time series at the specified output time points
+    """
+    t_win = int(t_win/3)
+    t_obs = t_obs[~np.isnan(series)]
+    series = series[~np.isnan(series)]
+
+    kf = KalmanFilter(initial_state_mean=series[0], n_dim_obs=1)
+    smoothed_series, _ = kf.smooth(series)
+    series_interp = np.interp(t_interp, t_obs, smoothed_series.reshape(-1))
+    return series_interp[t_out]
 
 
 def savgol_non_uniform_smooth(
@@ -602,7 +671,7 @@ def savgol_non_uniform_smooth(
     t_obs = t_obs[~np.isnan(series)]
     series = series[~np.isnan(series)]
     try:
-        series_smooth = non_uniform_savgol(t_obs, series, window=9, polynom=3)
+        series_smooth = non_uniform_savgol(t_obs, series, window=t_win, polynom=3)
         # series_smooth = np.interp(t_interp, t_obs, series_smooth)
         series_interp = np.interp(t_interp, t_obs, series_smooth)
         # series_smooth = savgol_filter(series_interp, window_length=9, polyorder=order, axis=-1)
@@ -714,11 +783,12 @@ def dask_smooth_wrapper(
         "ewma": ewma_smooth,
         "median": median_smooth,
         "savgol": savgol_smooth,
+        "savgol_reverse": savgol_smooth_reverse,
         "ICA": ica_denoise,
         "bspline": bspline_smooth,
         "savgol_non_uniform": savgol_non_uniform_smooth,
         "smoothing_spline": smoothing_cubic_spline_smooth,
-        "ridge_regression": ridge_regression_smooth,
+        "ridge_regression": ridge_regression_smooth,"lowess": lowess_smooth, "kalman":kalman_smooth, "ewma":ewma_smooth
     }
 
     # filt_func = {

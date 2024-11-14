@@ -192,7 +192,7 @@ result = cube_interp.load_pixel(i, j, output_format="df", proj=proj, visual=True
 
 # Filter and load raw data
 if filt_raw:
-    cube.filter_cube(delete_outliers=delete_outliers)
+    cube.filter_cube_before_inversion(delete_outliers=delete_outliers)
 data_raw = cube.load_pixel(i, j, output_format="df", proj=proj, visual=True)[0]
 
 pixel_object = pixel_class()

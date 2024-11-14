@@ -309,6 +309,7 @@ def inversion_core(
             data_dates, data_values, data_str = data
         else:
             data_dates, data_values = data
+        del data
 
         if dates_range is None:
             dates_range = construction_dates_range_np(
@@ -335,7 +336,7 @@ def inversion_core(
 
         # Set a weight of 0, for large temporal baseline in the first inversion
         weight_temporal_decorrelation = (
-            np.where(data_values[:, 4] > 200, 0, 1) if detect_temporal_decorrelation else None
+            np.where(data_values[:, 4] > 180, 0, 1) if detect_temporal_decorrelation else None
         )
         # First weight of the inversion
         Weightx = weight_for_inversion(
@@ -513,7 +514,7 @@ def inversion_core(
 
             del result_dx, result_dy
             if not visual:
-                if result_quality is not None and "Error_propagation" in result_quality:
+                if result_quality is not None and "Error_propagation" not in result_quality:
                     del data_values, data_dates
 
         else:  # If not iteration
@@ -548,12 +549,13 @@ def inversion_core(
 
                 return prop_wieght_diag, sigma0_weight, t_value
 
-            def Prop_weight(weight, Residu, error):
-                W = np.diag(weight.astype("float32"))
-                FTWF = F.T * W @ F
+            def Prop_weight(F,weight, Residu, error):
+
+                error = np.max([Residu,error],axis=0)
+                W = weight.astype("float32")
+                FTWF = np.multiply(F.T, W[np.newaxis, :])@ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
-                Prop_weight = N @ F.T @ W @ error @ W @ F @ N
-                # Prop_weight = N @ F.T @ W @ F @ N
+                Prop_weight = np.multiply(np.multiply(N @ F.T, W[np.newaxis, :]) * error, W[np.newaxis, :]) @ F @ N
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
                 prop_wieght_diag = np.diag(Prop_weight)
                 # Compute the confidence intervals
@@ -562,18 +564,11 @@ def inversion_core(
 
                 return prop_wieght_diag, sigma0_weight, t_value
 
-            #
-            # # if not 'GCV' in result_quality:
-            F = sp.csc_matrix(A, dtype="float32")
-            Residux = data_values[:, 0] - F @ result_dx_i  # has a normal distribution
-            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 2])**2))
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag((data_values[:, 3] * data_values[:, -1] / unit)**2))
-            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(weight_ix, Residux, np.diag(Residux**2))
-            #
-            Residuy = data_values[:, 1] - F @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 4]* data_values[:, -1] / unit)**2))
-            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag((data_values[:, 3])**2))
-            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(weight_iy, Residuy, np.diag(Residuy**2))
+            Residux = data_values[:, 0] - A @ result_dx_i  # has a normal distribution
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(A,weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit)**2)
+
+            Residuy = data_values[:, 1] - A @ result_dy_i  # has a normal distribution
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(A,weight_iy, Residuy, (data_values[:, 3]* data_values[:, -1] / unit)**2)
 
             #Victor method
             # A = sp.csc_matrix(A, dtype="float32")
@@ -682,7 +677,6 @@ def interpolation_core(
 
     :return dataf_lp: [pd dataframe] --- Result of the temporal interpolation
     """
-
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     if first_date_interpol is None:
@@ -768,6 +762,8 @@ def interpolation_core(
         if "X_contribution" in result_quality:
             xcount_x = fdx_xcount(x_shifted) - fdx_xcount(x_regu[:-step])
             xcount_y = fdy_xcount(x_shifted) - fdy_xcount(x_regu[:-step])
+            xcount_x[xcount_x <0] = 0
+            xcount_y[xcount_y < 0] = 0
         if "Error_propagation" in result_quality:
             error_x = fdx_error(x_shifted) - fdx_error(x_regu[:-step])
             error_y = fdy_error(x_shifted) - fdy_error(x_regu[:-step])
@@ -1185,7 +1181,7 @@ def process_blocks_refine(
             return result_block
 
         # Filter the cube
-        obs_filt, flag_block = block.filter_cube(**preData_kwargs)
+        obs_filt, flag_block = block.filter_cube_before_inversion(**preData_kwargs)
         if isinstance(inversion_kwargs, dict):
             inversion_kwargs.update({"flag": flag_block})
 
@@ -1279,6 +1275,7 @@ def process_blocks_refine(
 def visualization_core(
     list_dataf: pd.DataFrame,
     option_visual: List,
+        type_data: List= ["obs", "invert"],
     save: bool = False,
     show: bool = True,
     path_save: Optional[str] = None,
@@ -1289,25 +1286,26 @@ def visualization_core(
     figsize: tuple[int, int] = (10, 6),
 ):
 
-    r"""
+    """
     Visualization function for the output of pixel_ticoi
     /!\ Many figures can be plotted
 
-    :param list_dataf: [pd.DataFrame] --- cube dataset
+    :param list_dataf: [pd.DataFrame] --- cube dataset, which could be the observations, the inverted results (ILF), and the filtered observations. Make sure that the order is coherent with type_data.
     :param option_visual: [list] --- list of options for visualization
+    :param type_data: [list] --- type of data: 'obs' for the observations, 'invert' for the inverted results, and 'obs_filt' for the filtered observations. Make sure that this is coherent with list_dataf.
     :param save:[bool] [default is False]  --- if True, save the figures
     :param show: [bool] [default is True]  --- if True, show the figures
     :param path_save: [str|None] [default is None] --- path where to save the figures
     :param A: [np.array] [default is None]  --- design matrix
     :param log_scale: [bool] [default is False]  ---  if True, plot the figures into log scale
-    :param cmap: [str] [default is 'rainbow''] --- color map used in the plots
+    :param cmap: [str] [default is 'viridis''] --- color map used in the plots
     :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :param figsize: tuple[int, int] [default is (10,6)] --- Size of the figures
     """
 
     pixel_object = pixel_class()
     pixel_object.load(
-        list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=["obs", "invert"]
+        list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data
     )
 
     dico_visual = {
@@ -1315,7 +1313,10 @@ def visualization_core(
         "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs")),
         "obs_vxvy_quality": (lambda pix: pix.plot_vx_vy_quality(cmap=cmap, type_data="obs")),
         "invertxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors)),
+        "obsfiltxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors, type_data="obs_filt")),
+        "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt")),
         "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors)),
+        "invert_vv_quality": (lambda pix: pix.plot_vv_quality(cmap=cmap, type_data="invert")),
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),

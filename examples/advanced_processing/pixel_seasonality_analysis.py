@@ -182,7 +182,7 @@ print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cu
 start.append(time.time())
 
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
-obs_filt, _ = cube.filter_cube(**preData_kwargs)
+obs_filt, _ = cube.filter_cube_before_inversion(**preData_kwargs)
 # Load pixel data
 data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 

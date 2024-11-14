@@ -97,7 +97,7 @@ class cube_data_class:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
         else:
             raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
-
+        
     def subset(self, proj: str, subset: list):
 
         """
@@ -148,7 +148,7 @@ class cube_data_class:
                 x=slice(np.min([i1, i2, i3, i4]), np.max([i1, i2, i3, i4])),
                 y=slice(np.max([j1, j2, j3, j4]), np.min([j1, j2, j3, j4])),
             )
-            del i3, i4, j3, j4
+            del i1, i2, j1, j2,i3, i4, j3, j4
         else:
             i1, j1 = buffer[0] - buffer[2], buffer[1] + buffer[2]
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
@@ -751,11 +751,9 @@ class cube_data_class:
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
-                sub = [
-                    self.ds["x"].min().values,
-                    self.ds["x"].max().values,
-                    self.ds["y"].min().values,
-                    self.ds["y"].max().values,
+                sub = [self.ds["y"].min().values,
+                    self.ds["y"].max().values,self.ds["x"].min().values,
+                    self.ds["x"].max().values
                 ]
                 cube2.load(
                     filepath[n],
@@ -1057,7 +1055,6 @@ class cube_data_class:
             i, j = self.convert_coordinates(i, j, proj=proj)
             # Interpolate only necessary variables and drop NaN values
             if interp == "nearest":
-                # 74.3 ms ± 1.33 ms per loop (mean ± std. dev. of 7 runs, 10 loops each)
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
                 data = data.dropna(dim="mid_date")
             else:
@@ -1082,7 +1079,7 @@ class cube_data_class:
                 # Load rolling mean for the given pixel, only on the dates available
                 dates_range = construction_dates_range_np(
                     data_dates
-                )  # 652 µs ± 3.24 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                )
                 mean = rolling_mean.sel(
                     mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method="nearest"
                 )[["vx_filt", "vy_filt"]]
@@ -1455,7 +1452,7 @@ class cube_data_class:
 
         return flag
 
-    def filter_cube(
+    def filter_cube_before_inversion(
         self,
         i: int | float | None = None,
         j: int | float | None = None,
@@ -1472,13 +1469,13 @@ class cube_data_class:
         solver: str = "LSMR_ini",
         proj: str = "EPSG:4326",
         velo_or_disp: str = "velo",
-        select_baseline: int | None = None,
+        select_baseline: int | None = 180,
         verbose: bool = False,
     ) -> xr.Dataset:
 
         """
            Filter the original data before the inversion:
-        -delete outliers according to the provided criterium
+        -delete outliers according to the provided criterion
         -compute a spatio-temporal kernel of the data, which can be used as apriori for the inversion (for "1accelnotnull" or "directionxy" )
         -compute mean velocity along x and y ( for solver = 'LSMR_ini' if regu is not "1accelnotnull" or "directionxy" )
 
@@ -1501,15 +1498,15 @@ class cube_data_class:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = None) -> (np.ndarray, np.ndarray):  # type: ignore
+        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = 180) -> (np.ndarray, np.ndarray):  # type: ignore
 
             """
-            A function to calculate spatial mean, resample data, and calculate exponential smoothed velocity.
+            A function to calculate spatial mean, resample data, and calculate smoothed velocity.
 
             :param da_arr: [xr dataset] --- Original data
-            :param select_baseline: [int] [default is 200] --- Threshold over the temporal baselines
+            :param select_baseline: [int] [default is None] --- Threshold over the temporal baselines
 
-            :return spatial_mean: [np array] --- Exponential smoothed velocity
+            :return spatial_mean: [np array] --- smoothed velocity
             :return date_out: [np array] --- Observed dates
             """
 
@@ -1519,16 +1516,14 @@ class cube_data_class:
 
             if verbose:
                 start = time.time()
-            if select_baseline is not None:
+            if select_baseline is not None:#select data with a temporal baseline lower than a threshold
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(
-                    baseline < select_baseline
-                )  # Take only the temporal baseline lower than the threshold selecr_baseline
+                    baseline < select_baseline)
                 while len(idx[0]) < 3 * len(date_out) & (
-                    select_baseline < 200
+                        select_baseline < 200
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
-                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -1589,12 +1584,12 @@ class cube_data_class:
             self.buffer(self.ds.proj4, [i, j, buffer])
             self.ds = self.ds.unify_chunks()
 
-        # The rolling smooth should be carried on velocity, while we need displacement during inversion
+        # The spatio-temporal smoothing should be carried on velocity, while we need displacement during inversion
         if velo_or_disp == "disp":  # to provide velocity values
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
-        if flag is not None:
+        if flag is not None: #create a flag, to indentify stable,areas, and eventually surges
             flag = self.create_flag(flag)
             flag.load()
 
@@ -1610,7 +1605,7 @@ class cube_data_class:
 
         start = time.time()
 
-        if delete_outliers is not None:
+        if delete_outliers is not None: #remove outliers beforehand
             slope, aspect, direction = None, None, None
             if (isinstance(delete_outliers, str) and delete_outliers == "topo_angle") or (
                 isinstance(delete_outliers, dict) and "topo_angle" in delete_outliers.keys()
@@ -1630,7 +1625,7 @@ class cube_data_class:
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
-        if "1accelnotnull" in regu or "directionxy" in regu:
+        if "1accelnotnull" in regu or "directionxy" in regu: #compute velocity smoothed using a spatio-temporal filter
             date_range = np.sort(
                 np.unique(
                     np.concatenate(
@@ -1641,15 +1636,15 @@ class cube_data_class:
                         axis=0,
                     )
                 )
-            )
+            )#dates between which the displacement should be estimated
             if verbose:
                 start = time.time()
 
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)
+            #spatio-temporal filter
+            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)#dates_uniq correspond to the central date of dates_range
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"], select_baseline=select_baseline)
 
-            # The time dimension of the smoothed velocity observations is different from the original,
-            # which is because of the possible duplicate mid_date of different image pairs...
+            # We obtain one smoothed value for each unique date in date_range
             obs_filt = xr.Dataset(
                 data_vars=dict(
                     vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
@@ -1672,15 +1667,13 @@ class cube_data_class:
             obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
             obs_filt.attrs["description"] = "Averaged velocity over the period"
             obs_filt.attrs["units"] = "m/y"
-        else:
-            obs_filt = None
+        else: obs_filt = None
 
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        if obs_filt != None:
-            obs_filt.load()
+        if obs_filt!= None: obs_filt.load()
         self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
@@ -1698,19 +1691,20 @@ class cube_data_class:
         :return cubes: [dict] --- Dictionary of the splitcubes (keys describe the position of the cube)
         """
 
-        cubes = dict()
+        cubes = []
         for s in range(n_split):
             if isinstance(dim, str):
                 cube = cube_data_class(
                     self,
                     self.ds.isel(
-                        {dim: slice(s * len(self.ds[dim].values) // 2, (s + 1) * len(self.ds[dim].values) // 2, 1)}
+                        {dim: slice(s * len(self.ds[dim].values) // n_split, (s + 1) * len(self.ds[dim].values) // n_split, 1)}
                     ),
                 )
+                cube.update_dimension()
                 if savepath is not None:
                     cube.ds.to_netcdf(f"{savepath}{dim}_{s}.nc")
                     print(f"Split cube saved at {savepath}{dim}_{s}.nc")
-                cubes[f"{savepath.split('/')[-1]}{dim}_{s}"] = cube
+                cubes.append(cube)
             elif isinstance(dim, list):
                 cube = cube_data_class(
                     self,
@@ -1728,9 +1722,112 @@ class cube_data_class:
                     if savepath is not None:
                         cube.ds.to_netcdf(f"{savepath}{dim[0]}_{s}.nc")
                         print(f"Split cube saved at {savepath}{dim[0]}_{s}.nc")
-                    cubes[f"{savepath.split('/')[-1]}{dim}_{s}"] = cube
+                    cubes.append(cube)
 
         return cubes
+
+
+    def reproj_coord(self,new_proj:Optional[str]=None,new_res:Optional[float]=None,interp_method:str="nearest",cube_to_match:Optional["cube_data_class"] =None):
+        """
+        Repreject the cube_data_self to a given projection system, and (optionally) resample this cube to a given resolution.
+        The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
+        The new resolution can be defined by the variable new_res or by a cube stored in cube_to_match.
+
+        :param new_proj: [str]  --- EPSG code of the new projection
+        :param new_res: [float]  --- new resolution in the unit of the new projection system
+        :param interp_method: [str]  ---
+        :param cube_to_match:  [cube_data_class]  --- cube used as a reference to reproject self
+        """
+        #asign coordinate system
+        if cube_to_match is not None: cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
+        self.ds = self.ds.rio.write_crs(self.ds.proj4)
+        self.ds = self.ds.transpose("mid_date", "y", "x")
+        
+        # Reproject coordinates
+        if cube_to_match is not None:
+            if interp_method == "nearest": self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.nearest)
+            elif interp_method == "bilinear":self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.bilinear)
+            if new_res is not None or new_proj is not None:  print('The new projection has been defined according to cube_to_match.')
+        elif new_res is None: self.ds =self.ds.rio.reproject(new_proj)
+        else: self.ds= self.ds.rio.reproject(new_proj,resolution=new_res)
+
+        # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
+        self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(
+            (np.abs(self.ds["vx"].values) < 10000) | (np.abs(self.ds["vy"].values) < 10000), np.nan
+        )
+
+        # Update of cube_data_classxr attributes
+        warnings.filterwarnings("ignore", category=UserWarning, module="pyproj")#prevent to have a warning
+        if new_proj is None:
+            new_proj = cube_to_match.ds.proj4
+            self.ds = self.ds.assign_attrs({"proj4": new_proj})
+        else: self.ds = self.ds.assign_attrs({"proj4": CRS.from_epsg(new_proj[5:]).to_proj4()})
+        self.ds = self.ds.assign_coords({"x": self.ds.x, "y": self.ds.y})
+        self.update_dimension()
+
+    def reproj_vel(self, new_proj: Optional[str] = None, cube_to_match: Optional["cube_data_class"] = None,
+                   unit: int = 365,nb_cpu:int=8):
+        """
+        Reproject the velocity vector in a new projection grid (i.e. the x and y variables are not changed, only vx and vy are modified).
+        The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
+
+        :param new_proj: [str]  --- EPSG code of the new projection
+        :param cube_to_match: [cube_data_class]  --- cube used as a reference to reproject self
+        :param unit: [int] [default is 365] --- 365 if the unit of the velocity are m/y, 1 if they are m/d
+        :param nb_cpu: [int] [default is 8] --- number of CPUs used for the parallelization
+        """
+
+        if new_proj is None:
+            if cube_to_match is not None:
+                new_proj = cube_to_match.ds.proj4
+                transformer = Transformer.from_crs(self.ds.proj4, new_proj)
+            else:
+                raise ValueError("Please provide new_proj or cube_to_match")
+        else:        transformer = Transformer.from_crs(self.ds.proj4, CRS.from_epsg(new_proj[5:]).to_proj4())
+
+
+        # Prepare grid and transformer
+        grid = np.meshgrid(self.ds["x"], self.ds["y"])
+        grid_transformed = transformer.transform(grid[0], grid[1])
+        temp = self.temp_base_()
+
+        def transform_slice(z):
+            """Transform the velocity slice for a single time step."""
+            # compute the coordinate for the ending point of the vector
+            endx = (self.ds["vx"].isel(mid_date=z) * temp[z] / unit) + grid[0]
+            endy = (self.ds["vy"].isel(mid_date=z) * temp[z] / unit) + grid[1]
+
+            # Transform final coordinates
+            t = transformer.transform(endx, endy)
+            # Compute differences in the new coordinate system
+            vx = (grid_transformed[0] - t[0]) / temp[z] * unit
+            vy = (t[1] - grid_transformed[1]) / temp[z] * unit
+
+            return vx, vy
+
+        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(
+            delayed(transform_slice)(z)
+            for z in range(self.nz)
+        ))
+        # Unpack the results
+        vx, vy = results[:,0,:,:],results[:,1,:,:]
+
+        # Updating DataArrays
+        self.ds["vx"] = xr.DataArray(
+            vx.astype("float32"),
+            dims=["mid_date", "y", "x"],
+            coords={"mid_date": self.ds.mid_date, "y": self.ds.y, "x": self.ds.x},
+        )
+        self.ds["vx"].encoding = {"vx": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
+
+        self.ds["vy"] = xr.DataArray(
+            vy.astype("float32"),
+            dims=["mid_date", "y", "x"],
+            coords={"mid_date": self.ds.mid_date, "y": self.ds.y, "x": self.ds.x},
+        )
+        self.ds["vy"].encoding = {"vy": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
+
+        del grid, transformer, temp, vx, vy
 
     def align_cube(
         self,
@@ -1738,7 +1835,7 @@ class cube_data_class:
         unit: int = 365,
         reproj_vel: bool = True,
         reproj_coord: bool = True,
-        interp_method: str = "nearest",
+        interp_method: str = "nearest",nb_cpu:int=8,
     ):
 
         """
@@ -1749,79 +1846,18 @@ class cube_data_class:
         :param reproj_vel: Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
         :param reproj_coord: Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
         :param interp_method: Interpolation method used to reproject cube (default is 'nearest')
+        :param nb_cpu: [int] [default is 8] --- number of CPUs used for the parallelization
 
         :return: Cube projected to self
         """
+        # if the velocity components have to be reprojected in the new projection system
+        if reproj_vel:  cube.reproj_vel(cube_to_match=self,unit=unit,nb_cpu=nb_cpu)
 
-        if reproj_vel:  # if the velocity components have to be reprojected in the new projection system
-            grid = np.meshgrid(cube.ds["x"], cube.ds["y"])
-            temp = cube.temp_base_()
-            endx = np.array(
-                [(np.ma.masked_invalid(cube.ds["vx"][z]) * temp[z] / unit) + grid[0] for z in range(cube.nz)]
-            )  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in x
-            endy = np.array(
-                [(np.ma.masked_invalid(cube.ds["vy"][z]) * temp[z] / unit) + grid[1] for z in range(cube.nz)]
-            )  # localisation of the final coordinate of each pixel displaced by the corresponding velocity vector, in y
-
-            # reprojection of the final coordinate of each pixel displaced by the corresponding velocity vector
-            transformer = Transformer.from_crs(cube.ds.proj4, self.ds.proj4)
-            t = np.array([transformer.transform(endx[z], endy[z]) for z in range(cube.nz)])
-            del endx, endy
-
-            # Computation of the difference between final and oringinal coordinates in the new system
-            grid = transformer.transform(grid[0], grid[1])
-            vx = np.array(
-                [(grid[0] - t[z, 0, :, :]) / temp[z] * unit for z in range(cube.nz)]
-            )  # positive toward the West
-            vy = np.array(
-                [(t[z, 1, :, :] - grid[1]) / temp[z] * unit for z in range(cube.nz)]
-            )  # positive toward the North
-            cube.ds["vx"] = xr.DataArray(
-                vx.astype("float32"),
-                dims=["mid_date", "y", "x"],
-                coords={"mid_date": cube.ds.mid_date, "y": cube.ds.y, "x": cube.ds.x},
-            )
-            cube.ds["vx"].encoding = {"vx": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
-            cube.ds["vy"] = xr.DataArray(
-                vy.astype("float32"),
-                dims=["mid_date", "y", "x"],
-                coords={"mid_date": cube.ds.mid_date, "y": cube.ds.y, "x": cube.ds.x},
-            )
-            cube.ds["vy"].encoding = {"vy": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
-            del vx, vy
-
-            # if reproj_coord:
-        #     # Convert the system of coordinate and adjust the spatial resolution of self to match the resolution, projection, and region of cube
-        #     cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
-        #     self.ds = self.ds.rio.write_crs(self.ds.proj4)
-        #     if interp_method == 'nearest':
-        #         cube.ds = self.ds.rio.reproject_match(cube.ds, resampling=rasterio.enums.Resampling.nearest)
-        #     # Update of cube_data_classxr attributes
-        #     self.ds = self.ds.assign_attrs({'proj4': cube.ds.proj4})
-        #     # cube2.ds = cube2.ds.rio.write_crs(cube2.proj4, inplace=True)
-        #     self.nx = self.ds.dims['x']
-        #     self.ny = self.ds.dims['y']
-
-        if reproj_coord:
-            # Convert the system of coordinate and adjust the spatial resolution of the cube2 to match the resolution, projection, and region of self, using a bilinear interpolation
-            cube.ds = cube.ds.rio.write_crs(cube.ds.proj4)
-            self.ds = self.ds.rio.write_crs(self.ds.proj4)
-            cube.ds = cube.ds.transpose("mid_date", "y", "x")
-            # Reproject coordinates
-            if interp_method == "nearest":
-                cube.ds = cube.ds.rio.reproject_match(self.ds, resampling=rasterio.enums.Resampling.nearest)
-            # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
-            cube.ds[["vx", "vy"]] = cube.ds[["vx", "vy"]].where(
-                (np.abs(cube.ds["vx"].values) < 10000) | (np.abs(cube.ds["vy"].values) < 10000), np.nan
-            )
-
-            # Update of cube_data_classxr attributes
-            cube.ds = cube.ds.assign_attrs({"proj4": self.ds.proj4})
-            cube.nx = cube.ds.dims["x"]
-            cube.ny = cube.ds.dims["y"]
-            cube.ds = cube.ds.assign_coords({"x": cube.ds.x, "y": cube.ds.y})
+        # if the coordinates have to be reprojected in the new projection system
+        if reproj_coord: cube.reproj_coord(cube_to_match=self)
 
         cube.ds = cube.ds.assign_attrs({"author": f"{cube.ds.author} aligned"})
+        cube.update_dimension()
 
         return cube
 
@@ -2010,7 +2046,7 @@ class cube_data_class:
         return line_df_vv
 
     # @jit(nopython=True)
-    def nvvc(self, parallel=True, nb_cpu=8, verbose=True):
+    def nvvc(self, nb_cpu=8, verbose=True):
 
         """
         Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
@@ -2271,6 +2307,8 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # Save the dataset to a netcdf file
+            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
+
             encoding = {
                 "vx": {"zlib": True, "complevel": 5, "dtype": "float32"},
                 "vy": {"zlib": True, "complevel": 5, "dtype": "float32"},
@@ -2341,9 +2379,6 @@ class cube_data_class:
         unit = ["m", "m", "no unit", "no unit"]
 
         start = time.time()
-        from joblib import Parallel, delayed
-
-        start = time.time()
         second_date_list = [
             np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
         ]
@@ -2351,7 +2386,6 @@ class cube_data_class:
         df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, second_date_list) for df in result)
 
         print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
-        start = time.time()
 
         # List of the reference date, i.e. the first date of the cumulative displacement time series
         result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
@@ -2404,6 +2438,7 @@ class cube_data_class:
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
+            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
             encoding = {
                 "dx": {"zlib": True, "complevel": 5, "dtype": "float32"},
                 "dy": {"zlib": True, "complevel": 5, "dtype": "float32"},
