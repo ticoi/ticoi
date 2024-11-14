@@ -89,7 +89,7 @@ load_kwargs = {
 ## ----------------------- Data preparation parameters --------------------- ##
 # For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = 2  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 200  # Regularization coefficient.s to be used (for each flag if flag is not None)
+coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
 delete_outlier = "flow_angle"
 apriori_weight = False  # should be false if the error is nor provided in the original observation
 

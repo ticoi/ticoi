@@ -58,12 +58,10 @@ warnings.filterwarnings("ignore")
 #                                 INVERSION                                   #
 # =========================================================================%% #
 
-
 def adaptive_weightf(residu: np.ndarray, 
                     baseline: np.ndarray, 
                     deform: np.ndarray,
-                    Weight: np.ndarray = None,
-                    baseline_threshold: float = 36.0) -> np.ndarray:
+                    Weight: np.ndarray = None) -> np.ndarray:
     """
     Compute adaptive weights for deformation observations with baseline threshold
     
@@ -75,25 +73,24 @@ def adaptive_weightf(residu: np.ndarray,
     
     :return weight: [np array] Weight for the inversion
     """
-    # 1. 基于阈值的基线因子计算
-    baseline_factor = np.ones_like(baseline)
-    long_baseline_mask = baseline > baseline_threshold
+    # 3. 计算形变速率因子
+    eps = 1e-6
+    rate = np.abs(deform) / (baseline + eps)
+    mad_rate = stats.median_abs_deviation(rate)
+    median_rate = np.median(rate)
     
-    if np.any(long_baseline_mask):
-        # 对于长基线观测，使用相对于阈值的比例
-        baseline_factor[long_baseline_mask] = baseline_threshold / baseline[long_baseline_mask]
+    # 使用软阈值函数计算速率因子
+    z_score = np.abs(rate - median_rate) / (mad_rate + eps)
+    rate_factor = 1 + 1 / (1 + np.exp(z_score - 3))
     
-    # 2. 计算形变速率
-    deform_rate = np.abs(deform / baseline)
-    rate_median = np.median(deform_rate[deform_rate != 0])
-    rate_scale = deform_rate / rate_median
-    
-    # 3. 计算加权残差
-    # 短基线使用原始残差，长基线考虑基线比例
-    adaptive_residu = residu * baseline_factor
-    
-    # 4. 标准化残差
-    r_std = adaptive_residu / (stats.median_abs_deviation(adaptive_residu) / 0.6745)
+    # 3. 综合考虑基线和形变速率的影响
+    relative_residu = residu / (np.abs(deform) + eps)  # 残差/形变量
+
+    # 速率大的地方允许更大的相对残差
+    adaptive_relative_residu = relative_residu * np.sqrt(rate_factor)
+
+    # 标准化相对残差
+    r_std = adaptive_relative_residu / (stats.median_abs_deviation(adaptive_relative_residu) / 0.6745)
     
     # 5. 计算权重
     if Weight is not None:
@@ -102,64 +99,6 @@ def adaptive_weightf(residu: np.ndarray,
         weight = modified_huber_weight(r_std)
     
     return weight
-
-
-def analyze_residuals(residu: np.ndarray, 
-                     baseline: np.ndarray, 
-                     deform: np.ndarray,
-                     weights: np.ndarray,
-                     baseline_threshold: float = 36.0):
-    """
-    Analyze and visualize the residuals and weights
-    
-    :param residu: Residual vector
-    :param baseline: Temporal baseline
-    :param deform: Deformation observations
-    :param weights: Calculated weights
-    :param baseline_threshold: Baseline threshold used
-    """
-    import matplotlib.pyplot as plt
-    
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-    
-    # Plot 1: Residuals vs Baseline with threshold line
-    scatter1 = ax1.scatter(baseline, np.abs(residu), c=weights, cmap='viridis', alpha=0.6)
-    ax1.axvline(x=baseline_threshold, color='r', linestyle='--', 
-                label=f'Threshold ({baseline_threshold} days)')
-    ax1.set_xlabel('Temporal Baseline (days)')
-    ax1.set_ylabel('Absolute Residual')
-    ax1.set_title('Residuals vs Baseline')
-    ax1.legend()
-    plt.colorbar(scatter1, ax=ax1, label='Weight')
-    
-    # Plot 2: Weights vs Residuals, colored by baseline
-    scatter2 = ax2.scatter(np.abs(residu), weights, c=baseline, cmap='viridis', alpha=0.6)
-    ax2.set_xlabel('Absolute Residual')
-    ax2.set_ylabel('Weight')
-    ax2.set_title('Weights vs Residuals')
-    plt.colorbar(scatter2, ax=ax2, label='Baseline (days)')
-    
-    # Plot 3: Deformation Rate vs Baseline
-    deform_rate = np.abs(deform / baseline)
-    scatter3 = ax3.scatter(baseline, deform_rate, c=weights, cmap='viridis', alpha=0.6)
-    ax3.axvline(x=baseline_threshold, color='r', linestyle='--')
-    ax3.set_xlabel('Temporal Baseline (days)')
-    ax3.set_ylabel('Absolute Deformation Rate')
-    ax3.set_title('Deformation Rate vs Baseline')
-    plt.colorbar(scatter3, ax=ax3, label='Weight')
-    
-    # Plot 4: Weight Distribution
-    ax4.hist(weights[baseline <= baseline_threshold], bins=20, alpha=0.5, 
-             label=f'Baseline ≤ {baseline_threshold} days')
-    ax4.hist(weights[baseline > baseline_threshold], bins=20, alpha=0.5,
-             label=f'Baseline > {baseline_threshold} days')
-    ax4.set_xlabel('Weight Value')
-    ax4.set_ylabel('Frequency')
-    ax4.set_title('Weight Distribution by Baseline Length')
-    ax4.legend()
-    
-    plt.tight_layout()
-    return fig
 
 def modified_huber_weight(z: np.ndarray, k_min: float = 1.345, k_max: float = 2.5) -> np.ndarray:
     """
@@ -319,19 +258,6 @@ def inversion_iteration(
 
         return weight
     
-    def weightf_huber(residu: np.ndarray, Weight: np.ndarray | None, delta: float = 1.345) -> np.ndarray:
-        # Huber权重计算函数
-        mad = stats.median_abs_deviation(residu)
-        if mad == 0:
-            mad = 1e-6  # 避免除以零
-        r_std = residu / (mad / 0.6745)
-        huber_weights = HuberWeight(r_std, delta)
-        if Weight is not None:
-            weight = Weight * huber_weights
-        else:
-            weight = huber_weights
-        return weight
-    
     if len(results) == 2:
         result_dx, result_dy = results
         weightx = weightf(compute_residual(A, data[:, 0], result_dx), Weight[0])
@@ -354,7 +280,7 @@ def inversion_iteration(
         weight_az_asc = adaptive_weightf(residu_dy[i_idx:], data[:, 2][i_idx:], data[:, 1][i_idx:], Weight[1][i_idx:] if Weight[1] is not None else None)
         weight_los_desc = adaptive_weightf(residu_dx[:i_idx], data[:, 2][:i_idx], data[:, 0][:i_idx], Weight[0][:i_idx] if Weight[0] is not None else None)
         weight_az_desc = adaptive_weightf(residu_dy[i_idx:], data[:, 2][i_idx:], data[:, 1][i_idx:], Weight[1][i_idx:] if Weight[1] is not None else None)
-        fig = analyze_residuals(residu_dx[:i_idx], data[:, 2][:i_idx], data[:, 0][:i_idx], weight_los_desc)
+        fig = analyze_weights(residu_dx[:i_idx], data[:, 2][:i_idx], data[:, 0][:i_idx], weight_los_desc)
         fig.savefig('residuals_weights_los_desc.png')
         weightx = np.concatenate([weight_los_asc, weight_los_desc])
         weighty = np.concatenate([weight_az_asc, weight_az_desc])
@@ -835,19 +761,19 @@ def inversion_core(
                 accel=accel,
                 result_quality=result_quality,
             )
-            # result_dx, result_dy, result_dz = results_d_i
-            # delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
-            # result_vx = result_dx / delta_t
-            # result_vy = result_dy / delta_t
-            # result_vz = result_dz / delta_t
-            # import matplotlib.pyplot as plt
+            result_dx, result_dy, result_dz = results_d_i
+            delta_t = np.diff(dates_range) / np.timedelta64(1, "D")
+            result_vx = result_dx / delta_t
+            result_vy = result_dy / delta_t
+            result_vz = result_dz / delta_t
+            import matplotlib.pyplot as plt
 
-            # fig, ax = plt.subplots()
-            # ax.plot(dates_range[:-1], result_vx, label="vx", linestyle="--", marker="o")
-            # ax.plot(dates_range[:-1], result_vy, label="vy", linestyle="--", marker="*")
-            # ax.plot(dates_range[:-1], result_vz, label="vz", linestyle="--", marker="+")
-            # ax.legend()
-            # fig.savefig("test5.png")
+            fig, ax = plt.subplots()
+            ax.plot(dates_range[:-1], result_vx, label="vx", linestyle="--", marker="o")
+            ax.plot(dates_range[:-1], result_vy, label="vy", linestyle="--", marker="*")
+            ax.plot(dates_range[:-1], result_vz, label="vz", linestyle="--", marker="+")
+            ax.legend()
+            fig.savefig("test5.png")
             # result_dx_i, result_dy_i, weight_2x, weight_2y, residu_normx, residu_normy
             # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
             i = 2
