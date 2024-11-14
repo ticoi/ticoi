@@ -122,6 +122,11 @@ def set_function_for_interpolation(
     :return fdx_xcount, fdx_ycount: [functions | None] --- The functions which need to be used to interpolate the contributed values in X
     """
 
+    assert (
+            type(option_interpol) == str and option_interpol in ["spline_smooth","spline","nearest"]
+        ), f"The filepath must be a string among the options: 'spline_smooth','spline','nearest'."
+
+
     # Compute the functions used to interpolate
     # Define the interpolation functions based on the interpolation option
     interpolation_functions = {
@@ -131,24 +136,21 @@ def set_function_for_interpolation(
     }
 
     # Compute the functions used to interpolate
-    if option_interpol in interpolation_functions:
-        interpolation_func = interpolation_functions[option_interpol]
+    interpolation_func = interpolation_functions[option_interpol]
 
-        fdx = interpolation_func(x, dataf["dx"])
-        fdy = interpolation_func(x, dataf["dy"])
+    fdx = interpolation_func(x, dataf["dx"])
+    fdy = interpolation_func(x, dataf["dy"])
 
-        fdx_xcount, fdy_xcount, fdx_error, fdy_error = None, None, None, None
-        if result_quality is not None:
-            if "X_contribution" in result_quality:
-                fdx_xcount = interpolation_func(x, dataf["xcount_x"])
-                fdy_xcount = interpolation_func(x, dataf["xcount_y"])
-            if "Error_propagation" in result_quality:
-                fdx_error = interpolation_func(x, dataf["error_x"])
-                fdy_error = interpolation_func(x, dataf["error_y"])
+    fdx_xcount, fdy_xcount, fdx_error, fdy_error = None, None, None, None
+    if result_quality is not None:
+        if "X_contribution" in result_quality:
+            fdx_xcount = interpolation_func(x, dataf["xcount_x"])
+            fdy_xcount = interpolation_func(x, dataf["xcount_y"])
+        if "Error_propagation" in result_quality:
+            fdx_error = interpolation_func(x, dataf["error_x"])
+            fdy_error = interpolation_func(x, dataf["error_y"])
 
-        return fdx, fdy, fdx_xcount, fdy_xcount, fdx_error, fdy_error
-
-    return None, None, None, None  # Return default values if interpolation option is not valid
+    return fdx, fdy, fdx_xcount, fdy_xcount, fdx_error, fdy_error
 
 
 def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd.Series) -> pd.DataFrame:

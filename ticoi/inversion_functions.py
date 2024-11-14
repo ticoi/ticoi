@@ -38,10 +38,10 @@ def mu_regularisation(regu: str | int, A: np.ndarray, dates_range: np.ndarray, i
 
     # First order Tikhonov regularisation
     if regu == 1:
-        mu = np.identity(A.shape[1], dtype="float32")
-        mu[np.arange(mu.shape[0] - 1) + 1, np.arange(mu.shape[0] - 1)] = -1
+        mu = np.diag(np.full(A.shape[1], -1, dtype="float32"))
+        mu[np.arange(A.shape[1] - 1), np.arange(A.shape[1] - 1) + 1] = 1
         mu /= np.diff(dates_range) / np.timedelta64(1, "D")
-        mu = np.delete(mu, 0, axis=0)
+        mu = np.delete(mu, -1, axis=0)
 
     # First order Tikhonov regularisation, with an apriori on the acceleration
     elif regu == "1accelnotnull":
@@ -152,12 +152,14 @@ def weight_for_inversion(
             Weight = data[:, pos]
         else:  # The data quality corresponds to errors in m/y or m/d
             # Normalization of the errors
-            try:
-                Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
-            except ZeroDivisionError:
-                Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            Weight = TukeyBiweight(Weight, 4.685)
+
+            Weight = 1 - (data[:, pos] - np.min(data[:, pos])) / (np.max(data[:, pos]) - np.min(data[:, pos]))
+            # try:
+            #     Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
+            # except ZeroDivisionError:
+            #     Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
+            # # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
+            # Weight = TukeyBiweight(Weight, 4.685)
 
         if temporal_decorrelation is not None:
             Weight = np.multiply(temporal_decorrelation, Weight)

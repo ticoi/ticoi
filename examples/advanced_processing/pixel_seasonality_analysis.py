@@ -35,11 +35,13 @@ from ticoi.interpolation_functions import visualisation_interpolation
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str)
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2_2022_2023"))}/c_x01470_y03675.nc'
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "pixel"))}/'  # Path where to store the results
 proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # i, j = 342890.4,5092114.7  # Point (pixel) where to carry on the computation
 i, j = 343686.3, 5091294.9  # Pixel coordinates
+i, j = 337783.8, 5079818.0
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used
@@ -77,7 +79,7 @@ load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "buffer": [i, j, 500],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_date": ["2018-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
     "proj": proj,  # EPSG system of the given coordinates
@@ -134,6 +136,7 @@ interpolation_kwargs = {
     "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "result_quality": result_quality,  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+    "unit": unit,  # 365 if the unit is m/y, 1 if the unit is m/d
 }
 
 ## ------------------- Parameters for seasonality analysis ----------------- ##
@@ -141,9 +144,9 @@ interpolation_kwargs = {
 impose_frequency = True
 # Add several sinus at different freqs (1/365.25 and harmonics (2/365.25, 3/365.25...) if impose_frequency is True)
 #   (only available for impose_frequency = True for now)
-several_freq = 1
+several_freq = 3
 # Compute also the best matching sinus to raw data, for comparison
-raw_seasonality = True
+raw_seasonality = False
 # Filter to use in the first place
 # 'highpass' : apply a bandpass filter between low frequencies (reject variations over several years (> 1.5 y))
 # and the Nyquist frequency to ensure Shanon theorem
@@ -179,7 +182,7 @@ print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cu
 start.append(time.time())
 
 # Filter the cube (compute rolling_mean for regu=1accelnotnull)
-obs_filt, _ = cube.filter_cube(**preData_kwargs)
+obs_filt, _ = cube.filter_cube_before_inversion(**preData_kwargs)
 # Load pixel data
 data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
@@ -442,7 +445,7 @@ else:
     first_max_day = pd.Timedelta(np.argmax(sine_year), "D") + dataf_lp["date1"].min()
     max_day = first_max_day - pd.Timestamp(year=first_max_day.year, month=1, day=1)
     print(f"                   Maximum at day {max_day.days}")
-    print(f"                   RMSE : {round(root_mean_squared_error(sine, vv_filt))} m/y")
+    print(f"                   RMSE : {round(mean_squared_error(sine, vv_filt))} m/y")
 
     del sine_year
 
