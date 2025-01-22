@@ -97,7 +97,7 @@ def find_granule_by_point(input_dict, input_point):  # [lon,lat]
 
 def points_of_shp_line(shp_file, proj="EPSG:4326", distance=50, nb_points=None, select=None):
     geolns = gpd.read_file(shp_file)
-    if geolns.geom_type.describe()["top"] not in ["LineString","MultiLineString"]:
+    if geolns.geom_type.describe()["top"] not in ["LineString", "MultiLineString"]:
         raise ValueError("The shp geometries must be a LineString.")
 
     # The selection is given in kilometers -> convert it to meters
@@ -444,7 +444,7 @@ def VVC_TICOI(
 ):
 
     """
-    Compute TICOI for one particular coefficent, and compute the VVC
+    Compute TICOI for one particular coefficient, and compute the VVC
     :param data:
     :param mean:
     :param dates_range:
@@ -456,7 +456,7 @@ def VVC_TICOI(
     :param regu:
     :return:
     """
-    #TODO commentaire Laurane: pourquoi cette option ici ?
+    # TODO commentaire Laurane: pourquoi cette option ici ?
     # Proceed to inversion
     if regu is None:
         A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, coef=coef, **inversion_kwargs)
@@ -579,7 +579,7 @@ def optimize_coef(
 
     # Coefficients to be tested
     if coefs is None:
-        coefs = np.arange(cmin, cmax + 1, step)#range of coef
+        coefs = np.arange(cmin, cmax + 1, step)  # range of coef
     else:
         coefs = np.array(coefs)
 

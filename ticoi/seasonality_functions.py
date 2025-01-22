@@ -37,6 +37,8 @@ def match_sine(
         return np.nan, np.nan, np.nan
     if variable == "vv":
         vv = np.sqrt(d["vx"] ** 2 + d["vy"] ** 2).to_numpy()
+    elif variable == "direction":
+        vv = np.arctan2(d["vy"], d["vx"]).to_numpy()
     else:
         vv = d[variable]
     Ts = dates[1] - dates[0]

@@ -15,7 +15,7 @@ def mjd2date(date):
     """
 
     t = jdcal.jd2gcal(2400000.5, date)
-    return np.datetime64(f'{t[0]}-{"{:02}".format(t[1])}-{"{:02}".format(t[2])}')
+    return np.datetime64(f'{t[0]}-{f"{t[1]:02}"}-{f"{t[2]:02}"}')
 
 
 def date2mjd(date):

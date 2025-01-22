@@ -28,29 +28,24 @@ from ticoi.interpolation_functions import (
 # =========================================================================%% #
 
 ###  Selection of data
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "nathan", "Donnees", "Cubes_de_donnees", "cubes_Sentinel_2_2022_2023"))}/c_x01225_y03675.nc'
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "nathan", "Donnees", "Cubes_de_donnees"))}/stack_median_pleiades_alllayers_2012-2022_modiflaurane.nc'
-# cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__),"..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
 dem_file = None
-proj = "EPSG:32632"  # EPSG system of the given coordinates
+proj = "EPSG:3413"  # EPSG system of the given coordinates
 
-i, j = 338988.8, 5081488.4  # Pixel coordinates
-i, j = 330594.7, 5076626.1  # Bionassay Italien
-# i, j = 343422.55,5093003.94
-# i, j = 343658.7,5091307.2
-i, j = 334065.2, 5082367.6
+i, j = -138.18069, 60.29076  # coordinate in pixel
+
+
+cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
+path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
-coef = 100000  # Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outliers = {"median_angle": 45, "mz_score": 3}
-# delete_outliers = {
-#     "median_angle": 45
-#     }
-# delete_outliers=None
+coef = 100  # Regularization coefficient.s to be used (for each flag if flags is not None)
+delete_outliers = {"median_angle": 45}
+
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
 unit = 365  # 1 for m/d, 365 for m/y
@@ -88,11 +83,11 @@ load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-    "buffer": [i, j, 250],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2020-01-01", "2022-01-01"],  # Select dates ([min, max] or None to select all)
+    "buffer": [i, j, 0.1],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
-    "proj": proj,  # EPSG system of the given coordinates
+    "proj": "EPSG:4326",  # EPSG system of the given coordinates
     "verbose": False,  # Print information throughout the loading process
 }
 

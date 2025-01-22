@@ -9,23 +9,15 @@ from pyproj import CRS
 
 start = time.time()
 
-dst_nc = "/media/tristan/Data3/Hala_lake/Landsat8/Hala_disp_LS7_LS8_refine_0819.nc"
+dst_nc = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc"
 
-file_path = [
-    "/media/tristan/Data3/Hala_lake/Landsat8/Hala_disp_LS7_refine_2nd/",
-    "/media/tristan/Data3/Hala_lake/Landsat8/Hala_displacement_LS8/",
-]
+file_path = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Velo_refine/filtered/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
 
 unit = "m/y"  # if obs_mode is 'velocity', need to specify the unit of the velocity 'm/y' or 'm/d'
 
-if isinstance(file_path, str):
-    files = glob.glob(f"{file_path}*filt.tif")
-elif isinstance(file_path, list):
-    files = []
-    for path in file_path:
-        files.extend(glob.glob(f"{path}*filt.tif"))
+files = glob.glob(f"{file_path}*filt.tif")
 files.sort()
 
 datasets = []
@@ -49,8 +41,8 @@ for file in files:
     if obs_mode == "velocity":
         velo_unit = 365 if unit == "m/y" else 1
         period = (date2 - date1).days
-        ds["vx"] = ds["vx"] / period * velo_unit
-        ds["vy"] = ds["vy"] / period * velo_unit
+        ds["vx"] = ds["vx"] * period / velo_unit
+        ds["vy"] = ds["vy"] * period / velo_unit
     elif obs_mode == "displacement":
         pass
 

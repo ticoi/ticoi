@@ -88,23 +88,17 @@ warnings.filterwarnings("ignore")
 load_pixel_process = "block_process"
 
 ## --------- ------------ Data availability parameters --------------------- ##
+
 index = [
     "monthly_graph",
-    "all_data",
-    "median_baseline",
-    "max_leap_frog",
-    "mini_month",
-    "mini_3month",
-    "mean_month",
-    "median_month",
-    "mini_season",
-    "min_all_season",
+    "month" "mini_3month",
+    "mean_3month",
+    "median_3month",
 ]
 
 ## ------------------------------ Data selection --------------------------- ##
 # Path.s to the data cube.s (can be a list of str to merge several cubes, or a single str,
 cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_Argentiere_S2.nc'
-flag_file = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))}/Alps_Mont-Blanc_flags.nc'  # Path to flags file
 mask_file = None  # Path to mask file (.shp file) to mask some of the data on cube
 path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "cube", "data_availability"))}/'  # Path where to store the results
 result_fn = "Argentiere_example"  # Name of the netCDF file to be created (if save is True)
@@ -114,9 +108,6 @@ proj = "EPSG:32632"  # EPSG system of the given coordinates
 # Divide the data in several areas where different methods should be used
 assign_flag = True
 flag = None
-if assign_flag:
-    flag = xr.open_dataset(flag_file)
-    flag.load()
 
 # Regularization method.s to be used (for each flag if flag is not None)
 regu = {0: 1, 1: "1accelnotnull"}  # With flag (0: stable ground, 1: glaciers)
@@ -602,9 +593,9 @@ def mini_nmonth(monthly, positions, coord_data, n_month=1):
 # Month (or selection of n months among the 12 months) with the lowest average of available data on the whole dataset
 def mean_nmonth(monthly, positions, coord_data, n_month=1):
     index_map = np.zeros([coord_data["nb_long_data"], coord_data["nb_lat_data"]], dtype="float32")
-    monthly = monthly.groupby(monthly.columns.month, axis=1).mean()
+    monthly_map = monthly.groupby(monthly.columns.month, axis=1).mean()
     if n_month > 1:
-        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month - 1 :]]
+        monthly_map = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month - 1 :]]
     index_map[coord_data["long_data"], coord_data["lat_data"]] = monthly_map.min(axis=1).to_list()
     return index_map
 
@@ -612,9 +603,9 @@ def mean_nmonth(monthly, positions, coord_data, n_month=1):
 # Month (or selection of n months among the 12 months) with the lowest median of available data on the whole dataset
 def median_nmonth(monthly, positions, coord_data, n_month=1):
     index_map = np.zeros([coord_data["nb_long_data"], coord_data["nb_lat_data"]], dtype="float32")
-    monthly = monthly.groupby(monthly.columns.month, axis=1).median()
+    monthly_map = monthly.groupby(monthly.columns.month, axis=1).median()
     if n_month > 1:
-        monthly = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month - 1 :]]
+        monthly_map = monthly.rolling(window=n_month, axis=1).sum()[monthly.columns[n_month - 1 :]]
     index_map[coord_data["long_data"], coord_data["lat_data"]] = monthly_map.min(axis=1).to_list()
     return index_map
 

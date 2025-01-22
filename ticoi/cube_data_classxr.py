@@ -9,7 +9,6 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import contextlib
 import itertools
 import os
 import time
@@ -25,7 +24,6 @@ import pandas as pd
 import rasterio as rio
 import rasterio.enums
 import rasterio.warp
-import richdem as rd
 import xarray as xr
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
@@ -34,11 +32,7 @@ from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 from tqdm import tqdm
 
-from ticoi.filtering_functions import (
-    dask_filt_warpper,
-    dask_smooth_wrapper,
-    median_filter,
-)
+from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
@@ -87,7 +81,7 @@ class cube_data_class:
         """
         Update the attributes corresponding to cube dimensions: nx, ny, and nz
 
-        :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
+        :param time_dim: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
         """
 
         self.nx = self.ds["x"].sizes["x"]
@@ -97,7 +91,7 @@ class cube_data_class:
             self.resolution = self.ds["x"].values[1] - self.ds["x"].values[0]
         else:
             raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
-        
+
     def subset(self, proj: str, subset: list):
 
         """
@@ -148,7 +142,7 @@ class cube_data_class:
                 x=slice(np.min([i1, i2, i3, i4]), np.max([i1, i2, i3, i4])),
                 y=slice(np.max([j1, j2, j3, j4]), np.min([j1, j2, j3, j4])),
             )
-            del i1, i2, j1, j2,i3, i4, j3, j4
+            del i1, i2, j1, j2, i3, i4, j3, j4
         else:
             i1, j1 = buffer[0] - buffer[2], buffer[1] + buffer[2]
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
@@ -175,7 +169,7 @@ class cube_data_class:
         :param variable_name: [str] [default is 'vx'] --- Name of the variable containing the time series array
         :param x_dim: [str] [default is 'x'] --- Name of the x dimension in the array
         :param y_dim: [str] [default is 'y'] --- Name of the y dimension in the array
-        :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
+        :param time_dim: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
         :param verbose: [bool] [default is False] --- Boolean flag to control verbosity of output
 
         :return tc: [int] --- Chunk size along the time dimension
@@ -729,17 +723,6 @@ class cube_data_class:
         """
         self.__init__()
 
-        time_dim_name = {
-            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
-            "J. Mouginot, R.Millan, A.Derkacheva": "z",
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
-            "L. Charrier, L. Guo": "mid_date",
-            "L. Charrier": "mid_date",
-            "E. Ducasse": "time",
-            "S. Leinss, L. Charrier": "mid_date",
-            "IGE": "mid_date",
-        }
-
         assert (
             type(filepath) == list or type(filepath) == str
         ), f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
@@ -762,9 +745,15 @@ class cube_data_class:
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
                 # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
-                sub = [self.ds["y"].min().values,
-                    self.ds["y"].max().values,self.ds["x"].min().values,
-                    self.ds["x"].max().values
+                # sub = [self.ds["y"].min().values,
+                #     self.ds["y"].max().values,self.ds["x"].min().values,
+                #     self.ds["x"].max().values
+                # ]
+                sub = [
+                    self.ds["x"].min().values,
+                    self.ds["x"].max().values,
+                    self.ds["y"].min().values,
+                    self.ds["y"].max().values,
                 ]
                 cube2.load(
                     filepath[n],
@@ -785,15 +774,19 @@ class cube_data_class:
                     )
                 self.merge_cube(cube2)  # Merge the new cube to the main one
             del cube2
-            if chunks == {}:  # Rechunk with optimal chunk size
-                var_name = "vx" if not self.is_TICO else "dx"
-                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
-                tc, yc, xc = self.determine_optimal_chunk_size(
-                    variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
-                )
-                self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
         else:  # Load one cube
+            time_dim_name = {
+                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
+                "J. Mouginot, R.Millan, A.Derkacheva": "z",
+                "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
+                "L. Charrier, L. Guo": "mid_date",
+                "L. Charrier": "mid_date",
+                "E. Ducasse": "time",
+                "S. Leinss, L. Charrier": "mid_date",
+                "IGE": "mid_date",
+            }
+
             with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
                 if filepath.split(".")[-1] == "nc":
                     try:
@@ -1084,9 +1077,7 @@ class cube_data_class:
         if (solver == "LSMR_ini" or regu == "1accelnotnull" or regu == "directionxy") and rolling_mean is not None:
             if len(rolling_mean.sizes) == 3:  # if regu == 1accelnotnul, rolling_mean have a time dimesion
                 # Load rolling mean for the given pixel, only on the dates available
-                dates_range = construction_dates_range_np(
-                    data_dates
-                )
+                dates_range = construction_dates_range_np(data_dates)
                 mean = rolling_mean.sel(
                     mid_date=dates_range[:-1] + np.diff(dates_range) // 2, x=i, y=j, method="nearest"
                 )[["vx_filt", "vy_filt"]]
@@ -1294,7 +1285,7 @@ class cube_data_class:
     def compute_flow_direction(self, vx_file: str | None = None, vy_file: str | None = None) -> xr.DataArray:
 
         """
-        Compute the avaerage flow direction from the input vx and vy files or just from the observations
+        Compute the average flow direction from the input vx and vy files or just from the observations
         :param: vx_file | vy_file: [str] --- path of the flow velocity file, should be geotiff format
         :return: direction: [xr.DataArray] --- computed average flow direction at each pixel
         """
@@ -1302,20 +1293,20 @@ class cube_data_class:
             vx = self.reproject_geotiff_to_cube(vx_file)
             vy = self.reproject_geotiff_to_cube(vy_file)
         else:
-            vx = self.ds["vx"]
-            vy = self.ds["vy"]
+            vx = self.ds["vx"].values
+            vy = self.ds["vy"].values
 
         temporal_baseline = self.ds["temporal_baseline"].values
         temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
-        vx_weighted = np.nansum(vx.values * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
-        vy_weighted = np.nansum(vy.values * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+        vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+        vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
 
         v_mean_weighted = np.sqrt(vx_weighted**2 + vy_weighted**2)
 
         direction = np.arctan2(vx_weighted, vy_weighted)
         direction = (np.rad2deg(direction) + 360) % 360
 
-        direction = np.where(v_mean_weighted < 1.5, np.nan, direction)
+        direction = np.where(v_mean_weighted < 1, np.nan, direction)
 
         direction = xr.Dataset(
             data_vars=dict(
@@ -1325,71 +1316,6 @@ class cube_data_class:
         )
 
         return direction
-
-    def compute_slo_asp(self, dem_file: str, blur_size: int = 5) -> (xr.DataArray, xr.DataArray):
-        """
-
-        :param dem_file: [str] --- path of the DEM
-        :param blur_size: [int] --- spatial smoothing to apply to the DEM
-        :return: slope [xr.DataArray] --- slope of the smoothed DEM
-        :return: aspect [xr.DataArray] --- aspect of the smoothed D DEM
-
-        """
-
-        # decorator to define a generator-based context manager. This allows the user to use the with statement with a generator function, here to remove every printed messages
-        @contextlib.contextmanager
-        def suppress_stdout_stderr():
-            with open(os.devnull, "w") as devnull:
-                old_stdout = os.dup(1)
-                old_stderr = os.dup(2)
-                os.dup2(devnull.fileno(), 1)
-                os.dup2(devnull.fileno(), 2)
-                try:
-                    yield
-                finally:
-                    os.dup2(old_stdout, 1)
-                    os.dup2(old_stderr, 2)
-
-        if CRS.from_proj4(self.ds.proj4) == CRS.from_epsg(4326):
-            raise ValueError("The CRS of the cube must be projected in meters for calculating slope and aspect")
-        # Open the DEM file
-        dem = self.reproject_geotiff_to_cube(dem_file)
-
-        # Set no_data value if src.nodata is None
-        with rio.open(dem_file) as src:
-            no_data = src.nodata if src.nodata is not None else -9999
-
-        dem = median_filter(dem, size=blur_size)  # Blur the DEM, should be done first before computing slope and aspect
-        # Create richdem array with suppressed output, richDEM is very quick for even very large DEMs.
-        with suppress_stdout_stderr():
-            dem_rd = rd.rdarray(dem, no_data=no_data)
-
-        dem_rd.geotransform = self.ds.rio.transform().to_gdal()
-
-        # Calculate slope and aspect with suppressed output message
-        with suppress_stdout_stderr():
-            slope = rd.TerrainAttribute(dem_rd, attrib="slope_degrees")
-            aspect = rd.TerrainAttribute(dem_rd, attrib="aspect")
-
-        # Replace no_data values in slope and aspect with NaN
-        slope[slope == slope.no_data] = np.nan
-        aspect[aspect == aspect.no_data] = np.nan
-
-        # Convert slope and aspect to xarray Datasets
-        slope = xr.Dataset(
-            data_vars=dict(
-                slope=(["y", "x"], np.array(slope)),
-            ),
-            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
-        )
-        aspect = xr.Dataset(
-            data_vars=dict(
-                aspect=(["y", "x"], np.array(aspect)),
-            ),
-            coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
-        )
-
-        return slope, aspect
 
     def create_flag(self, flag: str = None, field_name: str | None = None, default_value: str | int | None = None):
 
@@ -1523,15 +1449,13 @@ class cube_data_class:
 
             if verbose:
                 start = time.time()
-            if select_baseline is not None:#select data with a temporal baseline lower than a threshold
+            if select_baseline is not None:  # select data with a temporal baseline lower than a threshold
                 baseline = self.ds["temporal_baseline"].compute()
-                idx = np.where(
-                    baseline < select_baseline)
+                idx = np.where(baseline < select_baseline)
                 while len(idx[0]) < 3 * len(date_out) & (
-                        select_baseline < 200
+                    select_baseline < 200
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
-                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -1571,7 +1495,7 @@ class cube_data_class:
             ):  # The spatial average is performed only if the size of the cube is larger than s_win, the spatial window
                 spatial_axis = tuple(i for i in range(3) if i != time_axis)
                 pad_widths = tuple((s_win // 2, s_win // 2) if i != time_axis else (0, 0) for i in range(3))
-                spatial_mean = da.nanmedian(
+                spatial_mean = da.nanmean(
                     sliding_window_view(filtered_in_time, (s_win, s_win), axis=spatial_axis), axis=(-1, -2)
                 )
                 spatial_mean = da.pad(spatial_mean, pad_widths, mode="edge")
@@ -1597,7 +1521,7 @@ class cube_data_class:
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
-        if flag is not None: #create a flag, to indentify stable,areas, and eventually surges
+        if flag is not None:  # create a flag, to identify stable,areas, and eventually surges
             flag = self.create_flag(flag)
             flag.load()
 
@@ -1613,7 +1537,7 @@ class cube_data_class:
 
         start = time.time()
 
-        if delete_outliers is not None: #remove outliers beforehand
+        if delete_outliers is not None:  # remove outliers beforehand
             slope, aspect, direction = None, None, None
             if (isinstance(delete_outliers, str) and delete_outliers == "topo_angle") or (
                 isinstance(delete_outliers, dict) and "topo_angle" in delete_outliers.keys()
@@ -1633,7 +1557,7 @@ class cube_data_class:
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
-        if "1accelnotnull" in regu or "directionxy" in regu: #compute velocity smoothed using a spatio-temporal filter
+        if "1accelnotnull" in regu or "directionxy" in regu:  # compute velocity smoothed using a spatio-temporal filter
             date_range = np.sort(
                 np.unique(
                     np.concatenate(
@@ -1644,12 +1568,14 @@ class cube_data_class:
                         axis=0,
                     )
                 )
-            )#dates between which the displacement should be estimated
+            )  # dates between which the displacement should be estimated
             if verbose:
                 start = time.time()
 
-            #spatio-temporal filter
-            vx_filtered, dates_uniq = loop_rolling(self.ds["vx"], select_baseline=select_baseline)#dates_uniq correspond to the central date of dates_range
+            # spatio-temporal filter
+            vx_filtered, dates_uniq = loop_rolling(
+                self.ds["vx"], select_baseline=select_baseline
+            )  # dates_uniq correspond to the central date of dates_range
             vy_filtered, dates_uniq = loop_rolling(self.ds["vy"], select_baseline=select_baseline)
 
             # We obtain one smoothed value for each unique date in date_range
@@ -1675,13 +1601,15 @@ class cube_data_class:
             obs_filt = self.ds[["vx", "vy"]].mean(dim="mid_date")
             obs_filt.attrs["description"] = "Averaged velocity over the period"
             obs_filt.attrs["units"] = "m/y"
-        else: obs_filt = None
+        else:
+            obs_filt = None
 
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        if obs_filt!= None: obs_filt.load()
+        if obs_filt != None:
+            obs_filt.load()
         self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
 
@@ -1705,7 +1633,13 @@ class cube_data_class:
                 cube = cube_data_class(
                     self,
                     self.ds.isel(
-                        {dim: slice(s * len(self.ds[dim].values) // n_split, (s + 1) * len(self.ds[dim].values) // n_split, 1)}
+                        {
+                            dim: slice(
+                                s * len(self.ds[dim].values) // n_split,
+                                (s + 1) * len(self.ds[dim].values) // n_split,
+                                1,
+                            )
+                        }
                     ),
                 )
                 cube.update_dimension()
@@ -1734,8 +1668,13 @@ class cube_data_class:
 
         return cubes
 
-
-    def reproj_coord(self,new_proj:Optional[str]=None,new_res:Optional[float]=None,interp_method:str="nearest",cube_to_match:Optional["cube_data_class"] =None):
+    def reproj_coord(
+        self,
+        new_proj: Optional[str] = None,
+        new_res: Optional[float] = None,
+        interp_method: str = "nearest",
+        cube_to_match: Optional["cube_data_class"] = None,
+    ):
         """
         Repreject the cube_data_self to a given projection system, and (optionally) resample this cube to a given resolution.
         The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
@@ -1746,18 +1685,24 @@ class cube_data_class:
         :param interp_method: [str]  ---
         :param cube_to_match:  [cube_data_class]  --- cube used as a reference to reproject self
         """
-        #asign coordinate system
-        if cube_to_match is not None: cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
+        # assign coordinate system
+        if cube_to_match is not None:
+            cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
         self.ds = self.ds.rio.write_crs(self.ds.proj4)
         self.ds = self.ds.transpose("mid_date", "y", "x")
-        
+
         # Reproject coordinates
         if cube_to_match is not None:
-            if interp_method == "nearest": self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.nearest)
-            elif interp_method == "bilinear":self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.bilinear)
-            if new_res is not None or new_proj is not None:  print('The new projection has been defined according to cube_to_match.')
-        elif new_res is None: self.ds =self.ds.rio.reproject(new_proj)
-        else: self.ds= self.ds.rio.reproject(new_proj,resolution=new_res)
+            if interp_method == "nearest":
+                self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.nearest)
+            elif interp_method == "bilinear":
+                self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.bilinear)
+            if new_res is not None or new_proj is not None:
+                print("The new projection has been defined according to cube_to_match.")
+        elif new_res is None:
+            self.ds = self.ds.rio.reproject(new_proj)
+        else:
+            self.ds = self.ds.rio.reproject(new_proj, resolution=new_res)
 
         # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
         self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(
@@ -1765,16 +1710,22 @@ class cube_data_class:
         )
 
         # Update of cube_data_classxr attributes
-        warnings.filterwarnings("ignore", category=UserWarning, module="pyproj")#prevent to have a warning
+        warnings.filterwarnings("ignore", category=UserWarning, module="pyproj")  # prevent to have a warning
         if new_proj is None:
             new_proj = cube_to_match.ds.proj4
             self.ds = self.ds.assign_attrs({"proj4": new_proj})
-        else: self.ds = self.ds.assign_attrs({"proj4": CRS.from_epsg(new_proj[5:]).to_proj4()})
+        else:
+            self.ds = self.ds.assign_attrs({"proj4": CRS.from_epsg(new_proj[5:]).to_proj4()})
         self.ds = self.ds.assign_coords({"x": self.ds.x, "y": self.ds.y})
         self.update_dimension()
 
-    def reproj_vel(self, new_proj: Optional[str] = None, cube_to_match: Optional["cube_data_class"] = None,
-                   unit: int = 365,nb_cpu:int=8):
+    def reproj_vel(
+        self,
+        new_proj: Optional[str] = None,
+        cube_to_match: Optional["cube_data_class"] = None,
+        unit: int = 365,
+        nb_cpu: int = 8,
+    ):
         """
         Reproject the velocity vector in a new projection grid (i.e. the x and y variables are not changed, only vx and vy are modified).
         The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
@@ -1791,13 +1742,14 @@ class cube_data_class:
                 transformer = Transformer.from_crs(self.ds.proj4, new_proj)
             else:
                 raise ValueError("Please provide new_proj or cube_to_match")
-        else:        transformer = Transformer.from_crs(self.ds.proj4, CRS.from_epsg(new_proj[5:]).to_proj4())
-
+        else:
+            transformer = Transformer.from_crs(self.ds.proj4, CRS.from_epsg(new_proj[5:]).to_proj4())
 
         # Prepare grid and transformer
         grid = np.meshgrid(self.ds["x"], self.ds["y"])
         grid_transformed = transformer.transform(grid[0], grid[1])
-        temp = self.temp_base_()
+        # temp = self.temp_base_()
+        temp = np.array([30] * self.nz)
 
         def transform_slice(z):
             """Transform the velocity slice for a single time step."""
@@ -1813,12 +1765,9 @@ class cube_data_class:
 
             return vx, vy
 
-        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(
-            delayed(transform_slice)(z)
-            for z in range(self.nz)
-        ))
+        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(transform_slice)(z) for z in range(self.nz)))
         # Unpack the results
-        vx, vy = results[:,0,:,:],results[:,1,:,:]
+        vx, vy = results[:, 0, :, :], results[:, 1, :, :]
 
         # Updating DataArrays
         self.ds["vx"] = xr.DataArray(
@@ -1843,7 +1792,8 @@ class cube_data_class:
         unit: int = 365,
         reproj_vel: bool = True,
         reproj_coord: bool = True,
-        interp_method: str = "nearest",nb_cpu:int=8,
+        interp_method: str = "nearest",
+        nb_cpu: int = 8,
     ):
 
         """
@@ -1859,10 +1809,12 @@ class cube_data_class:
         :return: Cube projected to self
         """
         # if the velocity components have to be reprojected in the new projection system
-        if reproj_vel:  cube.reproj_vel(cube_to_match=self,unit=unit,nb_cpu=nb_cpu)
+        if reproj_vel:
+            cube.reproj_vel(cube_to_match=self, unit=unit, nb_cpu=nb_cpu)
 
         # if the coordinates have to be reprojected in the new projection system
-        if reproj_coord: cube.reproj_coord(cube_to_match=self)
+        if reproj_coord:
+            cube.reproj_coord(cube_to_match=self)
 
         cube.ds = cube.ds.assign_attrs({"author": f"{cube.ds.author} aligned"})
         cube.update_dimension()
@@ -2333,8 +2285,9 @@ class cube_data_class:
             if verbose:
                 print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
 
-        if return_result:
-            return cubenew, result
+        # if return_result:
+        #     return cubenew, result
+        #
         return cubenew
 
     def write_result_tico(
@@ -2508,3 +2461,4 @@ class cube_data_class:
                 result_quality=result_quality,
                 verbose=verbose,
             )
+        return self

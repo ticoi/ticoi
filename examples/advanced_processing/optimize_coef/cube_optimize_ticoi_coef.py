@@ -23,8 +23,9 @@ from tqdm import tqdm
 
 from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.other_functions import optimize_coef
 from ticoi.optimize_coefficient_functions import *
+from ticoi.other_functions import optimize_coef
+
 # %%========================================================================= #
 #                                    PARAMETERS                               #
 # =========================================================================%% #
