@@ -727,6 +727,17 @@ class cube_data_class:
             type(filepath) == list or type(filepath) == str
         ), f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
 
+        time_dim_name = {
+            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
+            "J. Mouginot, R.Millan, A.Derkacheva": "z",
+            "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
+            "L. Charrier, L. Guo": "mid_date",
+            "L. Charrier": "mid_date",
+            "E. Ducasse": "time",
+            "S. Leinss, L. Charrier": "mid_date",
+            "IGE": "mid_date",
+        }
+
         if type(filepath) == list:  # Merge several cubes
             self.load(
                 filepath[0],
@@ -744,11 +755,6 @@ class cube_data_class:
 
             for n in range(1, len(filepath)):
                 cube2 = cube_data_class()
-                # res = self.ds['x'].values[1] - self.ds['x'].values[0] # Resolution of the main data
-                # sub = [self.ds["y"].min().values,
-                #     self.ds["y"].max().values,self.ds["x"].min().values,
-                #     self.ds["x"].max().values
-                # ]
                 sub = [
                     self.ds["x"].min().values,
                     self.ds["x"].max().values,
@@ -774,19 +780,15 @@ class cube_data_class:
                     )
                 self.merge_cube(cube2)  # Merge the new cube to the main one
             del cube2
+            if chunks == {}:  # Rechunk with optimal chunk size
+                var_name = "vx" if not self.is_TICO else "dx"
+                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
+                tc, yc, xc = self.determine_optimal_chunk_size(
+                    variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
+                )
+                self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
         else:  # Load one cube
-            time_dim_name = {
-                "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
-                "J. Mouginot, R.Millan, A.Derkacheva": "z",
-                "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
-                "L. Charrier, L. Guo": "mid_date",
-                "L. Charrier": "mid_date",
-                "E. Ducasse": "time",
-                "S. Leinss, L. Charrier": "mid_date",
-                "IGE": "mid_date",
-            }
-
             with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
                 if filepath.split(".")[-1] == "nc":
                     try:
@@ -815,7 +817,6 @@ class cube_data_class:
                         filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks
                     )
                     self.is_TICO = False
-                    time_dim = "mid_date"
                     var_name = "vx"
 
                 if verbose:
@@ -855,11 +856,6 @@ class cube_data_class:
 
                 if mask is not None:
                     self.mask_cube(mask)
-
-                # if self.ds['mid_date'].dtype == ('<M8[ns]'): #if the dates are given in ns, convert them to days
-                #     self.ds['mid_date'] = self.ds['date2'].astype('datetime64[D]')
-                #     self.ds['date1'] = self.ds['date1'].astype('datetime64[D]')
-                #     self.ds['date2'] = self.ds['date2'].astype('datetime64[D]')
 
                 if verbose:
                     print(f"[Data loading] Author : {self.ds.author}")
