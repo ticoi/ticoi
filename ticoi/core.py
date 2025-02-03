@@ -114,7 +114,7 @@ def inversion_iteration(
         :return weight: [np array] Weight for the inversion
         """
 
-        mad = (stats.median_abs_deviation(residu) / 0.6745)
+        mad = stats.median_abs_deviation(residu) / 0.6745
         if mad != 0.0:
             r_std = residu / mad
             if Weight is not None:  # The weight is a combination of apriori weight and the studentized residual
@@ -122,7 +122,8 @@ def inversion_iteration(
                 weight = Weight * TukeyBiweight(r_std, 4.685)
             else:
                 weight = TukeyBiweight((r_std), 4.685)
-        else: weight = np.ones(residu.shape[0])
+        else:
+            weight = np.ones(residu.shape[0])
 
         return weight
 
@@ -312,15 +313,11 @@ def inversion_core(
         del data
 
         if dates_range is None:
-            dates_range = construction_dates_range_np(
-                data_dates
-            )
+            dates_range = construction_dates_range_np(data_dates)
 
         ####  Build A (design matrix in AX = Y)
         if not linear_operator:
-            A = construction_a_lf(
-                data_dates, dates_range
-            )
+            A = construction_a_lf(data_dates, dates_range)
             linear_operator = None
         else:  # use a linear operator to solve the inversion, it is sometimes faster
             linear_operator = class_linear_operator()
@@ -357,8 +354,14 @@ def inversion_core(
         )
         del weight_temporal_decorrelation
         if not visual:
-            if result_quality is not None and not apriori_weight_in_second_iteration and not "Error_propagation" in result_quality:
-                data_values = np.delete(data_values, [2, 3], 1)  # Delete quality indicator, which are not needed anymore
+            if (
+                result_quality is not None
+                and not apriori_weight_in_second_iteration
+                and not "Error_propagation" in result_quality
+            ):
+                data_values = np.delete(
+                    data_values, [2, 3], 1
+                )  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         if not linear_operator:
             if regu == "directionxy":
@@ -369,7 +372,7 @@ def inversion_core(
 
         ##  Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
-        #TODO: we can make it shorter
+        # TODO: we can make it shorter
         if regu == "1accelnotnull":
             accel = [
                 np.diff(mean[0]),
@@ -549,11 +552,11 @@ def inversion_core(
 
                 return prop_wieght_diag, sigma0_weight, t_value
 
-            def Prop_weight(F,weight, Residu, error):
+            def Prop_weight(F, weight, Residu, error):
 
-                error = np.max([Residu,error],axis=0)
+                error = np.max([Residu, error], axis=0)
                 W = weight.astype("float32")
-                FTWF = np.multiply(F.T, W[np.newaxis, :])@ F
+                FTWF = np.multiply(F.T, W[np.newaxis, :]) @ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
                 Prop_weight = np.multiply(np.multiply(N @ F.T, W[np.newaxis, :]) * error, W[np.newaxis, :]) @ F @ N
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
@@ -565,12 +568,16 @@ def inversion_core(
                 return prop_wieght_diag, sigma0_weight, t_value
 
             Residux = data_values[:, 0] - A @ result_dx_i  # has a normal distribution
-            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(A,weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit)**2)
+            prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(
+                A, weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit) ** 2
+            )
 
             Residuy = data_values[:, 1] - A @ result_dy_i  # has a normal distribution
-            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(A,weight_iy, Residuy, (data_values[:, 3]* data_values[:, -1] / unit)**2)
+            prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(
+                A, weight_iy, Residuy, (data_values[:, 3] * data_values[:, -1] / unit) ** 2
+            )
 
-            #Victor method
+            # Victor method
             # A = sp.csc_matrix(A, dtype="float32")
             # F_regu = np.multiply(coef, mu)
             # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weightVictor(weight_ix, pos=0)
@@ -601,7 +608,7 @@ def inversion_core(
                 }
             )
             if (
-                    residu_normx is not None
+                residu_normx is not None
             ):  # save the L2-norm from the last inversion, of the term AXY and the regularization term for the x- and y-component
                 NormR = np.zeros(data_values.shape[0])
                 NormR[:4] = np.hstack(
@@ -645,6 +652,7 @@ def inversion_core(
             result["sigma0"] = sigma
 
     return A, result, dataf
+
 
 # %% ======================================================================== #
 #                               INTERPOLATION                                 #
@@ -762,7 +770,7 @@ def interpolation_core(
         if "X_contribution" in result_quality:
             xcount_x = fdx_xcount(x_shifted) - fdx_xcount(x_regu[:-step])
             xcount_y = fdy_xcount(x_shifted) - fdy_xcount(x_regu[:-step])
-            xcount_x[xcount_x <0] = 0
+            xcount_x[xcount_x < 0] = 0
             xcount_y[xcount_y < 0] = 0
         if "Error_propagation" in result_quality:
             error_x = fdx_error(x_shifted) - fdx_error(x_regu[:-step])
@@ -1275,7 +1283,7 @@ def process_blocks_refine(
 def visualization_core(
     list_dataf: pd.DataFrame,
     option_visual: List,
-        type_data: List= ["obs", "invert"],
+    type_data: List = ["obs", "invert"],
     save: bool = False,
     show: bool = True,
     path_save: Optional[str] = None,
@@ -1286,7 +1294,7 @@ def visualization_core(
     figsize: tuple[int, int] = (10, 6),
 ):
 
-    """
+    r"""
     Visualization function for the output of pixel_ticoi
     /!\ Many figures can be plotted
 
@@ -1304,9 +1312,7 @@ def visualization_core(
     """
 
     pixel_object = pixel_class()
-    pixel_object.load(
-        list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data
-    )
+    pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data)
 
     dico_visual = {
         "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
@@ -1321,7 +1327,6 @@ def visualization_core(
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
         "invert_weight": (lambda pix: pix.plot_weights_inversion()),
-        "invert_interp_obs_residual": (lambda pix: pix.plot_invert_interp_obs_residual()),
     }
 
     for option in option_visual:

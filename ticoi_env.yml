@@ -1,6 +1,8 @@
+name: ticoi
 dependencies:
   aiohttp: null
   dask: null
+  fiona: =1.9
   geopandas: '>=0.10.0'
   h5netcdf: null
   h5py: null
@@ -21,5 +23,5 @@ dependencies:
   seaborn: null
   shapely: null
   tqdm: null
-  xarray: null
+  xarray: null.
   zarr: null

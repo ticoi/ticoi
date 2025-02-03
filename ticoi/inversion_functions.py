@@ -16,7 +16,6 @@ import scipy.linalg as la
 import scipy.optimize as opt
 import scipy.sparse as sp
 from numba import jit
-from scipy import stats
 from scipy.linalg import inv
 
 # %% ======================================================================== #
