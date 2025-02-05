@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+'''
+Store geotiff files in a netcdf file in a format compatible with the loader used in TICOI
+This script is only a template. The user need to modify the lines TO MODIFY according to their data.
+
+'''
 import glob
 import time
 from datetime import date, datetime
@@ -9,15 +14,15 @@ from pyproj import CRS
 
 start = time.time()
 
-dst_nc = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Hala_lake_disp_refine_LS7.nc"
+dst_nc = "save_path/netcdf_name.nc"
 
-file_path = "/media/tristan/Data3/Hala_lake/Landsat7_refine/Velo_refine/filtered/"
+file_path = "geotiff_path/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
 
 unit = "m/y"  # if obs_mode is 'velocity', need to specify the unit of the velocity 'm/y' or 'm/d'
 
-files = glob.glob(f"{file_path}*filt.tif")
+files = glob.glob(f"{file_path}*.tif")
 files.sort()
 
 datasets = []
@@ -27,14 +32,14 @@ for file in files:
     print(file)
     ds = rioxarray.open_rasterio(file, band_as_variable=True)
 
-    # extract the date from the filename
-    date1 = datetime.strptime(file.split("/")[-1].split("day")[-1][:8], "%Y%m%d")
-    date2 = datetime.strptime(file.split("/")[-1].split("day")[-1][9:17], "%Y%m%d")
+    # extract the date from the filename (MODIFY IT ACCORDING TO YOUR DATA)
+    date1 = datetime.strptime(file.split("/")[-1].split("day")[-1][:8], "%Y%m%d")#TO MODIFY
+    date2 = datetime.strptime(file.split("/")[-1].split("day")[-1][9:17], "%Y%m%d") #TO MODIFY
     mid_date = date1 + (date2 - date1) / 2
 
     # set the variable name
     ds = ds.assign_coords(time=mid_date)
-    ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})
+    ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})#TO MODIFY
     ds = ds.expand_dims("mid_date")
 
     # convert to displacement
@@ -87,8 +92,8 @@ ds_combined.vy.attrs = {
 }
 
 proj4 = CRS(ds.spatial_ref.projected_crs_name).to_proj4()
-source = "L. Charrier, L. Guo"
-sensor = "LS8"
+source = "L. Charrier, L. Guo" #TO MODIFY
+sensor = "LS8" #TO MODIFY
 
 ds_combined.attrs.update(
     {

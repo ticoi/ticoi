@@ -577,12 +577,6 @@ def inversion_core(
                 A, weight_iy, Residuy, (data_values[:, 3] * data_values[:, -1] / unit) ** 2
             )
 
-            # Victor method
-            # A = sp.csc_matrix(A, dtype="float32")
-            # F_regu = np.multiply(coef, mu)
-            # prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weightVictor(weight_ix, pos=0)
-            # prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weightVictor(weight_iy, pos=1)
-
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
         if visual:
             vx = data_values[:, 0] / data_values[:, -1] * unit
@@ -1310,7 +1304,7 @@ def visualization_core(
     :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :param figsize: tuple[int, int] [default is (10,6)] --- Size of the figures
     """
-
+    
     pixel_object = pixel_class()
     pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data)
 
@@ -1326,12 +1320,13 @@ def visualization_core(
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
-        "invert_weight": (lambda pix: pix.plot_weights_inversion()),
+        "invert_weight": (lambda pix: pix.plot_weights_inversion()),"direction":(lambda pix: pix.plot_direction())
     }
 
     for option in option_visual:
         if option in dico_visual.keys():
             dico_visual[option](pixel_object)
+        else: print(f'{option} is not a valid option for visualization')
 
 
 def save_cube_parameters(
