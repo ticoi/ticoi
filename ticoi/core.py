@@ -1074,7 +1074,10 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
     GB = 1073741824
     blocks = []
     if cube.ds.nbytes > block_size * GB:
-        num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
+
+        try: num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
+        except ValueError : cube = cube.ds.unify_chunks() #ValueError: Object has inconsistent chunks along dimension x. This can be fixed by calling unify_chunks().
+
         chunk_bytes = num_elements * cube.ds["vx"].dtype.itemsize
 
         nchunks_block = int(block_size * GB // chunk_bytes)
