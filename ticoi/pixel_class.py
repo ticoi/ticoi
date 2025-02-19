@@ -590,7 +590,7 @@ class pixel_class:
         colors: List[str] = ["orange", "blue"],
         type_data: str = "invert",
         zoom_on_results: bool = False,
-        block_plot: bool = True,
+        block_plot: bool = True
     ):
 
         """
@@ -664,7 +664,7 @@ class pixel_class:
 
         return ax, fig
 
-    def plot_vv(self, color: str = "orange", type_data: str = "invert", block_plot: bool = True):
+    def plot_vv(self, color: str = "orange", type_data: str = "invert", block_plot: bool = True, vminmax: list|None = None ):
 
         """
         Plot the velocity magnitude.
@@ -679,7 +679,8 @@ class pixel_class:
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         fig, ax = plt.subplots(figsize=self.figsize)
-        ax.set_ylim(data.vvymin, data.vvymax)
+        if vminmax is None: ax.set_ylim(data.vvymin, data.vvymax)
+        else: ax.set_ylim(vminmax[0], vminmax[1])
         ax.set_ylabel(f"Velocity magnitude  [{self.unit}]", fontsize=14)
         p = ax.plot(
             data.dataf["date_cori"],
@@ -719,7 +720,7 @@ class pixel_class:
         colors: List[str] = ["orange", "blue"],
         type_data: str = "invert",
         zoom_on_results: bool = False,
-        block_plot: bool = True,
+        block_plot: bool = True,vminmax: list|None = None
     ):
 
         """
@@ -738,7 +739,7 @@ class pixel_class:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        ax, fig = self.plot_vv(color=colors[0], type_data="obs")
+        ax, fig = self.plot_vv(color=colors[0], type_data="obs",vminmax=vminmax)
         self.show, self.save = show, save
 
         if zoom_on_results:
@@ -777,51 +778,6 @@ class pixel_class:
                 fig.savefig(f"{self.path_save}/vv_overlaid_zoom_on_results_{type_data}.png")
             else:
                 fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
-
-        # # condi = ((data.dataf["xcount_x"]>10)&(data.dataf["xcount_y"]>10))
-        # condi = ((data.dataf["xcount_x"]>10)&(data.dataf["xcount_y"]>10))
-        # show = copy.copy(self.show)
-        # save = copy.copy(self.save)
-        # self.show, self.save = False, False
-        # ax, fig = self.plot_vv(color=colors[0], type_data="obs")
-        # self.show, self.save = show, save
-        #
-        # if zoom_on_results:
-        #     ax.set_ylim(data.vvymin, data.vvymax)
-        # p = ax.plot(
-        #     data.dataf["date_cori"][condi],
-        #     data.dataf["vv"][condi],
-        #     linestyle="",
-        #     zorder=1,
-        #     marker="o",
-        #     lw=0.7,
-        #     markersize=2,
-        #     color=colors[1],
-        #     label=f"Results from the inversion",
-        # )
-        # ax.errorbar(
-        #     data.dataf["date_cori"][condi],
-        #     data.dataf["vv"][condi],
-        #     xerr=data.dataf["offset_bar"][condi],
-        #     color=colors[1],
-        #     alpha=0.2,
-        #     fmt=",",
-        #     zorder=1,
-        # )
-        # ax.legend(loc="lower left", bbox_to_anchor=(0, -0.3), fontsize=14)
-        # fig.suptitle(
-        #     f"Magnitude of {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data magnitude",
-        #     y=0.95,
-        #     fontsize=16,
-        # )
-        #
-        # if self.show:
-        #     plt.show(block=block_plot)
-        # if self.save:
-        #     if zoom_on_results:
-        #         fig.savefig(f"{self.path_save}/vv_overlaid_zoom_on_results_{type_data}.png")
-        #     else:
-        #         fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
 
         return ax, fig
 

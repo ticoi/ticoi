@@ -45,7 +45,7 @@ i, j = 337783.8, 5079818.0
 
 ## --------------------------- Main parameters ----------------------------- ##
 regu = "1accelnotnull"  # Regularization method to be used
-coef = 5000  # Regularization coefficient to be used
+coef = 500  # Regularization coefficient to be used
 solver = "LSMR_ini"  # Solver for the inversion
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = (

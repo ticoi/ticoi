@@ -1288,7 +1288,7 @@ def visualization_core(
     log_scale: bool = False,
     cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
-    figsize: tuple[int, int] = (10, 6),
+    figsize: tuple[int, int] = (10, 6),vminmax=None
 ):
 
     r"""
@@ -1313,11 +1313,11 @@ def visualization_core(
 
     dico_visual = {
         "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
-        "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs")),
+        "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs",vminmax=vminmax)),
         "obs_vxvy_quality": (lambda pix: pix.plot_vx_vy_quality(cmap=cmap, type_data="obs")),
         "invertxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors)),
         "obsfiltxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors, type_data="obs_filt")),
-        "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt")),
+        "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt",vminmax=vminmax)),
         "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors)),
         "invert_vv_quality": (lambda pix: pix.plot_vv_quality(cmap=cmap, type_data="invert")),
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),

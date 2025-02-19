@@ -30,8 +30,10 @@ def match_sine(
 
     d = d.dropna()
     dates = (d["date1"] + (d["date2"] - d["date1"]) // 2 - d["date1"].min()).dt.days.to_numpy()
+
+
     N = len(dates)
-    if N <= 4:
+    if N <= 4:#do not compute anything
         if raw_seasonality:
             return np.nan, np.nan, np.nan, np.nan, np.nan
         return np.nan, np.nan, np.nan
@@ -41,6 +43,7 @@ def match_sine(
         vv = np.arctan2(d["vy"], d["vx"]).to_numpy()
     else:
         vv = d[variable]
+
     Ts = dates[1] - dates[0]
 
     # Filtering to remove inter-annual variations
