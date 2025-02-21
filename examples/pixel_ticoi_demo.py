@@ -50,8 +50,8 @@ apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = [
-    "X_contribution"
-]  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
+    'Error_propagation', 'X_contribution'
+]  # Criterium used to evaluate the quality of the results ('X_count', 'Norm_residual', 'X_contribution', 'Error_propagation')
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False  # Print information throughout TICOI processing
@@ -59,22 +59,22 @@ save = True  # Save the results and figures
 show = True  # Plot some figures
 
 # Visualisation options
-option_visual = [
-    "obs_xy",
-    "obs_magnitude",
-    "obs_vxvy_quality",
-    "invertxy_overlaid",
-    "residuals",
-    "xcount_xy",
-    "xcount_vv",
-    "invert_weight",
-    "interp_xy_overlaid",
-    "interp_xy_overlaid_zoom",
-    "invertvv_overlaid",
-    "invertvv_overlaid_zoom",
-    "direction_overlaid",
-]  # see README_visualization_pixel_output.md
-option_visual = ["obs_magnitude", "invertvv_overlaid"]
+# option_visual = [
+#     "obs_xy",
+#     "obs_magnitude",
+#     "obs_vxvy_quality",
+#     "invertxy_overlaid",
+#     "residuals",
+#     "xcount_xy",
+#     "xcount_vv",
+#     "invert_weight",
+#     "interp_xy_overlaid",
+#     "interp_xy_overlaid_zoom",
+#     "invertvv_overlaid",
+#     "invertvv_overlaid_zoom",
+#     "direction_overlaid",
+# ]  # see README_visualization_pixel_output.md
+option_visual = ["obs_magnitude", "invertvv_overlaid","quality_metrics"]
 
 vmax = [False, False]  # vmin and vmax of the legend
 
@@ -214,6 +214,14 @@ last_date_interpol = np.max(np.max(cube.date2_()))
 
 # Proceed to interpolation
 dataf_lp = interpolation_core(result, **interpolation_kwargs)
+
+dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
+
+# result = dataf_lp.dropna(subset=['vx', 'vy'])
+#
+# result['v'] = np.sqrt(result['vx']**2+result['vy']**2 )
+
+
 
 
 stop.append(time.time())

@@ -10,6 +10,8 @@ import scipy.signal as signal
 import seaborn as sns
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error
+import matplotlib.colors as mcolors
+import matplotlib.lines as malines
 
 import ticoi.pixel_class
 
@@ -952,6 +954,64 @@ class pixel_class:
 
         return ax, fig
 
+    def plot_quality_metrics(self):
+
+        dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data='interp')
+        data = dataf.dataf.dropna(subset=['vx', 'vy']) #drop rows where with no velocity values
+
+        data['error_x'] = np.sqrt(data['error_x'])
+
+        data['error_y'] = np.sqrt(data['error_y'])
+        data['error_v'] = np.sqrt(
+            (data['vx'] / data['vv'] * data['error_x']) ** 2 + (data['vy'] / data['vv'] * data['error_y']) ** 2)
+
+        data['confidence_x'] = data['sigma0'].iloc[2] * data['error_x']
+        data['confidence_y'] = data['sigma0'].iloc[3] * data['error_y']
+        data['confidence_v'] = np.nanmean(data['sigma0'].iloc[2:4]) * data['error_v']
+
+        xcount_mean = np.nanmean([data['xcount_x'], data['xcount_y']], axis=0)  # Mean of xcount_x and xcount_y
+        max_xcount = int(np.max(xcount_mean))
+        if max_xcount > 100:
+            bounds = [0, 100, 1000, max_xcount]
+            cmap = mcolors.ListedColormap(['lightcoral', 'red', 'darkred'])  # Light red, red, dark red
+            # Boundaries for color ranges
+        else:
+            bounds = [0, 100, max_xcount]
+            cmap = mcolors.ListedColormap(['lightcoral', 'red'])  # Light red, red, dark red
+
+        norm = mcolors.BoundaryNorm(bounds, cmap.N)
+
+        # Apply the custom colormap to the scatter plot based on xcount
+        # vmin = np.min([np.mean(original_data['v']) - 3 * np.std(original_data['v']), np.min(RLF['v']) - 20])
+        # vmax = np.max([np.mean(original_data['v']) + 3 * np.std(original_data['v']), np.max(RLF['v']) + 50])
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        # ax.set_ylim(vmin, vmax)
+        # Plot confidence interval using fill_between
+        ax.fill_between(data['date_cori'], data['vv'] - data['confidence_v'], data['vv'] + data['confidence_v'],
+                        color='purple',
+                        alpha=0.4)
+        scat = ax.scatter(data['date_cori'], data['vv'], c=xcount_mean, cmap=cmap, norm=norm, s=7)
+
+        # Add the colorbar for xcount
+        cbar = fig.colorbar(scat, ax=ax, boundaries=bounds, orientation='horizontal', pad=0.15, shrink=0.7)
+        cbar.set_label('Number of image-pair velocities used', fontsize=14)
+
+        # Create custom legend entries for confidence interval and GNSSS
+        conf_legend = malines.Line2D([], [], color='purple', alpha=0.4, lw=6, label='95% confidence interval')
+
+        plt.subplots_adjust(bottom=-0.01)
+        # Add the legends for confidence interval and GPS
+        ax.legend([conf_legend], ['95% confidence interval'],
+                  loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=15, ncol=3, markerscale=1.5)
+        ax.set_ylabel(f'Velocity magnitude [m/y]', fontsize=18)
+        # Show plot if specified
+        if self.show:
+            plt.show(block=False)
+
+        # Save the figure
+        if self.save:fig.savefig(f'{self.path_save}/confidence_intervals_and_quality.png')
+
     # %%========================================================================= #
     #                       PLOTS ABOUT INVERSION RESULTS                         #
     # =========================================================================%% #
@@ -959,7 +1019,7 @@ class pixel_class:
     def plot_xcount_vx_vy(self, cmap: str = "viridis", block_plot: bool = True):
 
         """
-        Plot the obersvation contribution to the inversion on top of velocities x and y components.
+        Plot the observation contribution to the inversion on top of velocities x and y components.
 
         :param cmap: [str] [default is 'rainbow] --- Color map used to mark the xcount values in the plots.
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
@@ -1182,9 +1242,6 @@ class pixel_class:
         ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
         assert self.A is not None, "Please provide A (design matrix) when loading the pixel_class"
 
-        # self.dataobs.dataf[self.dataobs.dataf["author"] == "L. Charrier, J. Mouginot, R.Millan, A.Derkacheva"][
-        #     "author"
-        # ] = "IGE"
         dataf = self.dataobs.dataf.replace("L. Charrier, J. Mouginot, R.Millan, A.Derkacheva", "IGE")
         dataf = dataf.replace("S. Leinss, L. Charrier", "Leinss")
 

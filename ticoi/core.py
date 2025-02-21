@@ -435,10 +435,8 @@ def inversion_core(
 
         if regu == "directionxy":
             mu = mu_regularisation(regu, A, dates_range, ini=[mean[0], mean[1], result_dx, result_dy])
-            # coef = coef * 1000
 
         # Second Iteration
-        # 1.11 s ± 17.5 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
         if iteration:
             if (
                 apriori_weight_in_second_iteration
@@ -535,26 +533,11 @@ def inversion_core(
             xcount_x = xcount_y = np.ones(result_dx_i.shape[0])
 
         # propagate the error
-        # TODO terminate propgation of errors
         if result_quality is not None and "Error_propagation" in result_quality:
-
-            def Prop_weightVictor(weight, pos, F_regu):
-                F = np.vstack([np.multiply(weight[:, np.newaxis], A), F_regu]).astype("float32")
-                if pos == 0:
-                    Residu = data_values[:, pos] - F @ result_dx_i
-                elif pos == 1:
-                    Residu = data_values[:, pos] - F @ result_dy_i
-
-                prop_wieght_diag = np.diag(np.linalg.inv(F.T @ F))
-                sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
-                alpha = 0.05  # Confidence level
-                t_value = stats.t.ppf(1 - alpha / 2, df=F.shape[0] - F.shape[1])
-
-                return prop_wieght_diag, sigma0_weight, t_value
 
             def Prop_weight(F, weight, Residu, error):
 
-                error = np.max([Residu, error], axis=0)
+                error = np.max([Residu, error], axis=0) #take the maximum between residuals and errors
                 W = weight.astype("float32")
                 FTWF = np.multiply(F.T, W[np.newaxis, :]) @ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
@@ -1323,7 +1306,7 @@ def visualization_core(
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
-        "invert_weight": (lambda pix: pix.plot_weights_inversion()),"direction":(lambda pix: pix.plot_direction())
+        "invert_weight": (lambda pix: pix.plot_weights_inversion()),"direction":(lambda pix: pix.plot_direction()),
     }
 
     for option in option_visual:
