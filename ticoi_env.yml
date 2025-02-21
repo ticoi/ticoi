@@ -2,10 +2,11 @@ name: ticoi
 dependencies:
   aiohttp: null
   dask: null
-  fiona: =1.9
+  fiona: '=1.9'
+  gdal: null
   geopandas: '>=0.10.0'
   h5netcdf: null
-  h5py: null
+  h5py: '>= 3.11'
   jdcal: null
   matplotlib: ==3.
   netcdf4: null
@@ -16,12 +17,12 @@ dependencies:
   pyproj: '>=3.4'
   rasterio: '>=1.3'
   requests: null
-  richdem: null
   rioxarray: null
   scikit-learn: null
   scipy: ==1.
   seaborn: null
   shapely: null
+  statmodels: null
   tqdm: null
   xarray: null.
   zarr: null
