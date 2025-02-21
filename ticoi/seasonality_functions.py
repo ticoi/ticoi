@@ -31,9 +31,8 @@ def match_sine(
     d = d.dropna()
     dates = (d["date1"] + (d["date2"] - d["date1"]) // 2 - d["date1"].min()).dt.days.to_numpy()
 
-
     N = len(dates)
-    if N <= 4:#do not compute anything
+    if N <= 4:  # do not compute anything
         if raw_seasonality:
             return np.nan, np.nan, np.nan, np.nan, np.nan
         return np.nan, np.nan, np.nan

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-'''
+"""
 Store geotiff files in a netcdf file in a format compatible with the loader used in TICOI
 This script is only a template. The user need to modify the lines TO MODIFY according to their data.
 
-'''
+"""
 import glob
 import time
 from datetime import date, datetime
@@ -33,13 +33,13 @@ for file in files:
     ds = rioxarray.open_rasterio(file, band_as_variable=True)
 
     # extract the date from the filename (MODIFY IT ACCORDING TO YOUR DATA)
-    date1 = datetime.strptime(file.split("/")[-1].split("day")[-1][:8], "%Y%m%d")#TO MODIFY
-    date2 = datetime.strptime(file.split("/")[-1].split("day")[-1][9:17], "%Y%m%d") #TO MODIFY
+    date1 = datetime.strptime(file.split("/")[-1].split("day")[-1][:8], "%Y%m%d")  # TO MODIFY
+    date2 = datetime.strptime(file.split("/")[-1].split("day")[-1][9:17], "%Y%m%d")  # TO MODIFY
     mid_date = date1 + (date2 - date1) / 2
 
     # set the variable name
     ds = ds.assign_coords(time=mid_date)
-    ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})#TO MODIFY
+    ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})  # TO MODIFY
     ds = ds.expand_dims("mid_date")
 
     # convert to displacement
@@ -92,8 +92,8 @@ ds_combined.vy.attrs = {
 }
 
 proj4 = CRS(ds.spatial_ref.projected_crs_name).to_proj4()
-source = "L. Charrier, L. Guo" #TO MODIFY
-sensor = "LS8" #TO MODIFY
+source = "L. Charrier, L. Guo"  # TO MODIFY
+sensor = "LS8"  # TO MODIFY
 
 ds_combined.attrs.update(
     {

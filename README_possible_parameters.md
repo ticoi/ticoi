@@ -9,9 +9,8 @@ Different parameters can be used. Here some explanation of the some parameters
 - 'median_magnitude':   Remove the observation if it median_magnitude_thres times bigger than the mean velocity at pixel, or if it is
     1/median_magnitude_thres times smaller than the mean velocity at pixel
 - 'error': Remove the observations if its error variable is larger than a given threshold
-- flow_angle: 
+- flow_angle:
 
 #### regu
 - '1accelnotnull': use a first order Tikhonov regularisation, using a first guess on the velocity. This first guess is inferred from a spatio-temporal smoothing. The regularisation term is the form of || G (X - X_0) ||² with X_0 the initial guess on the velocity, and G the first order derivative operator.
 - 1: use a first order Tikhonov regularisation
-

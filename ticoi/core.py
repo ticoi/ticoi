@@ -537,7 +537,7 @@ def inversion_core(
 
             def Prop_weight(F, weight, Residu, error):
 
-                error = np.max([Residu, error], axis=0) #take the maximum between residuals and errors
+                error = np.max([Residu, error], axis=0)  # take the maximum between residuals and errors
                 W = weight.astype("float32")
                 FTWF = np.multiply(F.T, W[np.newaxis, :]) @ F
                 N = np.linalg.inv(FTWF + coef * mu.T @ mu)
@@ -1058,8 +1058,12 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
     blocks = []
     if cube.ds.nbytes > block_size * GB:
 
-        try: num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
-        except ValueError : cube = cube.ds.unify_chunks() #ValueError: Object has inconsistent chunks along dimension x. This can be fixed by calling unify_chunks().
+        try:
+            num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
+        except ValueError:
+            cube = (
+                cube.ds.unify_chunks()
+            )  # ValueError: Object has inconsistent chunks along dimension x. This can be fixed by calling unify_chunks().
 
         chunk_bytes = num_elements * cube.ds["vx"].dtype.itemsize
 
@@ -1271,7 +1275,8 @@ def visualization_core(
     log_scale: bool = False,
     cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
-    figsize: tuple[int, int] = (10, 6),vminmax=None
+    figsize: tuple[int, int] = (10, 6),
+    vminmax=None,
 ):
 
     r"""
@@ -1290,29 +1295,31 @@ def visualization_core(
     :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :param figsize: tuple[int, int] [default is (10,6)] --- Size of the figures
     """
-    
+
     pixel_object = pixel_class()
     pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data)
 
     dico_visual = {
         "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
-        "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs",vminmax=vminmax)),
+        "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)),
         "obs_vxvy_quality": (lambda pix: pix.plot_vx_vy_quality(cmap=cmap, type_data="obs")),
         "invertxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors)),
         "obsfiltxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors, type_data="obs_filt")),
-        "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt",vminmax=vminmax)),
+        "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt", vminmax=vminmax)),
         "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors)),
         "invert_vv_quality": (lambda pix: pix.plot_vv_quality(cmap=cmap, type_data="invert")),
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
-        "invert_weight": (lambda pix: pix.plot_weights_inversion()),"direction":(lambda pix: pix.plot_direction()),
+        "invert_weight": (lambda pix: pix.plot_weights_inversion()),
+        "direction": (lambda pix: pix.plot_direction()),
     }
 
     for option in option_visual:
         if option in dico_visual.keys():
             dico_visual[option](pixel_object)
-        else: print(f'{option} is not a valid option for visualization')
+        else:
+            print(f"{option} is not a valid option for visualization")
 
 
 def save_cube_parameters(

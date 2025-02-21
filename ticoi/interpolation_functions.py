@@ -214,7 +214,8 @@ def visualisation_interpolation(
         "interp_xy_overlaid_zoom",
         "invertvv_overlaid",
         "invertvv_overlaid_zoom",
-        "direction_overlaid","quality_metrics"
+        "direction_overlaid",
+        "quality_metrics",
     ],
     save: bool = False,
     show: bool = True,
@@ -253,7 +254,8 @@ def visualisation_interpolation(
         "invertvv_overlaid_zoom": (
             lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
         ),
-        "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp")),"quality_metrics": (lambda pix: pix.plot_quality_metrics())
+        "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp")),
+        "quality_metrics": (lambda pix: pix.plot_quality_metrics()),
     }
 
     for option in option_visual:

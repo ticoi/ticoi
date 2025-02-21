@@ -50,7 +50,8 @@ apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
 unit = 365  # 1 for m/d, 365 for m/y
 result_quality = [
-    'Error_propagation', 'X_contribution'
+    "Error_propagation",
+    "X_contribution",
 ]  # Criterium used to evaluate the quality of the results ('X_count', 'Norm_residual', 'X_contribution', 'Error_propagation')
 
 ## ----------------------- Visualization parameters ------------------------ ##
@@ -74,7 +75,7 @@ show = True  # Plot some figures
 #     "invertvv_overlaid_zoom",
 #     "direction_overlaid",
 # ]  # see README_visualization_pixel_output.md
-option_visual = ["obs_magnitude", "invertvv_overlaid","quality_metrics"]
+option_visual = ["obs_magnitude", "invertvv_overlaid", "quality_metrics"]
 
 vmax = [False, False]  # vmin and vmax of the legend
 
@@ -220,8 +221,6 @@ dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
 # result = dataf_lp.dropna(subset=['vx', 'vy'])
 #
 # result['v'] = np.sqrt(result['vx']**2+result['vy']**2 )
-
-
 
 
 stop.append(time.time())
