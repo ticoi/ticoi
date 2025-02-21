@@ -779,7 +779,7 @@ class cube_data_class:
                         cube2, reproj_vel=reproj_vel, reproj_coord=reproj_coord, interp_method="nearest"
                     )
                 self.merge_cube(cube2)  # Merge the new cube to the main one
-            del cube2
+                del cube2
             if chunks == {}:  # Rechunk with optimal chunk size
                 var_name = "vx" if not self.is_TICO else "dx"
                 time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
