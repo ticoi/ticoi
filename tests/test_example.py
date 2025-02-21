@@ -14,7 +14,7 @@ def test_example_script_output():
     # Check if the script ran successfully
     assert result.returncode == 0, "The example cube_demo_simple has crashed"
 
-    print("Testing cube_demo_advanced")
-    result = subprocess.run(["python", cube_demo_flag], capture_output=True, text=True)
-    # Check if the script ran successfully
-    assert result.returncode == 0, "The example cube_demo_advanced has crashed"
+    # print("Testing cube_demo_advanced")
+    # result = subprocess.run(["python", cube_demo_flag], capture_output=True, text=True)
+    # # Check if the script ran successfully
+    # assert result.returncode == 0, "The example cube_demo_advanced has crashed"

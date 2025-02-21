@@ -959,13 +959,13 @@ class pixel_class:
 
         return ax, fig
 
-    def plot_quality_metrics(self,color: str = "orange"):
+    def plot_quality_metrics(self, color: str = "orange"):
 
         dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="interp")
         data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values
 
         assert (
-                "error_x" and "x_count" not in data.columns
+            "error_x" and "x_count" not in data.columns
         ), "No quality metrics to display, please re run ticoi using the options Error_propagation or X_contribution"
 
         if "error_x" in data.columns:
@@ -990,7 +990,7 @@ class pixel_class:
                 bounds = [0, 100, max_xcount]
                 cmap = mcolors.ListedColormap(["lightcoral", "red"])  # Light red, red, dark red
 
-            norm = mcolors.BoundaryNorm(bounds, cmap.N) # Apply the custom colormap to the scatter plot based on xcount
+            norm = mcolors.BoundaryNorm(bounds, cmap.N)  # Apply the custom colormap to the scatter plot based on xcount
 
         fig, ax = plt.subplots(figsize=(10, 6))
         if "error_x" in data.columns:
@@ -1017,7 +1017,8 @@ class pixel_class:
             )
             # Create custom legend entries for confidence interval
             conf_legend = malines.Line2D([], [], color="purple", alpha=0.4, lw=6, label="95% confidence interval")
-            if "xcount_x" in data.columns: plt.subplots_adjust(bottom=-0.01)
+            if "xcount_x" in data.columns:
+                plt.subplots_adjust(bottom=-0.01)
             # Add the legends for confidence interval and GPS
             ax.legend(
                 [conf_legend],
