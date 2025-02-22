@@ -1,5 +1,8 @@
 name: ticoi
+channels:
+  conda-forge
 dependencies:
+  python: 3.11
   aiohttp: null
   dask: null
   fiona: '=1.9'
