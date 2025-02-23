@@ -147,8 +147,7 @@ def match_sine(
     else:
         return 1 / f, A, max_day
 
-
-def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
+def rolling_std(raw, dataf_lp, local_var_method="uniform_7d"):
 
     """
        Compute Amplitude to local VARiations index, which compares the amplitude of the best matching sinus to the standard
@@ -159,9 +158,6 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
        :param dataf_lp: list of pandas dataframes, TICOI results
        :param local_var_method: str, method to be used to process the local variations
     """
-
-    if A == np.nan:
-        return np.nan
 
     # Compute local variations
     if local_var_method == "rolling_7d":
@@ -180,6 +176,7 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
                 local_var[date] = raw.loc[
                     (raw.index > date - pd.Timedelta("3D")) & (raw.index < date + pd.Timedelta("3D")), "vv"
                 ].std(ddof=0)
+
         elif local_var_method == "uniform_all":
             for date in var_dates:
                 local_var[date] = raw.loc[(raw["date1"] < date) & (raw["date2"] > date), "vv"].std(ddof=0)
@@ -193,5 +190,24 @@ def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
         dataf = raw[raw.index >= dataf_lp.index[0]]
         dataff_vv_c = dataf["vv"] - dataf_lp["vv"]
         var = dataff_vv_c.std(ddof=0)
+
+    return var
+
+def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
+
+    """
+       Compute Amplitude to local VARiations index, which compares the amplitude of the best matching sinus to the standard
+    deviation of the noise using one of the four given methods.
+
+       :param A: float, amplitude of the best matchning sinus
+       :param raw: list, raw data
+       :param dataf_lp: list of pandas dataframes, TICOI results
+       :param local_var_method: str, method to be used to process the local variations
+    """
+
+    if A == np.nan:
+        return np.nan
+
+    var = rolling_std(raw, dataf_lp, local_var_method)
 
     return max(0, 1 - var / abs(A))

@@ -1,6 +1,9 @@
 aiohttp #to access data on the cloud
 dask
 geopandas>=0.10.0
+fiona
+gdal
+geopandas >=0.10.0
 h5netcdf
 h5py >= 3.11
 jdcal
@@ -16,6 +19,7 @@ requests #to access data on the cloud
 rioxarray
 scikit-learn
 scipy==1.*
+rioxarray
 seaborn
 shapely
 statsmodels

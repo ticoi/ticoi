@@ -539,7 +539,7 @@ class pixel_class:
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to observations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
-        :return ax, fig: Axis and Figures of the plot
+        :return fig, ax: Axis and Figures of the plot
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
@@ -585,7 +585,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/vx_vy_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_vx_vy_overlaid(
         self,
@@ -603,7 +603,7 @@ class pixel_class:
         :param zoom_on_results: [bool] [default is False] --- Set the limits of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
-        :return ax, fig: Axis and Figures of the plot
+        :return fig, ax: Axis and Figures of the plot
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
@@ -611,7 +611,7 @@ class pixel_class:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        ax, fig = self.plot_vx_vy(color=colors[0], type_data="obs")
+        fig, ax = self.plot_vx_vy(color=colors[0], type_data="obs")
 
         self.show, self.save = show, save
 
@@ -664,7 +664,7 @@ class pixel_class:
             else:
                 fig.savefig(f"{self.path_save}/vx_vy_overlaid_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_vv(
         self, color: str = "orange", type_data: str = "invert", block_plot: bool = True, vminmax: list | None = None
@@ -677,7 +677,7 @@ class pixel_class:
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
-        :return ax, fig: Axis and Figure of the plot
+        :return fig, ax: Axis and Figure of the plot
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
@@ -719,7 +719,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/vv_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_vv_overlaid(
         self,
@@ -738,7 +738,7 @@ class pixel_class:
         :param zoom_on_results: [bool] [default is False] --- Set the limites of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
-        :return ax, fig: Axis and Figure of the plots
+        :return fig, ax: Axis and Figure of the plots
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
@@ -746,7 +746,7 @@ class pixel_class:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        ax, fig = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)
+        fig, ax = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)
         self.show, self.save = show, save
 
         if zoom_on_results:
@@ -786,7 +786,7 @@ class pixel_class:
             else:
                 fig.savefig(f"{self.path_save}/vv_overlaid_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_vv_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
 
@@ -797,7 +797,7 @@ class pixel_class:
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting
 
-        :return ax, fig: Axis and Figure of the plots
+        :return fig, ax: Axis and Figure of the plots
         """
 
         assert (
@@ -828,7 +828,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/vxvy_quality_bas_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_vx_vy_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
 
@@ -839,7 +839,7 @@ class pixel_class:
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting
 
-        :return ax, fig: Axis and Figure of the plots
+        :return fig, ax: Axis and Figure of the plots
         """
 
         assert (
@@ -876,9 +876,9 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/vxvy_quality_bas_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
-    def plot_direction(self, color: str = "orange", type_data: str = "obs", block_plot: bool = True):
+    def plot_direction(self, color: str = "orange", type_data: str = "obs", block_plot: bool = True,plot_mean: bool = True):
 
         """
         Plot the direction of the velocities for each of the data at this point.
@@ -886,8 +886,8 @@ class pixel_class:
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
-
-        :return ax, fig: Axis and Figure of the plot
+        :param plot_mean:  [bool] [default is True] --- If True, plot the mean velocity direction
+        :return fig, ax: Axis and Figure of the plot
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
@@ -895,7 +895,7 @@ class pixel_class:
         directionm, directionm_mean = self.get_direction(data)
         fig, ax = plt.subplots(figsize=self.figsize)
         ax.plot(data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=2, color=color, label=label)
-        ax.hlines(
+        if plot_mean: ax.hlines(
             directionm_mean,
             np.min(data.dataf["date_cori"]),
             np.max(data.dataf["date_cori"]),
@@ -913,10 +913,10 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/direction_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_direction_overlaid(
-        self, colors: List[str] = ["orange", "blue"], type_data: str = "interp", block_plot: bool = True
+        self, colors: List[str] = ["orange", "blue"], type_data: str = "interp", block_plot: bool = True,plot_mean: bool = True
     ):
 
         """
@@ -925,8 +925,9 @@ class pixel_class:
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
+                :param plot_mean:  [bool] [default is True] --- If True, plot the mean velocity direction
 
-        :return ax, fig: Axis and Figure of the plot
+        :return fig, ax: Axis and Figure of the plot
         """
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
@@ -934,7 +935,7 @@ class pixel_class:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        ax, fig = self.plot_direction(color=colors[0], type_data="obs")
+        fig, ax = self.plot_direction(color=colors[0], type_data="obs",plot_mean=plot_mean)
         self.show, self.save = show, save
 
         directionm, directionm_mean = self.get_direction(data)
@@ -957,9 +958,18 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/direction_overlaid_{type_data}.png")
 
-        return ax, fig
+        return fig, ax
+
+
+        return fig, ax
 
     def plot_quality_metrics(self, color: str = "orange"):
+        """
+        Plot quality metrics on top of velocity magnitude. It can be the number of observations used for each estimation, and/or the confidence intervals.
+        :param color: [str] [default is 'orange'] --- Color used for the plot
+        :return:
+        """
+
 
         dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="interp")
         data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values
@@ -1045,6 +1055,8 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/confidence_intervals_and_quality.png")
 
+        return fig, ax
+
     # %%========================================================================= #
     #                       PLOTS ABOUT INVERSION RESULTS                         #
     # =========================================================================%% #
@@ -1057,7 +1069,7 @@ class pixel_class:
         :param cmap: [str] [default is 'rainbow] --- Color map used to mark the xcount values in the plots.
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
-        :return ax, fig: Axis and Figure of the plot
+        :return fig, ax: Axis and Figure of the plot
         """
 
         assert (
@@ -1100,7 +1112,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/X_dates_contribution_vx_vy.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_xcount_vv(self, cmap: str = "viridis", block_plot: bool = True):
 
@@ -1110,7 +1122,7 @@ class pixel_class:
         :param cmap: [str] [default is 'rainbow''] --- Color map used in the plots
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
-        :return ax, fig: Axis and Figure of the plot
+        :return fig, ax: Axis and Figure of the plot
         """
 
         assert (
@@ -1141,7 +1153,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/X_dates_contribution_vv.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_weights_inversion(self, cmap: str = "plasma_r", block_plot: bool = True):
 
@@ -1300,7 +1312,7 @@ class pixel_class:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        ax, fig = self.plot_vx_vy(type_data="obs")
+        fig, ax = self.plot_vx_vy(type_data="obs")
         self.show, self.save = show, save
 
         # fig, ax = plt.subplots(2, 1, figsize=(8, 4))
@@ -1510,7 +1522,7 @@ class pixel_class:
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param impose_frequency: [bool] [default is True] --- If True, impose the frequency to 1/365.25 days-1 (one year seasonality). If False, look for the best matching frequency too, using the Fourier Transform in the first place
 
-        :return ax, fig: Axis and Figure of the plot
+        :return fig, ax: Axis and Figure of the plot
         """
 
         vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt=filt)
@@ -1544,7 +1556,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/filtered_results.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_TF(self, filt=None, verbose=False):
 
@@ -1554,7 +1566,7 @@ class pixel_class:
         :param filt: [str | None] [default is None] --- Filter to be used ('highpass' for a highpass filtering removing the trend over several years, 'lowpass' to just respect Shannon criterium, or None to don't apply any filter)
         :param verbose:[bool] [default is False] --- If True, print the maximum and the amplitude of the TF
 
-        :return ax, fig: Axis and Figure of the plot
+        :return fig, ax: Axis and Figure of the plot
         """
 
         vv_tf, vv_win_tf, freq, N = self.get_TF(filt=filt, verbose=verbose)
@@ -1581,7 +1593,7 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}TF.png")
 
-        return ax, fig
+        return fig, ax
 
     def plot_best_matching_sinus(
         self,
@@ -1601,7 +1613,7 @@ class pixel_class:
         :param several_freq: [int] [default is 1] --- Number of harmonics to be computed (combination of sinus at frequencies 1/365.25, 2/365.25, etc...). If 1, only compute the fundamental
         :param verbose: [bool] [default is False] --- If True, print the amplitude, the position of the maximum and the RMSE between the best matching sinus and the original data (TICOI results and raw data), and the best matching frequency if impose_frequency is False
 
-        :return ax, fig: Axis and Figure of the plots
+        :return fig, ax: Axis and Figure of the plots
         """
 
         sine_f, popt, popt_raw, dates, vv_filt, stats, stats_raw = self.get_best_matching_sinus(
@@ -1667,6 +1679,8 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}matching_sine.png")
 
+        return fig, ax
+
     def plot_annual_curves(
         self,
         normalize: bool = False,
@@ -1697,7 +1711,7 @@ class pixel_class:
         :param markers_size: [List[int]] [default is [5, 4, 3, 4, 3, 4, 4, 6, 4]] --- Marker size to use for each marker
         :param verbose: [bool] [default is False] --- Print a recap of the year statistics for each year
 
-        :return ax, fig: Axis and Figure of the plots
+        :return fig, ax: Axis and Figure of the plots
         :return stats: [dict] --- dictionary of the statistics (each key is associated to a list with every year's value of the statistic related to the key)
         """
 
@@ -1838,4 +1852,4 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}annual_curves.png")
 
-        return ax, fig, {key: stats[key] for key in statistics}
+        return fig, ax, {key: stats[key] for key in statistics}
