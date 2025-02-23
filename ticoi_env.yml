@@ -1,31 +1,31 @@
 name: ticoi
 channels:
-  conda-forge
+  - conda-forge
 dependencies:
-  python: 3.11
-  aiohttp: null
-  dask: null
-  fiona: '=1.9'
-  gdal: null
-  geopandas: '>=0.10.0'
-  h5netcdf: null
-  h5py: '>= 3.11'
-  jdcal: null
-  matplotlib: ==3.
-  netcdf4: null
-  numba: ==0.
-  numpy: ==1.
-  pandas: null
-  pip: null
-  pyproj: '>=3.4'
-  rasterio: '>=1.3'
-  requests: null
-  rioxarray: null
-  scikit-learn: null
-  scipy: ==1.
-  seaborn: null
-  shapely: null
-  statmodels: null
-  tqdm: null
-  xarray: null.
-  zarr: null
+  - python=3.11
+  - aiohttp
+  - dask
+  - fiona=1.9
+  - gdal
+  - geopandas>=0.10.0
+  - h5netcdf
+  - h5py>=3.11
+  - jdcal
+  - matplotlib=3.*
+  - netcdf4
+  - numba=0.*
+  - numpy=1.*
+  - pandas
+  - pip
+  - pyproj>=3.4
+  - rasterio>=1.3
+  - requests
+  - rioxarray
+  - scikit-learn
+  - scipy=1.*
+  - seaborn
+  - shapely
+  - statsmodels
+  - tqdm
+  - xarray
+  - zarr

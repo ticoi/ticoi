@@ -957,9 +957,18 @@ class pixel_class:
         if self.save:
             fig.savefig(f"{self.path_save}/direction_overlaid_{type_data}.png")
 
+        return fig, ax
+
+
         return ax, fig
 
     def plot_quality_metrics(self, color: str = "orange"):
+        """
+        Plot quality metrics on top of velocity magnitude. It can be the number of observations used for each estimation, and/or the confidence intervals.
+        :param color: [str] [default is 'orange'] --- Color used for the plot
+        :return:
+        """
+
 
         dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="interp")
         data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values
@@ -1044,6 +1053,8 @@ class pixel_class:
         # Save the figure
         if self.save:
             fig.savefig(f"{self.path_save}/confidence_intervals_and_quality.png")
+
+        return fig, ax
 
     # %%========================================================================= #
     #                       PLOTS ABOUT INVERSION RESULTS                         #
@@ -1666,6 +1677,8 @@ class pixel_class:
             plt.show()
         if self.save:
             fig.savefig(f"{self.path_save}matching_sine.png")
+
+        return ax, fig
 
     def plot_annual_curves(
         self,
