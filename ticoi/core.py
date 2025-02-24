@@ -258,7 +258,7 @@ def inversion_core(
     j: float | int,
     dates_range: np.ndarray | None = None,
     solver: str = "LSMR",
-    regu: int | str = 1,
+    regu: int | str = "1accelnotnull",
     coef: int = 100,
     apriori_weight: bool = False,
     iteration: bool = True,
@@ -638,12 +638,12 @@ def inversion_core(
 
 def interpolation_core(
     result: pd.DataFrame,
-    interval_output: int,
+    interval_output: int=30,
     option_interpol: str = "spline",
     first_date_interpol: np.datetime64 | str | None = None,
     last_date_interpol: np.datetime64 | str | None = None,
     unit: int = 365,
-    redundancy: int | None = None,
+    redundancy: int | None = 5,
     result_quality: list | None = None,
 ):
 
@@ -1364,7 +1364,7 @@ def save_cube_parameters(
     return source, sensor
 
 
-def ticoi_one_pixel(cube_name,i,j,save,path_save,show,option_visual,verbose=False,load_kwargs={},load_pixel_kwargs={},preData_kwargs={},inversion_kwargs={},interpolation_kwargs={}):
+def ticoi_one_pixel(cube_name,i,j,save,path_save,show,option_visual,verbose=False,load_kwargs={},load_pixel_kwargs={},preData_kwargs={},inversion_kwargs={},interpolation_kwargs={"interpolation_output":30}):
     # %% ======================================================================== #
     #                                DATA LOADING                                 #
     # =========================================================================%% #
@@ -1417,11 +1417,6 @@ def ticoi_one_pixel(cube_name,i,j,save,path_save,show,option_visual,verbose=Fals
     # =========================================================================%% #
 
     if verbose: start.append(time.time())
-
-    if interpolation_kwargs["interval_output"] == False:
-        interpolation_kwargs["interval_output"] = 1
-    start_date_interpol = np.min(np.min(cube.date2_()))
-    last_date_interpol = np.max(np.max(cube.date2_()))
 
     # Proceed to interpolation
     dataf_lp = interpolation_core(result, **interpolation_kwargs)
