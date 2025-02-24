@@ -34,7 +34,7 @@ from tqdm import tqdm
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
-    set_function_for_interpolation,prepare_interpolation_date,visualisation_interpolation
+    set_function_for_interpolation,visualisation_interpolation
 )
 from ticoi.inversion_functions import (
     TukeyBiweight,
@@ -1364,33 +1364,61 @@ def save_cube_parameters(
     return source, sensor
 
 
-def ticoi_one_pixel(cube_name,i,j,save,path_save,show,option_visual,verbose=False,load_kwargs={},load_pixel_kwargs={},preData_kwargs={},inversion_kwargs={},interpolation_kwargs={"interpolation_output":30}):
+def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,option_visual:list=["invertvv_overlaid"],verbose:bool=False,load_kwargs:dict={},load_pixel_kwargs:dict={},preData_kwargs:dict={},inversion_kwargs:dict={},interpolation_kwargs:dict={},already_loaded:pd.DataFrame|None=None):
+    """
+    :param cube_name: [string] --- name of the cube dataset
+    :param i: [int] --- pixel index
+    :param j: [int] --- pixel index
+    :param save: [bool] --- whether to save the figures or not
+    :param path_save: [string] --- path to save the figures
+    :param show: [bool] --- whether to show the figures or not
+    :param option_visual: [list] --- option visual
+    :param verbose: [bool] --- whether to plot some text
+    :param load_kwargs: [dict] --- parameters used to load the cube
+    :param load_pixel_kwargs: [dict] --- parameters used to load the pixel
+    :param preData_kwargs: [dict] --- parameters used to prepare the cube
+    :param inversion_kwargs: [dict] --- parameters used for the inversion
+    :param interpolation_kwargs: [dict] --- parameters used for the interpolation
+    :param already_loaded: [pd.Dataframe or None] --- whether the dataframe of the pixel is already loaded or not
+    :return:
+    """
     # %% ======================================================================== #
     #                                DATA LOADING                                 #
     # =========================================================================%% #
 
     if verbose: start = [time.time()]
 
-    # Load the main cube
-    cube = cube_data_class()
-    cube.load(cube_name, **load_kwargs)
+    if already_loaded is None:
+        # Load the main cube
+        cube = cube_data_class()
+        cube.load(cube_name, **load_kwargs)
 
-    if verbose:
-        stop = [time.time()]
-        print(f"[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s")
-        print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ")
+        if verbose:
+            stop = [time.time()]
+            print(f"[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s")
+            print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ")
 
-        start.append(time.time())
+            start.append(time.time())
 
-    # Filter the cube (compute rolling_mean for regu=1accelnotnull)
-    obs_filt, flag = cube.filter_cube_before_inversion(**preData_kwargs)
+        # Filter the cube (compute rolling_mean for regu=1accelnotnull)
+        obs_filt, flag = cube.filter_cube_before_inversion(**preData_kwargs)
 
-    # Load pixel data
-    data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
+        # Load pixel data
+        data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
+        # Prepare interpolation dates
+        first_date_interpol, last_date_interpol = cube.prepare_interpolation_date()
+        interpolation_kwargs.update(
+            {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
-    # Prepare interpolation dates
-    first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
-    interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
+    else:
+        data, mean, dates_range = already_loaded
+        cube_date1 = data["date1"].tolist()
+        cube_date1 = cube_date1 + data["date2"].tolist()
+        cube_date1.remove(np.min(cube_date1))
+        first_date_interpol = np.min(cube_date1)
+        last_date_interpol = np.max(data["date2"])
+        interpolation_kwargs.update(
+            {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
     if verbose:
         stop.append(time.time())
@@ -1452,4 +1480,4 @@ def ticoi_one_pixel(cube_name,i,j,save,path_save,show,option_visual,verbose=Fals
 
     if verbose: print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")
 
-    return dataf, dataf_lp
+    return data,dataf, dataf_lp

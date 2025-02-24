@@ -176,7 +176,7 @@ obs_filt, flag = cube.filter_cube_before_inversion(**preData_kwargs)
 data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
 
 # Prepare interpolation dates
-first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+first_date_interpol, last_date_interpol = cube.prepare_interpolation_date()
 interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
 stop.append(time.time())

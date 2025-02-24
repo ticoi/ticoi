@@ -19,29 +19,6 @@ from scipy import interpolate
 from ticoi.pixel_class import pixel_class
 
 
-def prepare_interpolation_date(
-    cube: "ticoi.cube_data_classxr.cube_data_class",
-) -> (np.datetime64, np.datetime64):  # type: ignore
-
-    """
-    Define the first and last date required for the interpolation, as the first date and last in the observations.
-    The purpose is to have homogenized results
-
-    :param cube: dataset
-
-    :return: first and last date required for the interpolation
-    """
-
-    # Prepare interpolation dates
-    cube_date1 = cube.date1_().tolist()
-    cube_date1 = cube_date1 + cube.date2_().tolist()
-    cube_date1.remove(np.min(cube_date1))
-    first_date_interpol = np.min(cube_date1)
-    last_date_interpol = np.max(cube.date2_())
-
-    return first_date_interpol, last_date_interpol
-
-
 def reconstruct_common_ref(
     result: pd.DataFrame,
     second_date_list: List[np.datetime64] | None = None,

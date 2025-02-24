@@ -37,6 +37,7 @@ from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -882,6 +883,28 @@ class cube_data_class:
             if "errorx" not in self.ds.variables:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
+
+    def prepare_interpolation_date(
+            self,
+    ) -> (np.datetime64, np.datetime64):  # type: ignore
+
+        """
+        Define the first and last date required for the interpolation, as the first date and last in the observations.
+        The purpose is to have homogenized results
+
+        :param cube: dataset
+
+        :return: first and last date required for the interpolation
+        """
+
+        # Prepare interpolation dates
+        cube_date1 = self.date1_().tolist()
+        cube_date1 = cube_date1 + self.date2_().tolist()
+        cube_date1.remove(np.min(cube_date1))
+        first_date_interpol = np.min(cube_date1)
+        last_date_interpol = np.max(self.date2_())
+
+        return first_date_interpol, last_date_interpol
 
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
