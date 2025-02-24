@@ -329,7 +329,7 @@ def dask_smooth_wrapper(
     # It corresponds to the difference between each mid_date and the minimal date, in days
     t_obs = (dates.data - dates.data.min()).astype("timedelta64[D]").astype("float64")
 
-    if t_out.dtype == "datetime64[ns]":  # Convert ns to days
+    if t_out.dtype == "datetime64[ns]" or t_out.dtype == '<M8[s]':  # Convert ns to days
         t_out = (t_out - dates.data.min()).astype("timedelta64[D]").astype("int")
     if t_out.min() < 0:
         t_obs = t_obs - t_out.min()  # Ensure the output time points are within the range of interpolated points
