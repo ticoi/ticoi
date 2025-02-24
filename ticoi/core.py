@@ -271,7 +271,7 @@ def inversion_core(
     result_quality: list | str | None = None,
     nb_max_iteration: int = 10,
     apriori_weight_in_second_iteration: bool = False,
-    visual: bool = True,
+    visual: bool = False,
     verbose: bool = False,
 ) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
 
