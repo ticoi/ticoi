@@ -1385,7 +1385,7 @@ class cube_data_class:
         self,
         i: int | float | None = None,
         j: int | float | None = None,
-        smooth_method: str = "gaussian",
+        smooth_method: str = "savgol",
         s_win: int = 3,
         t_win: int = 90,
         sigma: int = 3,

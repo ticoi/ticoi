@@ -34,7 +34,7 @@ from tqdm import tqdm
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
-    set_function_for_interpolation,
+    set_function_for_interpolation,prepare_interpolation_date,visualisation_interpolation
 )
 from ticoi.inversion_functions import (
     TukeyBiweight,
@@ -1362,3 +1362,99 @@ def save_cube_parameters(
 
     source += f"The preparation are argument are: {preData_kwargs}"
     return source, sensor
+
+
+def ticoi_one_pixel(cube_name,i,j,save,path_save,show,option_visual,verbose=False,load_kwargs={},load_pixel_kwargs={},preData_kwargs={},inversion_kwargs={},interpolation_kwargs={}):
+    # %% ======================================================================== #
+    #                                DATA LOADING                                 #
+    # =========================================================================%% #
+
+    if verbose: start = [time.time()]
+
+    # Load the main cube
+    cube = cube_data_class()
+    cube.load(cube_name, **load_kwargs)
+
+    if verbose:
+        stop = [time.time()]
+        print(f"[Data loading] Loading the data cube.s took {round((stop[0] - start[0]), 4)} s")
+        print(f"[Data loading] Cube of dimension (nz,nx,ny) : ({cube.nz}, {cube.nx}, {cube.ny}) ")
+
+        start.append(time.time())
+
+    # Filter the cube (compute rolling_mean for regu=1accelnotnull)
+    obs_filt, flag = cube.filter_cube_before_inversion(**preData_kwargs)
+
+    # Load pixel data
+    data, mean, dates_range = cube.load_pixel(i, j, rolling_mean=obs_filt, **load_pixel_kwargs)
+
+    # Prepare interpolation dates
+    first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+    interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
+
+    if verbose:
+        stop.append(time.time())
+        print(f"[Data loading] Loading the pixel took {round((stop[1] - start[1]), 4)} s")
+
+    # %% ======================================================================== #
+    #                                 INVERSION                                   #
+    # =========================================================================%% #
+
+    if verbose:
+        start.append(time.time())
+
+    # Proceed to inversion
+    A, result, dataf = inversion_core(data, i, j, dates_range=dates_range, mean=mean, **inversion_kwargs)
+
+    if verbose:
+        stop.append(time.time())
+        print(f"[Inversion] Inversion took {round((stop[2] - start[2]), 4)} s")
+    if save:
+        result.to_csv(f"{path_save}/ILF_result.csv")
+
+    # %% ======================================================================== #
+    #                              INTERPOLATION                                  #
+    # =========================================================================%% #
+
+    if verbose: start.append(time.time())
+
+    if interpolation_kwargs["interval_output"] == False:
+        interpolation_kwargs["interval_output"] = 1
+    start_date_interpol = np.min(np.min(cube.date2_()))
+    last_date_interpol = np.max(np.max(cube.date2_()))
+
+    # Proceed to interpolation
+    dataf_lp = interpolation_core(result, **interpolation_kwargs)
+
+    dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
+
+    if verbose:
+        stop.append(time.time())
+        print(f"[Interpolation] Interpolation took {round((stop[3] - start[3]), 4)} s")
+
+    if save:
+        dataf_lp.to_csv(f"{path_save}/RLF_result.csv")
+    if show or save:  # plot some figures
+        visualization_core(
+            [dataf, result],
+            option_visual=option_visual,
+            save=save,
+            show=show,
+            path_save=path_save,
+            A=A,
+            log_scale=False,
+            cmap="rainbow",
+            colors=["orange", "blue"],
+        )
+        visualisation_interpolation(
+            [dataf, dataf_lp],
+            option_visual=option_visual,
+            save=save,
+            show=show,
+            path_save=path_save,
+            colors=["orange", "blue"],
+        )
+
+    if verbose: print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")
+
+    return dataf, dataf_lp
