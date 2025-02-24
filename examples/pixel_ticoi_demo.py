@@ -36,10 +36,6 @@ proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 i, j = -138.18069, 60.29076  # coordinate in pixel
 
-
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to stored the results
-
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
@@ -217,10 +213,6 @@ last_date_interpol = np.max(np.max(cube.date2_()))
 dataf_lp = interpolation_core(result, **interpolation_kwargs)
 
 dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
-
-# result = dataf_lp.dropna(subset=['vx', 'vy'])
-#
-# result['v'] = np.sqrt(result['vx']**2+result['vy']**2 )
 
 
 stop.append(time.time())
