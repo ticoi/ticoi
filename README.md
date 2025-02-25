@@ -18,7 +18,7 @@ To clone the git repository and set up the conda environment:
 ```
 git clone git@github.com:ticoi/ticoi.git
 cd ticoi/
-conda env create -f requirements.txt -n env_ticoi
+conda env create -f ticoi_env.yml -n env_ticoi
 conda activate ticoi
 pip install -e .
 ```

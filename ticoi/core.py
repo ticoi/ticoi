@@ -1419,6 +1419,7 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
         last_date_interpol = np.max(data["date2"])
         interpolation_kwargs.update(
             {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
+        data = [data[["date1","date2"]].to_numpy(),data[["dx","dy","errorx","errory","temporal_baseline"]].to_numpy(),data[["sensor","author"]].to_numpy()]
 
     if verbose:
         stop.append(time.time())
