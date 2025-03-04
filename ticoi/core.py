@@ -525,10 +525,15 @@ def inversion_core(
         if np.isnan(result_dx_i).all():  # no results
             return None, None, None
 
+        if not iteration:
+            weight_ix = Weightx
+            weight_iy = Weighty
+            if not visual: del Weighty, Weightx
         # compute the number of observations which have contributed to each estimated displacement
         if result_quality is not None and "X_contribution" in result_quality:
             xcount_x = A.T.dot(weight_ix)
             xcount_y = A.T.dot(weight_iy)
+
         else:
             xcount_x = xcount_y = np.ones(result_dx_i.shape[0])
 
@@ -889,8 +894,8 @@ def process(
     i: float | int,
     j: float | int,
     path_save,
-    solver: str = "LSMR",
-    regu: int | str = 1,
+    solver: str = "LSMR_ini",
+    regu: int | str = "1accelnotnull",
     coef: int = 100,
     flag: xr.Dataset | None = None,
     apriori_weight: bool = False,

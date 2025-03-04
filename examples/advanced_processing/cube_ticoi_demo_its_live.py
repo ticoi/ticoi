@@ -143,7 +143,7 @@ cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
 # Prepare interpolation dates
-first_date_interpol, last_date_interpol = self.prepare_interpolation_date()
+first_date_interpol, last_date_interpol = cube.prepare_interpolation_date()
 inversion_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
 stop = [time.time()]
