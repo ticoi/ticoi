@@ -26,7 +26,6 @@ from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.interpolation_functions import prepare_interpolation_date
 
 warnings.filterwarnings("ignore")
 
@@ -144,7 +143,7 @@ cube = cube_data_class()
 cube.load(cube_name, **load_kwargs)
 
 # Prepare interpolation dates
-first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+first_date_interpol, last_date_interpol = cube.prepare_interpolation_date()
 inversion_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
 stop = [time.time()]

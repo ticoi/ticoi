@@ -37,6 +37,7 @@ from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -883,6 +884,28 @@ class cube_data_class:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
 
+    def prepare_interpolation_date(
+            self,
+    ) -> (np.datetime64, np.datetime64):  # type: ignore
+
+        """
+        Define the first and last date required for the interpolation, as the first date and last in the observations.
+        The purpose is to have homogenized results
+
+        :param cube: dataset
+
+        :return: first and last date required for the interpolation
+        """
+
+        # Prepare interpolation dates
+        cube_date1 = self.date1_().tolist()
+        cube_date1 = cube_date1 + self.date2_().tolist()
+        cube_date1.remove(np.min(cube_date1))
+        first_date_interpol = np.min(cube_date1)
+        last_date_interpol = np.max(self.date2_())
+
+        return first_date_interpol, last_date_interpol
+
     # %% ==================================================================== #
     #                                 ACCESSORS                               #
     # =====================================================================%% #
@@ -1005,10 +1028,10 @@ class cube_data_class:
         i: int | float,
         j: int | float,
         unit: int = 365,
-        regu: int | str = 1,
+        regu: int | str = "1accelnotnull",
         coef: int = 100,
         flag: xr.Dataset | None = None,
-        solver: str = "LSMR",
+        solver: str = "LSMR_ini",
         interp: str = "nearest",
         proj: str = "EPSG:4326",
         rolling_mean: xr.Dataset | None = None,
@@ -1021,10 +1044,10 @@ class cube_data_class:
 
         :params i, j: [int | float] --- Coordinates to be converted
         :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
-        :param regu: [int | str] [default is 1] --- Type of regularization
+        :param regu: [int | str] [default is '1accelnotnull'] --- Type of regularization
         :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
+        :param solver: [str] [default is 'LSMR_ini'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
@@ -1385,7 +1408,7 @@ class cube_data_class:
         self,
         i: int | float | None = None,
         j: int | float | None = None,
-        smooth_method: str = "gaussian",
+        smooth_method: str = "savgol",
         s_win: int = 3,
         t_win: int = 90,
         sigma: int = 3,
@@ -1394,7 +1417,7 @@ class cube_data_class:
         delete_outliers: str | float | None = None,
         flag: xr.Dataset | str | None = None,
         dem_file: str | None = None,
-        regu: int | str = 1,
+        regu: int | str = "1accelnotnull",
         solver: str = "LSMR_ini",
         proj: str = "EPSG:4326",
         velo_or_disp: str = "velo",
@@ -1417,7 +1440,7 @@ class cube_data_class:
         :param unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
         :param delete_outliers: [str | float | None] [default is None] --- If float delete all velocities which a quality indicator higher than delete_outliers
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        :param regu: [int | str] [default is 1] --- Regularisation of the solver
+        :param regu: [int | str] [default is "1accelnotnull"] --- Regularisation of the solver
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
         :param velo_or_disp: [str] [default is 'velo'] --- 'disp' or 'velo' to indicate the type of the observations : 'disp' mean that self contain displacements values and 'velo' mean it contains velocity
