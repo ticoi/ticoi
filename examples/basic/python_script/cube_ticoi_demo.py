@@ -51,7 +51,7 @@ save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
-current_dir = os.path.dirname(os.path.abspath(__file__))#curent file
+current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
 # Navigate up to the root of your package (adjust the number of '..' as needed)
 package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 
