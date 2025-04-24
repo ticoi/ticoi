@@ -48,7 +48,7 @@ from ticoi.inversion_functions import (
     weight_for_inversion,
 )
 from ticoi.pixel_class import pixel_class
-
+from ticoi.utilis import filter_kwargs_for_function
 warnings.filterwarnings("ignore")
 
 # %% ======================================================================== #
@@ -1323,9 +1323,6 @@ def visualization_core(
     for option in option_visual:
         if option in dico_visual.keys():
             dico_visual[option](pixel_object)
-        else:
-            print(f"{option} is not a valid option for visualization")
-
 
 def save_cube_parameters(
     cube: "ticoi.cube_data_classxr.cube_data_class",
@@ -1392,6 +1389,7 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
     # =========================================================================%% #
 
     if verbose: start = [time.time()]
+
 
     if already_loaded is None:
         # Load the main cube

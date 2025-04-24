@@ -600,7 +600,7 @@ class pixel_class:
 
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param zoom_on_results: [bool] [default is False] --- Set the limits of the axis according to the results min and max
+        :param zoom_on_results: [bool] [default is False] --- If True set the limits of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return fig, ax: Axis and Figures of the plot

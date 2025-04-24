@@ -7,8 +7,9 @@ option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlaid'
 - 'obs_xy' -> vx_vy_obs.png : Original velocities (central date and temporal baselines) according to x and y.
 - 'original_magnitude' -> vv_obs.png : Magnitude of the original velocities (central date and temporal baselines).
 - 'obs_vxvy_quality' -> vv_quality_obs.png : Magnitude of the original velocity with measurement error (central date and colour).
+- direction : 
 
-#### Results after inversion of the AX = Y system (ILF: varying temporal sampling)
+#### Results after inversion of the AX = Y system (Irregular Leap Frog - ILF: varying temporal sampling)
 
 - 'invertxy_overlaid' -> vx_vy_overlaid.png : Superposition of estimated and observed velocities (vx and vy). The limits of the figure
   correspond to the estimated velocities.
@@ -25,3 +26,15 @@ option_visual = ['obs_xy','obs_magnitude','obs_vxvy_quality','invertxy_overlaid'
     - the type of sensor and authors (residuals_author_abs.png,residuals_vy_author.png,residuals_vx_author_abs.png),
     - and the quality indicators (residuals_quality.png).
 - 'invert_weight' -> weight_ini_vx_vy.png; weightlast_vx_vy.png: weight given in the first and last iteration of the inversion, respectively
+
+#### Results after interpolation of the inverted time-series (Regular Leap Frog - RLF: unique temporal sampling)
+- 'interp_xy_overlaid' -> vx_vy_overlaid_interp.png : Superposition of interpolated and observed velocities (vx and vy). The limits of the figure
+  correspond to the observed velocities. 
+- 'interp_xy_overlaid_zoom' -> vx_vy_overlaid_zoom_on_results_interp.png : Superposition of interpolated and observed velocities (vx and vy). The limits of the figure
+  correspond to the interpolated velocities. 
+- 'invertvv_overlaid' -> vv_overlaid_interp.png : Superposition of interpolated and observed velocities (velocity magnitude vv). The limits of the figure
+  correspond to the observed velocities. 
+- 'invertvv_overlaid_zoom' -> vv_overlaid_zoom_on_results_interp.png : Superposition of interpolated and observed velocities (velocity magnitude vv). The limits of the figure
+  correspond to the interpolated velocities. 
+- 'direction_overlaid' -> direction_overlaid_interp.png : Plot the velocity direction of interpolated results, overlaying the velocity direction of the observations (raw data).
+- 'quality_metrics' ->  confidence_intervals_and_quality.png : Plot quality metrics on top of velocity magnitude. It can be the number of observations used for each estimation, and/or the confidence intervals.

@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from ticoi.core import chunk_to_block, load_block
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.other_functions import optimize_coef
+from ticoi.utilis import optimize_coef
 
 
 async def process_block(

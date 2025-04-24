@@ -4,7 +4,7 @@ import subprocess
 
 def test_example_script_output():
     # Run the example.py script
-    cube_demo_flag = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples","advanced_processing"))}/cube_ticoi_demo_advanced.py'
+    cube_demo_flag = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples","advanced"))}/cube_ticoi_demo_advanced.py'
     cube_demo_simple = (
         f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))}/cube_ticoi_demo.py'
     )
