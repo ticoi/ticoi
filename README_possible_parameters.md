@@ -14,4 +14,3 @@ Different parameters can be used. Here some explanation of the some parameters
 #### regu
 - '1accelnotnull': use a first order Tikhonov regularisation, using a first guess on the velocity. This first guess is inferred from a spatio-temporal smoothing. The regularisation term is the form of || G (X - X_0) ||² with X_0 the initial guess on the velocity, and G the first order derivative operator.
 - 1: use a first order Tikhonov regularisation
-

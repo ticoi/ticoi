@@ -7,7 +7,10 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
+import inspect
+import json
 import math as m
+import urllib.request
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -19,27 +22,10 @@ import xarray as xr
 from joblib import Parallel, delayed
 from pyproj import CRS
 from shapely.geometry import Point, Polygon
-import urllib.request
-import json
-import inspect
 
-from ticoi.core import (
-    interpolation_core,
-    interpolation_to_data,
-    inversion_core,
-    visualization_core,
-)
+from ticoi.core import interpolation_core, interpolation_to_data, inversion_core
 from ticoi.cube_data_classxr import cube_data_class
 
-
-def filter_kwargs_for_function(func, config_dict):
-
-    sig = inspect.signature(func)
-    return {k: v for k, v in config_dict.items() if k in sig.parameters}
-
-def call_with_filtered_kwargs(func, config):
-    kwargs = filter_kwargs_for_function(func, config)
-    return func(**kwargs)
 
 def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_lines: bool = False) -> np.ndarray:
 
@@ -92,7 +78,7 @@ def find_granule_by_point(input_point):  # [lon,lat]
 
     """
 
-    with urllib.request.urlopen('https://its-live-data.s3.amazonaws.com/datacubes/catalog_v02.json') as url:
+    with urllib.request.urlopen("https://its-live-data.s3.amazonaws.com/datacubes/catalog_v02.json") as url:
         itslive_catalog = json.loads(url.read().decode())
 
         target_granule_urls = []

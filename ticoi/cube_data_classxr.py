@@ -37,7 +37,6 @@ from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
-
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -886,7 +885,7 @@ class cube_data_class:
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
 
     def prepare_interpolation_date(
-            self,
+        self,
     ) -> (np.datetime64, np.datetime64):  # type: ignore
 
         """

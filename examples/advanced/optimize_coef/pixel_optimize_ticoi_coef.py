@@ -19,7 +19,7 @@ import xarray as xr
 
 from ticoi.core import interpolation_to_data, inversion_core
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.utilis import optimize_coef
+from ticoi.utils import optimize_coef
 
 # %%===================================================================== #
 #                               PARAMETERS                                #

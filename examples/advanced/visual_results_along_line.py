@@ -9,8 +9,8 @@ import warnings
 from pyproj import Transformer
 
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.utilis import draw_heatmap, points_of_shp_line
 from ticoi.pixel_class import pixel_class
+from ticoi.utils import draw_heatmap, points_of_shp_line
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
