@@ -52,7 +52,9 @@ jobs:
       id: cache
 
     - name: Install project
-      run: pip install -e . --no-dependencies #to install ticoi package
+      run: |
+        mamba activate ticoi_env
+        pip install -e . --no-dependencies #to install ticoi package
 
     - name: Check import works with base environment
       run: |
@@ -60,7 +62,9 @@ jobs:
         python -c "import ticoi"
 
     - name: Setup pip dependencies
-      run: pip install pytest
+      run: |
+        mamba activate ticoi_env
+        pip install pytest
 
     - name: Update environment with development packages if cache does not exist
       if: steps.cache.outputs.cache-hit != 'true'
@@ -75,8 +79,7 @@ jobs:
     #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
     #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: List installed packages
-      run: conda list
+      run: mamba list
 
     - name: Test with pytest
-      run: |
-        pytest
+      run: mamba run -n ticoi_env pytest
