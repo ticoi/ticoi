@@ -62,6 +62,9 @@ jobs:
     - name: Setup pip dependencies
       run: pip install pytest
 
+    - name: Install dev environment
+      run: mamba env update -n ticoi_env -f dev-environment.yml
+
     # - name: Lint with flake8
     #   run: |
     #     # stop the build if there are Python syntax errors or undefined names
