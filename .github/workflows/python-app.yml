@@ -51,20 +51,19 @@ jobs:
         CACHE_NUMBER: 0
       id: cache
 
-    - name: Install project
-      run: mamba run -n ticoi_env pip install -e . --no-dependencies
-
-    - name: Check import works with base environment
-      run: mamba run -n ticoi_env python -c "import ticoi"
-
-    - name: Setup pip dependencies
-      run: mamba run -n ticoi_env pip install pytest
-
-    - name: Update environment with development packages if cache does not exist
-      if: steps.cache.outputs.cache-hit != 'true'
+    - name: Update environment (create or update ticoi_env)
       run: |
         unset PROJ_DATA
         mamba env update -n ticoi_env -f ticoi_env.yml
+
+    - name: Install project (inside env)
+      run: mamba run -n ticoi_env pip install -e . --no-dependencies
+
+    - name: Install test dependencies (inside env)
+      run: mamba run -n ticoi_env pip install pytest
+
+    - name: Check import works
+      run: mamba run -n ticoi_env python -c "import ticoi"
 
     - name: Test with pytest
       run: mamba run -n ticoi_env pytest
