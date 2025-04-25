@@ -18,9 +18,7 @@ import numpy as np
 
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import cube_data_class
-from ticoi.interpolation_functions import (
-    visualisation_interpolation,
-)
+from ticoi.interpolation_functions import visualisation_interpolation
 
 # %%========================================================================= #
 #                                    PARAMETERS                               #
@@ -54,7 +52,7 @@ verbose = False  # Print information throughout TICOI processing
 save = True  # Save the results and figures
 show = True  # Plot some figures
 
-vminmax = [0,4700]
+vminmax = [0, 4700]
 
 option_visual = ["obs_magnitude", "invertvv_overlaid", "quality_metrics"]
 
@@ -213,7 +211,8 @@ if show or save:  # plot some figures
         A=A,
         log_scale=False,
         cmap="rainbow",
-        colors=["orange", "blue"],vminmax=vminmax
+        colors=["orange", "blue"],
+        vminmax=vminmax,
     )
     visualisation_interpolation(
         [dataf, dataf_lp],
@@ -221,7 +220,8 @@ if show or save:  # plot some figures
         save=save,
         show=show,
         path_save=path_save,
-        colors=["orange", "blue"],vminmax=vminmax
+        colors=["orange", "blue"],
+        vminmax=vminmax,
     )
 
 print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")

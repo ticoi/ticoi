@@ -1283,7 +1283,7 @@ def visualization_core(
     cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
     figsize: tuple[int, int] = (10, 6),
-    vminmax:List[int] =None,
+    vminmax: List[int] = None,
 ):
 
     r"""
@@ -1387,7 +1387,6 @@ def ticoi_one_pixel(
     inversion_kwargs: dict = {},
     interpolation_kwargs: dict = {},
     already_loaded: pd.DataFrame | None = None,
-
 ):
     """
     :param cube_name: [string] --- name of the cube dataset

@@ -1071,7 +1071,7 @@ class cube_data_class:
         if proj == "int":
             data = self.ds.isel(x=i, y=j)[var_to_keep]
         else:
-            i, j = self.convert_coordinates(i, j, proj=proj) #convert the coordinates to the projection of the cube
+            i, j = self.convert_coordinates(i, j, proj=proj)  # convert the coordinates to the projection of the cube
             # Interpolate only necessary variables and drop NaN values
             if interp == "nearest":
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]

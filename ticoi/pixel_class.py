@@ -713,9 +713,12 @@ class pixel_class:
         ax.legend(loc="lower left", bbox_to_anchor=(0.02, -0.25), fontsize=14)
         ax.set_xlabel("Central dates", fontsize=14)
 
-        if type_data == 'obs':fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
-        elif type_data == 'invert':fig.suptitle("Magnitude of inverted velocities", y=0.95, fontsize=16)
-        elif type_data == 'interp':fig.suptitle("Magnitude of interpolated velocities", y=0.95, fontsize=16)
+        if type_data == "obs":
+            fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
+        elif type_data == "invert":
+            fig.suptitle("Magnitude of inverted velocities", y=0.95, fontsize=16)
+        elif type_data == "interp":
+            fig.suptitle("Magnitude of interpolated velocities", y=0.95, fontsize=16)
 
         if self.show:
             plt.show(block=block_plot)
@@ -928,7 +931,7 @@ class pixel_class:
         colors: List[str] = ["orange", "blue"],
         type_data: str = "interp",
         block_plot: bool = True,
-        plot_mean: bool = True
+        plot_mean: bool = True,
     ):
 
         """
