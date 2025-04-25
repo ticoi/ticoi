@@ -52,9 +52,7 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 
 ## ------------------------------ Data selection --------------------------- ##
 current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
-# Navigate up to the root of your package (adjust the number of '..' as needed)
 package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
-
 cube_name = os.path.join(package_root, "test_data", "ITS_LIVE_Lowell_Lower_test.nc")  # path to our dataset
 path_save = os.path.join(package_root, "examples", "results", "cube") + "/"  # path where to save our results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created

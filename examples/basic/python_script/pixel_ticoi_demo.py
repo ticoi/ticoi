@@ -19,7 +19,6 @@ import numpy as np
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import (
-    prepare_interpolation_date,
     visualisation_interpolation,
 )
 
@@ -28,13 +27,13 @@ from ticoi.interpolation_functions import (
 # =========================================================================%% #
 
 ###  Selection of data
-cube_name = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_data"))}/ITS_LIVE_Lowell_Lower_test.nc'  # Path where the Sentinel-2 IGE cubes are stored
-
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "results","pixel"))}/'  # Path where to store the results
-dem_file = None
-proj = "EPSG:3413"  # EPSG system of the given coordinates
+current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
+package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+cube_name = os.path.join(package_root, "test_data", "ITS_LIVE_Lowell_Lower_test.nc")  # path to our dataset
+path_save = os.path.join(package_root, "examples", "results", "pixel") + "/"  # path where to save our results
 
 i, j = -138.18069, 60.29076  # coordinate in pixel
+proj = "EPSG:4326"  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
@@ -55,32 +54,17 @@ verbose = False  # Print information throughout TICOI processing
 save = True  # Save the results and figures
 show = True  # Plot some figures
 
-# Visualisation options
-# option_visual = [
-#     "obs_xy",
-#     "obs_magnitude",
-#     "obs_vxvy_quality",
-#     "invertxy_overlaid",
-#     "residuals",
-#     "xcount_xy",
-#     "xcount_vv",
-#     "invert_weight",
-#     "interp_xy_overlaid",
-#     "interp_xy_overlaid_zoom",
-#     "invertvv_overlaid",
-#     "invertvv_overlaid_zoom",
-#     "direction_overlaid",
-# ]  # see README_visualization_pixel_output.md
+vminmax = [0,4700]
+
 option_visual = ["obs_magnitude", "invertvv_overlaid", "quality_metrics"]
 
-vmax = [False, False]  # vmin and vmax of the legend
 
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
-    "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
+    "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 as the lowest errors
     "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-    "buffer": [i, j, 0.1],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "buffer": [i, j, 0.05],  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": ["2015-01-01", "2024-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
@@ -92,13 +76,12 @@ load_kwargs = {
 preData_kwargs = {
     "smooth_method": "savgol",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
     "s_win": 3,  # Size of the spatial window
-    "t_win": 90,  # Time window size for 'ewma' smoothing
+    "t_win": 90,  # Time window size for smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
     "order": 3,  # Order of the smoothing function
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outliers,  # Delete the outliers from the data according to one (int or str) or several (dict) criteriums
     "flag": None,  # Divide the data in several areas where different methods should be used
-    "dem_file": dem_file,  # Path to the DEM file for calculating the slope and aspect
     "regu": regu,  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
@@ -230,7 +213,7 @@ if show or save:  # plot some figures
         A=A,
         log_scale=False,
         cmap="rainbow",
-        colors=["orange", "blue"],
+        colors=["orange", "blue"],vminmax=vminmax
     )
     visualisation_interpolation(
         [dataf, dataf_lp],
@@ -238,7 +221,7 @@ if show or save:  # plot some figures
         save=save,
         show=show,
         path_save=path_save,
-        colors=["orange", "blue"],
+        colors=["orange", "blue"],vminmax=vminmax
     )
 
 print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")

@@ -198,7 +198,7 @@ def visualisation_interpolation(
     show: bool = True,
     path_save: Optional[str] = None,
     colors: List[str] = ["blueviolet", "orange"],
-    figsize: tuple[int, int] = (10, 6),
+    figsize: tuple[int] = (10, 6), vminmax:List[int] =None,
 ):
 
     """
@@ -211,6 +211,7 @@ def visualisation_interpolation(
     :param path_save: [str | None] [default is None] --- Path where the figures must be saved if save is True
     :param colors: [List<str>] [default is ["blueviolet", "orange"]] --- Colors for the plot
     :param figsize: [tuple] [default is (10, 6)] --- Size of the figures
+    :param vminmax: [List[int, int]] [default is None] --- Min and max values for the y-axis of the plots
     """
 
     pixel_object = pixel_class()
@@ -225,11 +226,14 @@ def visualisation_interpolation(
         "interp_xy_overlaid_zoom": (
             lambda pix: pix.plot_vx_vy_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
         ),
-        "invertvv_overlaid": (
-            lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=False)
+        "inverpvv_overlaid": (
+            lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=False,vminmax=vminmax)
         ),
-        "invertvv_overlaid_zoom": (
-            lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True)
+        "inverpvv": (
+            lambda pix: pix.plot_vv(type_data="interp", color=colors[1],vminmax=vminmax)
+        ),
+        "inverpvv_overlaid_zoom": (
+            lambda pix: pix.plot_vv_overlaid(type_data="interp", colors=colors, zoom_on_results=True,vminmax=vminmax)
         ),
         "direction_overlaid": (lambda pix: pix.plot_direction_overlaid(type_data="interp")),
         "quality_metrics": (lambda pix: pix.plot_quality_metrics()),

@@ -1283,7 +1283,7 @@ def visualization_core(
     cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
     figsize: tuple[int, int] = (10, 6),
-    vminmax=None,
+    vminmax:List[int] =None,
 ):
 
     r"""
@@ -1301,6 +1301,7 @@ def visualization_core(
     :param cmap: [str] [default is 'viridis''] --- color map used in the plots
     :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :param figsize: tuple[int, int] [default is (10,6)] --- Size of the figures
+    :param vminmax: List[int] [default is None] --- Min and max values for the y-axis of the plots
     """
 
     pixel_object = pixel_class()
@@ -1310,10 +1311,12 @@ def visualization_core(
         "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
         "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)),
         "obs_vxvy_quality": (lambda pix: pix.plot_vx_vy_quality(cmap=cmap, type_data="obs")),
+        "invertxy": (lambda pix: pix.plot_vx_vy(color=colors[1])),
         "invertxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors)),
         "obsfiltxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors, type_data="obs_filt")),
         "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt", vminmax=vminmax)),
-        "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors)),
+        "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, vminmax=vminmax)),
+        "invertvv": (lambda pix: pix.plot_vv(color=colors[1], vminmax=vminmax)),
         "invert_vv_quality": (lambda pix: pix.plot_vv_quality(cmap=cmap, type_data="invert")),
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
@@ -1384,6 +1387,7 @@ def ticoi_one_pixel(
     inversion_kwargs: dict = {},
     interpolation_kwargs: dict = {},
     already_loaded: pd.DataFrame | None = None,
+
 ):
     """
     :param cube_name: [string] --- name of the cube dataset
