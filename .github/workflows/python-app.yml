@@ -26,7 +26,7 @@ jobs:
     - name: Set up Miniconda
       uses: conda-incubator/setup-miniconda@v2
       with:
-        environment-file: environment.yml
+        environment-file: ticoi_env.yml
         activate-environment: ticoi_env
         auto-activate-base: false
         use-mamba: true
