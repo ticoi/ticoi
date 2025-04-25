@@ -46,7 +46,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ env.CONDA }}/envs
-        key: conda-ubuntu-latest-3.11-${{ env.cache_date }}-${{ hashFiles('dev-environment.yml') }}-${{ env.CACHE_NUMBER }}
+        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('dev-environment.yml') }}-${{ env.CACHE_NUMBER }}
       env:
         CACHE_NUMBER: 0
       id: cache
@@ -74,6 +74,9 @@ jobs:
     #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
     #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
     #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: List installed packages
+      run: conda list
+
     - name: Test with pytest
       run: |
         pytest
