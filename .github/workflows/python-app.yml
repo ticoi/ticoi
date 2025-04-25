@@ -16,6 +16,8 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    env:
+      MAMBA_ROOT_PREFIX: /home/runner/mamba
 
     steps:
     - uses: actions/checkout@v3
@@ -51,7 +53,8 @@ jobs:
         CACHE_NUMBER: 0
       id: cache
 
-    - name: Update environment (create or update ticoi_env)
+    - name: Update environment with development packages if cache does not exist
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         unset PROJ_DATA
         mamba env update -n ticoi_env -f ticoi_env.yml
