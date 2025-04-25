@@ -600,7 +600,7 @@ class pixel_class:
 
         :param colors: [List[str]] [default is ['orange', 'blue']] --- List of the colors used for the plot (first : raw data, second : overlaying data)
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param zoom_on_results: [bool] [default is False] --- Set the limits of the axis according to the results min and max
+        :param zoom_on_results: [bool] [default is False] --- If True set the limits of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return fig, ax: Axis and Figures of the plot
@@ -878,7 +878,9 @@ class pixel_class:
 
         return fig, ax
 
-    def plot_direction(self, color: str = "orange", type_data: str = "obs", block_plot: bool = True,plot_mean: bool = True):
+    def plot_direction(
+        self, color: str = "orange", type_data: str = "obs", block_plot: bool = True, plot_mean: bool = True
+    ):
 
         """
         Plot the direction of the velocities for each of the data at this point.
@@ -895,12 +897,13 @@ class pixel_class:
         directionm, directionm_mean = self.get_direction(data)
         fig, ax = plt.subplots(figsize=self.figsize)
         ax.plot(data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=2, color=color, label=label)
-        if plot_mean: ax.hlines(
-            directionm_mean,
-            np.min(data.dataf["date_cori"]),
-            np.max(data.dataf["date_cori"]),
-            label=f"Mean direction of {label}",
-        )
+        if plot_mean:
+            ax.hlines(
+                directionm_mean,
+                np.min(data.dataf["date_cori"]),
+                np.max(data.dataf["date_cori"]),
+                label=f"Mean direction of {label}",
+            )
         ax.set_ylim(0, 360)
         ax.set_ylabel("Direction [°]")
         ax.set_xlabel("Central Dates")
@@ -916,7 +919,11 @@ class pixel_class:
         return fig, ax
 
     def plot_direction_overlaid(
-        self, colors: List[str] = ["orange", "blue"], type_data: str = "interp", block_plot: bool = True,plot_mean: bool = True
+        self,
+        colors: List[str] = ["orange", "blue"],
+        type_data: str = "interp",
+        block_plot: bool = True,
+        plot_mean: bool = True,
     ):
 
         """
@@ -935,7 +942,7 @@ class pixel_class:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        fig, ax = self.plot_direction(color=colors[0], type_data="obs",plot_mean=plot_mean)
+        fig, ax = self.plot_direction(color=colors[0], type_data="obs", plot_mean=plot_mean)
         self.show, self.save = show, save
 
         directionm, directionm_mean = self.get_direction(data)
@@ -960,7 +967,6 @@ class pixel_class:
 
         return fig, ax
 
-
         return fig, ax
 
     def plot_quality_metrics(self, color: str = "orange"):
@@ -969,7 +975,6 @@ class pixel_class:
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :return:
         """
-
 
         dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="interp")
         data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values

@@ -34,7 +34,8 @@ from tqdm import tqdm
 from ticoi.cube_data_classxr import cube_data_class
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
-    set_function_for_interpolation,visualisation_interpolation
+    set_function_for_interpolation,
+    visualisation_interpolation,
 )
 from ticoi.inversion_functions import (
     TukeyBiweight,
@@ -528,7 +529,8 @@ def inversion_core(
         if not iteration:
             weight_ix = Weightx
             weight_iy = Weighty
-            if not visual: del Weighty, Weightx
+            if not visual:
+                del Weighty, Weightx
         # compute the number of observations which have contributed to each estimated displacement
         if result_quality is not None and "X_contribution" in result_quality:
             xcount_x = A.T.dot(weight_ix)
@@ -643,7 +645,7 @@ def inversion_core(
 
 def interpolation_core(
     result: pd.DataFrame,
-    interval_output: int=30,
+    interval_output: int = 30,
     option_interpol: str = "spline",
     first_date_interpol: np.datetime64 | str | None = None,
     last_date_interpol: np.datetime64 | str | None = None,
@@ -1323,8 +1325,6 @@ def visualization_core(
     for option in option_visual:
         if option in dico_visual.keys():
             dico_visual[option](pixel_object)
-        else:
-            print(f"{option} is not a valid option for visualization")
 
 
 def save_cube_parameters(
@@ -1369,7 +1369,22 @@ def save_cube_parameters(
     return source, sensor
 
 
-def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,option_visual:list=["invertvv_overlaid"],verbose:bool=False,load_kwargs:dict={},load_pixel_kwargs:dict={},preData_kwargs:dict={},inversion_kwargs:dict={},interpolation_kwargs:dict={},already_loaded:pd.DataFrame|None=None):
+def ticoi_one_pixel(
+    cube_name: str,
+    i: int,
+    j: int,
+    save,
+    path_save: str,
+    show: bool = True,
+    option_visual: list = ["invertvv_overlaid"],
+    verbose: bool = False,
+    load_kwargs: dict = {},
+    load_pixel_kwargs: dict = {},
+    preData_kwargs: dict = {},
+    inversion_kwargs: dict = {},
+    interpolation_kwargs: dict = {},
+    already_loaded: pd.DataFrame | None = None,
+):
     """
     :param cube_name: [string] --- name of the cube dataset
     :param i: [int] --- pixel index
@@ -1391,7 +1406,8 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
     #                                DATA LOADING                                 #
     # =========================================================================%% #
 
-    if verbose: start = [time.time()]
+    if verbose:
+        start = [time.time()]
 
     if already_loaded is None:
         # Load the main cube
@@ -1413,7 +1429,8 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
         # Prepare interpolation dates
         first_date_interpol, last_date_interpol = cube.prepare_interpolation_date()
         interpolation_kwargs.update(
-            {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
+            {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol}
+        )
 
     else:
         data, mean, dates_range = already_loaded
@@ -1423,8 +1440,13 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
         first_date_interpol = np.min(cube_date1)
         last_date_interpol = np.max(data["date2"])
         interpolation_kwargs.update(
-            {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
-        data = [data[["date1","date2"]].to_numpy(),data[["dx","dy","errorx","errory","temporal_baseline"]].to_numpy(),data[["sensor","author"]].to_numpy()]
+            {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol}
+        )
+        data = [
+            data[["date1", "date2"]].to_numpy(),
+            data[["dx", "dy", "errorx", "errory", "temporal_baseline"]].to_numpy(),
+            data[["sensor", "author"]].to_numpy(),
+        ]
 
     if verbose:
         stop.append(time.time())
@@ -1450,7 +1472,8 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
     #                              INTERPOLATION                                  #
     # =========================================================================%% #
 
-    if verbose: start.append(time.time())
+    if verbose:
+        start.append(time.time())
 
     # Proceed to interpolation
     dataf_lp = interpolation_core(result, **interpolation_kwargs)
@@ -1484,6 +1507,7 @@ def ticoi_one_pixel(cube_name:str,i:int,j:int,save,path_save:str,show:bool=True,
             colors=["orange", "blue"],
         )
 
-    if verbose: print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")
+    if verbose:
+        print(f"[Overall] Overall processing took {round((stop[3] - start[0]), 4)} s")
 
-    return data,dataf, dataf_lp
+    return data, dataf, dataf_lp

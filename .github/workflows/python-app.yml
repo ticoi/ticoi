@@ -23,19 +23,47 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.10"
-    - name: Install dependencies
+
+    - name: Initiate empty environment
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-version: latest
+        auto-update-conda: true
+        use-mamba: true
+        mamba-version: "2.0.5"
+        channel-priority: strict
+        activate-environment: ticoi_env
+        python-version: "3.10"
+
+  #GitHub Actions treats the cache key as different → it skips reusing an old conda env and builds a fresh one.
+    - name: Get month for resetting cache
+      id: get-date
+      run: echo "cache_date=$(/bin/date -u '+%Y%m')" >> $GITHUB_ENV
+      shell: bash
+
+  #Installing all conda dependencies (especially heavy ones like gdal, graphviz, numpy, etc.) is slow. This step avoids redoing that work every time.
+    - name: Cache conda env
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.CONDA }}/envs
+        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('dev-environment.yml') }}-${{ env.CACHE_NUMBER }}
+      env:
+        CACHE_NUMBER: 0
+      id: cache
+
+    - name: Update environment (create or update ticoi_env)
       run: |
-        python -m pip install --upgrade pip
-        # pip install flake8 pytest
-        pip install pytest
-        pip install -r requirements.txt
-        pip install . #to install ticoi package
-    # - name: Lint with flake8
-    #   run: |
-    #     # stop the build if there are Python syntax errors or undefined names
-    #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-    #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        unset PROJ_DATA
+        mamba env update -n ticoi_env -f ticoi_env.yml
+
+    - name: Install project (inside env)
+      run: mamba run -n ticoi_env pip install -e . --no-dependencies
+
+    - name: Install test dependencies (inside env)
+      run: mamba run -n ticoi_env pip install pytest
+
+    - name: Check import works
+      run: mamba run -n ticoi_env python -c "import ticoi"
+
     - name: Test with pytest
-      run: |
-        pytest
+      run: mamba run -n ticoi_env pytest

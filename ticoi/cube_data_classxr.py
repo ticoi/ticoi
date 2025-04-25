@@ -37,7 +37,6 @@ from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
-
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -166,6 +165,7 @@ class cube_data_class:
 
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
+        This function is from gtsa DOI 10.5281/zenodo.8188085.
 
         :param variable_name: [str] [default is 'vx'] --- Name of the variable containing the time series array
         :param x_dim: [str] [default is 'x'] --- Name of the x dimension in the array
@@ -785,7 +785,7 @@ class cube_data_class:
                 var_name = "vx" if not self.is_TICO else "dx"
                 time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
                 tc, yc, xc = self.determine_optimal_chunk_size(
-                    variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
+                    variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=verbose
                 )
                 self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
@@ -807,7 +807,7 @@ class cube_data_class:
 
                     if chunks == {}:  # Rechunk with optimal chunk size
                         tc, yc, xc = self.determine_optimal_chunk_size(
-                            variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
+                            variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=verbose
                         )
                         self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
@@ -847,7 +847,7 @@ class cube_data_class:
                 # Rechunk again if the size of the cube is changed:
                 if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
                     tc, yc, xc = self.determine_optimal_chunk_size(
-                        variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=True
+                        variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=verbose
                     )
                     self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
@@ -885,7 +885,7 @@ class cube_data_class:
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
 
     def prepare_interpolation_date(
-            self,
+        self,
     ) -> (np.datetime64, np.datetime64):  # type: ignore
 
         """

@@ -147,6 +147,7 @@ def match_sine(
     else:
         return 1 / f, A, max_day
 
+
 def rolling_std(raw, dataf_lp, local_var_method="uniform_7d"):
 
     """
@@ -192,6 +193,7 @@ def rolling_std(raw, dataf_lp, local_var_method="uniform_7d"):
         var = dataff_vv_c.std(ddof=0)
 
     return var
+
 
 def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
 
