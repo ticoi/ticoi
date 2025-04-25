@@ -54,7 +54,7 @@ jobs:
       id: cache
 
     - name: Update environment with development packages if cache does not exist
-      if: steps.cache.outputs.cache-hit != 'true'
+      #if: steps.cache.outputs.cache-hit != 'true'
       run: |
         unset PROJ_DATA
         mamba env update -n ticoi_env -f ticoi_env.yml
