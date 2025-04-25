@@ -62,8 +62,11 @@ jobs:
     - name: Setup pip dependencies
       run: pip install pytest
 
-    - name: Install dev environment
-      run: mamba env update -n ticoi_env -f dev-environment.yml
+    - name: Update environment with development packages if cache does not exist
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        unset PROJ_DATA
+        mamba env update -n ticoi_env -f ticoi_env.yml
 
     # - name: Lint with flake8
     #   run: |
