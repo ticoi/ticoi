@@ -34,8 +34,10 @@ jobs:
         use-mamba: true
         mamba-version: "2.0.5"
         channel-priority: strict
+        environment-file: ticoi_env.yml
         activate-environment: ticoi_env
         python-version: "3.10"
+
 
   #GitHub Actions treats the cache key as different → it skips reusing an old conda env and builds a fresh one.
     - name: Get month for resetting cache
@@ -54,7 +56,7 @@ jobs:
       id: cache
 
     - name: Update environment with development packages if cache does not exist
-      #if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         unset PROJ_DATA
         mamba env update -n ticoi_env -f ticoi_env.yml
