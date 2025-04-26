@@ -1,13 +1,13 @@
 # TICOI
 
-![Python Logo](https://www.python.org/static/community_logos/python-logo.png "Sample inline image")
-
 Post-processing method based on the temporal closure to fuse multi-temporal and multi-sensor velocity measurements,
 which may have been computed from  different processing chains.
 
 If you use this package, please cite:
 
 Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational Python package to generate regularized glacier velocity time series. EGUsphere, 2025, 1-40.
+
+
 
 ## Get started
 
@@ -78,6 +78,9 @@ If not, you have to create your own dataloader, within which the dimension shoul
 
 ### OUTPUTS
 * to understand to output of pixel_demo please check README_visualization_pixel_output.md
+
+
+![TICOI_workflow.png](examples/image/TICOI_workflow.png)
 
 
 [packaging guide]: https://packaging.python.org
