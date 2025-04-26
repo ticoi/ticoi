@@ -80,7 +80,13 @@ If not, you have to create your own dataloader, within which the dimension shoul
 * to understand to output of pixel_demo please check README_visualization_pixel_output.md
 
 
-![TICOI_workflow.png](examples/image/TICOI_workflow.png)
+<p align="center">
+  <img src="examples/image/TICOI_workflow.png" alt="TICOI Workflow" width="800"/>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ticoi/ticoi/main/examples/image/TICOI_workflow.png" alt="TICOI Workflow" width="600"/>
+</p>
 
 
 [packaging guide]: https://packaging.python.org
