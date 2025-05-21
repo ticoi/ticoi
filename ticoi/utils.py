@@ -24,7 +24,7 @@ from pyproj import CRS
 from shapely.geometry import Point, Polygon
 
 from ticoi.core import interpolation_core, interpolation_to_data, inversion_core
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 
 
 def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_lines: bool = False) -> np.ndarray:
@@ -482,8 +482,8 @@ def VVC_TICOI(
 
 
 def optimize_coef(
-    cube: cube_data_class,
-    cube_gt: cube_data_class,
+    cube: CubeDataClass,
+    cube_gt: CubeDataClass,
     i: float | int,
     j: float | int,
     obs_filt: xr.Dataset,

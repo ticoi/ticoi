@@ -31,6 +31,7 @@ from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 from tqdm import tqdm
+import geopandas as gpd
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
@@ -42,7 +43,7 @@ from ticoi.mjd2date import mjd2date
 # =========================================================================%% #
 
 
-class cube_data_class:
+class CubeDataClass:
     def __init__(self, cube=None, ds=None):
 
         """
@@ -52,7 +53,7 @@ class cube_data_class:
         :param ds: [xr dataset | None] --- New dataset. If None, copy cube's dataset
         """
 
-        if not isinstance(cube, cube_data_class):
+        if not isinstance(cube, CubeDataClass):
             self.filedir = ""
             self.filename = ""
             self.nx = 250
@@ -737,7 +738,7 @@ class cube_data_class:
             "E. Ducasse": "time",
             "S. Leinss, L. Charrier": "mid_date",
             "IGE": "mid_date",
-        }
+        } #dictionary to set the name of time_dimension for a given author
 
         if type(filepath) == list:  # Merge several cubes
             self.load(
@@ -755,7 +756,7 @@ class cube_data_class:
             )
 
             for n in range(1, len(filepath)):
-                cube2 = cube_data_class()
+                cube2 = CubeDataClass()
                 sub = [
                     self.ds["x"].min().values,
                     self.ds["x"].max().values,
@@ -811,7 +812,7 @@ class cube_data_class:
                         )
                         self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-                elif filepath.split(".")[-1] == "zarr":
+                elif filepath.split(".")[-1] == "zarr":#the is not rechunked
                     if chunks == {}:
                         chunks = "auto"  # Change the default value to auto
                     self.ds = xr.open_dataset(
@@ -1649,7 +1650,7 @@ class cube_data_class:
         cubes = []
         for s in range(n_split):
             if isinstance(dim, str):
-                cube = cube_data_class(
+                cube = CubeDataClass(
                     self,
                     self.ds.isel(
                         {
@@ -1667,7 +1668,7 @@ class cube_data_class:
                     print(f"Split cube saved at {savepath}{dim}_{s}.nc")
                 cubes.append(cube)
             elif isinstance(dim, list):
-                cube = cube_data_class(
+                cube = CubeDataClass(
                     self,
                     self.ds.isel(
                         {
@@ -1692,7 +1693,7 @@ class cube_data_class:
         new_proj: Optional[str] = None,
         new_res: Optional[float] = None,
         interp_method: str = "nearest",
-        cube_to_match: Optional["cube_data_class"] = None,
+        cube_to_match: Optional["CubeDataClass"] = None,
     ):
         """
         Repreject the cube_data_self to a given projection system, and (optionally) resample this cube to a given resolution.
@@ -1741,7 +1742,7 @@ class cube_data_class:
     def reproj_vel(
         self,
         new_proj: Optional[str] = None,
-        cube_to_match: Optional["cube_data_class"] = None,
+        cube_to_match: Optional["CubeDataClass"] = None,
         unit: int = 365,
         nb_cpu: int = 8,
     ):
@@ -1807,7 +1808,7 @@ class cube_data_class:
 
     def align_cube(
         self,
-        cube: "cube_data_class",
+        cube: "CubeDataClass",
         unit: int = 365,
         reproj_vel: bool = True,
         reproj_coord: bool = True,
@@ -1840,7 +1841,7 @@ class cube_data_class:
 
         return cube
 
-    def merge_cube(self, cube: "cube_data_class"):
+    def merge_cube(self, cube: "CubeDataClass"):
 
         """
         Merge another cube to the present one. It must have been aligned first (using align_cube)
@@ -2058,6 +2059,62 @@ class cube_data_class:
             )
         ).reshape(self.nx, self.ny)
 
+    def compute_mad_dask_apply_ufunc(self, shapefile_path, return_as='dataframe', var_name='mad'):
+        """
+        Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
+
+        Parameters:
+            cube (xr.DataArray or xr.Dataset): Input cube with dims (time, y, x).
+            shapefile_path (str): Path to shapefile.
+            return_as (str): 'dataframe' or 'cube'.
+            var_name (str): Variable name for new data in cube if return_as='cube'.
+
+        Returns:
+            pd.DataFrame or xr.Dataset
+        """
+        # Ensure data has Dask chunks (required for parallel computation)
+        if not self.chunks:
+            self = self.chunk({'time': 10})  # chunk along time for per-step ops
+
+        # Clip with shapefile (rioxarray handles reprojection and masking)
+        gdf = gpd.read_file(shapefile_path)
+        gdf = gdf.to_crs(cube.rio.crs)
+        masked = cube.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True)
+
+        # Select variable if Dataset
+        if isinstance(masked, xr.Dataset):
+            var = list(masked.data_vars)[0]
+            data = masked[var]
+        else:
+            data = masked
+
+        # Define MAD function (works on 2D np arrays: y, x)
+        def mad_2d(arr):
+            median = np.nanmedian(arr)
+            return np.nanmedian(np.abs(arr - median))
+
+        # Use apply_ufunc to apply MAD over time slices
+        mad = xr.apply_ufunc(
+            mad_2d,
+            data,
+            input_core_dims=[['y', 'x']],
+            output_core_dims=[[]],
+            vectorize=True,
+            dask='parallelized',
+            output_dtypes=[data.dtype],
+        )
+
+        mad.name = var_name
+
+        if return_as == 'dataframe':
+            return mad.compute().to_dataframe(name=var_name).reset_index()
+
+        elif return_as == 'cube':
+            return cube.assign({var_name: mad})
+
+        else:
+            raise ValueError("return_as must be 'dataframe' or 'cube'")
+
     # %% ======================================================================== #
     #                            WRITING RESULTS AS NETCDF                        #
     # =========================================================================%% #
@@ -2075,7 +2132,7 @@ class cube_data_class:
         smooth_filt: np.ndarray | None = None,
         return_result: bool = False,
         verbose: bool = False,
-    ) -> Union["cube_data_class", str]:
+    ) -> Union["CubeDataClass", str]:
 
         """
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
@@ -2120,7 +2177,7 @@ class cube_data_class:
             print("Not the same time dimension for every pixels")
             raise ValueError("Not the same time dimension for every pixels, cannot save cube")
 
-        cubenew = cube_data_class()
+        cubenew = CubeDataClass()
         time_variable = non_null_el["date1"] + (non_null_el["date2"] - non_null_el["date1"]) // 2
         cubenew.ds["date1"] = xr.DataArray(non_null_el["date1"], dims="mid_date", coords={"mid_date": time_variable})
         cubenew.ds["date1"].attrs = {
@@ -2318,7 +2375,7 @@ class cube_data_class:
         savepath: str | None = None,
         result_quality: list | None = None,
         verbose: bool = False,
-    ) -> Union["cube_data_class", str]:
+    ) -> Union["CubeDataClass", str]:
 
         """
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
@@ -2335,7 +2392,7 @@ class cube_data_class:
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
 
-        cubenew = cube_data_class()
+        cubenew = CubeDataClass()
         cubenew.ds["x"] = self.ds["x"]
         cubenew.ds["x"].attrs = {
             "standard_name": "projection_x_coordinate",
@@ -2442,7 +2499,7 @@ class cube_data_class:
         savepath: str | None = None,
         result_quality: list | None = None,
         verbose: bool = False,
-    ) -> Union["cube_data_class", str]:
+    ) -> Union["CubeDataClass", str]:
 
         """
         Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10

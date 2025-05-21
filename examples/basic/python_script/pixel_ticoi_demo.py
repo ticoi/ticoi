@@ -17,7 +17,7 @@ import time
 import numpy as np
 
 from ticoi.core import interpolation_core, inversion_core, visualization_core
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import visualisation_interpolation
 
 # %%========================================================================= #
@@ -141,7 +141,7 @@ if not os.path.exists(path_save):
 start = [time.time()]
 
 # Load the main cube
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]

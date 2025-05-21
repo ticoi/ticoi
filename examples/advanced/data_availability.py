@@ -65,7 +65,7 @@ from osgeo import gdal, osr
 from tqdm import tqdm
 
 from ticoi.core import process_blocks_refine
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
@@ -169,7 +169,7 @@ if load_pixel_process == "direct_process":
 start = [time.time()]
 
 # Load the first cube
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name, **load_kwargs)
 
 stop = [time.time()]

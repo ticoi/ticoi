@@ -25,7 +25,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 
 warnings.filterwarnings("ignore")
 
@@ -139,7 +139,7 @@ for common_parameter in ["proj", "delete_outliers", "regu", "solver"]:
 
 start = [time.time()]
 # Load the first cube
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name, **load_kwargs)
 
 # Prepare interpolation dates

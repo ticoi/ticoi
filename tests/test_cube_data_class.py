@@ -5,7 +5,7 @@ import pytest
 import xarray as xr
 
 from ticoi.cube_data_classxr import (
-    cube_data_class,  # Assuming cube_data_class is defined in your_module
+    CubeDataClass,  # Assuming cube_data_class is defined in your_module
 )
 
 
@@ -24,7 +24,7 @@ class Testclass_cube_data_xr:
     @pytest.fixture
     def cube_data_class_instance(self, filepath):
         """Loads the file into an instance of cube_data_class and returns it."""
-        cube = cube_data_class()  # Create an instance of cube_data_class
+        cube = CubeDataClass()  # Create an instance of cube_data_class
         cube.load(filepath=filepath, verbose=False)  # Load data
         return cube
 
@@ -34,7 +34,7 @@ class Testclass_cube_data_xr:
     )  # Note that indirect should specify which parameters are to be treated indirectly
     def test_load(self, cube_data_class_instance):
         """Tests that the cube_data_class_instance is properly loaded and contains expected data."""
-        assert isinstance(cube_data_class_instance, cube_data_class), "Should be an instance of cube_data_class"
+        assert isinstance(cube_data_class_instance, CubeDataClass), "Should be an instance of cube_data_class"
         assert isinstance(cube_data_class_instance.ds, xr.Dataset), "Should be an xarray dataset"
 
         required_variables = {

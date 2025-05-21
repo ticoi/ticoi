@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from ticoi.core import interpolation_core, inversion_core, visualization_core
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import (
     prepare_interpolation_date,
     visualisation_interpolation,
@@ -216,7 +216,7 @@ if "L_curve" in option_visual:
 
 start = [time.time()]
 
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name[0], **load_kwargs)
 
 # Prepare interpolation dates
