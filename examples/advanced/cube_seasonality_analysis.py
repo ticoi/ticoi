@@ -30,7 +30,7 @@ from scipy.optimize import curve_fit
 from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import prepare_interpolation_date
 
 # %%========================================================================= #
@@ -197,7 +197,7 @@ start, stop = [], []
 start.append(time.time())
 
 # Load the cube.s
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name if TICOI_process != "load" else cube_name["raw"], **load_kwargs)
 
 # Load raw data at pixels if required
@@ -269,7 +269,7 @@ elif TICOI_process == "direct_process":
     result = {"raw": [result[i][0] for i in range(len(result))], "interp": [result[i][1] for i in range(len(result))]}
 
 elif TICOI_process == "load":
-    cube_interp = cube_data_class()
+    cube_interp = CubeDataClass()
     cube_interp.load(cube_name["interp"], **load_kwargs)
 
     print("[TICOI processing] Loading TICOI data...")

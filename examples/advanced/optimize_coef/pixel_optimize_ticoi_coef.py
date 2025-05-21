@@ -18,7 +18,7 @@ import sklearn.metrics as sm
 import xarray as xr
 
 from ticoi.core import interpolation_to_data, inversion_core
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.utils import optimize_coef
 
 # %%===================================================================== #
@@ -198,11 +198,11 @@ if not os.path.exists(path_save):
 start = [time.time()]
 
 # In the first place, we load the data
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name, **load_kwargs)
 
 # Then we load the "ground truth"
-cube_gt = cube_data_class()
+cube_gt = CubeDataClass()
 cube_gt.load(cube_gt_name, **load_kwargs)
 
 stop = [time.time()]

@@ -22,7 +22,7 @@ from osgeo import gdal, osr
 from tqdm import tqdm
 
 from ticoi.core import chunk_to_block, load_block
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.optimize_coefficient_functions import *
 from ticoi.utils import optimize_coef
 
@@ -227,7 +227,7 @@ if not os.path.exists(path_save):
 start = [time.time()]
 
 # In the first place, we load the data
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name, **load_kwargs)
 
 flag = None
@@ -237,7 +237,7 @@ if assign_flag:
 cube_gt = None
 if optimization_method == "ground_truth":
     # We load the "ground truth" cube
-    cube_gt = cube_data_class()
+    cube_gt = CubeDataClass()
     cube_gt.load(cube_gt_name, **load_kwargs)
 
 stop = [time.time()]
