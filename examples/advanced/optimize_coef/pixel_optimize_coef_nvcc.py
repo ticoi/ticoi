@@ -22,7 +22,6 @@ import pandas as pd
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import (
-    prepare_interpolation_date,
     visualisation_interpolation,
 )
 
@@ -220,7 +219,7 @@ cube = CubeDataClass()
 cube.load(cube_name[0], **load_kwargs)
 
 # Prepare interpolation dates
-first_date_interpol, last_date_interpol = prepare_interpolation_date(cube)
+first_date_interpol, last_date_interpol = cube.prepare_interpolation_date()
 interpolation_kwargs.update({"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol})
 
 stop = [time.time()]

@@ -32,6 +32,7 @@ from pyproj import CRS, Proj, Transformer
 from rasterio.features import rasterize
 from tqdm import tqdm
 import geopandas as gpd
+from functools import reduce
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
@@ -871,7 +872,7 @@ class CubeDataClass:
         """
 
         self.ds = self.ds.unify_chunks()
-        if self.ds.chunksizes[time_dim] != (self.nz,):
+        if self.ds.chunksizes[time_dim] != (self.nz,):#no chunk in time
             self.ds = self.ds.chunk({time_dim: self.nz})
 
         if not self.is_TICO:
@@ -884,6 +885,8 @@ class CubeDataClass:
             if "errorx" not in self.ds.variables:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
+
+        if self.ds.rio.write_crs: self.ds = self.ds.rio.write_crs(self.ds.proj4) #add the crs to the xarray dataset if missing
 
     def prepare_interpolation_date(
         self,
@@ -2059,58 +2062,112 @@ class CubeDataClass:
             )
         ).reshape(self.nx, self.ny)
 
-    def compute_mad_dask_apply_ufunc(self, shapefile_path, return_as='dataframe', var_name='mad'):
+    def compute_med_stable_areas(self, shapefile_path, return_as='dataframe', stat_name='med', var_list = ['vx', 'vy'], invert=True):
         """
         Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
 
         Parameters:
-            cube (xr.DataArray or xr.Dataset): Input cube with dims (time, y, x).
+
             shapefile_path (str): Path to shapefile.
             return_as (str): 'dataframe' or 'cube'.
-            var_name (str): Variable name for new data in cube if return_as='cube'.
+            stat_name (str): Base variable name for new data.
+            invert (bool): Whether to invert the shapefile mask.
 
         Returns:
             pd.DataFrame or xr.Dataset
         """
-        # Ensure data has Dask chunks (required for parallel computation)
-        if not self.chunks:
-            self = self.chunk({'time': 10})  # chunk along time for per-step ops
-
-        # Clip with shapefile (rioxarray handles reprojection and masking)
+        # Ensure data has Dask chunks
+        # self.ds = self.ds.chunk({'y': -1, 'x': -1, 'mid_date': 10})
+        print(var_list)
+        # Clip with shapefile
         gdf = gpd.read_file(shapefile_path)
-        gdf = gdf.to_crs(cube.rio.crs)
-        masked = cube.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True)
+        gdf = gdf.to_crs(self.ds.rio.crs)
+        masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
 
-        # Select variable if Dataset
-        if isinstance(masked, xr.Dataset):
-            var = list(masked.data_vars)[0]
-            data = masked[var]
+        print('Clipped')
+
+        # Return as DataFrame
+        if return_as == 'dataframe':
+            df_vx = masked['vx'].median(dim=["x", "y"]).compute().to_dataframe(name=f'{stat_name}_vx').reset_index()[['mid_date', f'{stat_name}_vx']]
+            df_vy = masked['vy'].median(dim=["x", "y"]).compute().to_dataframe(name=f'{stat_name}_vy').reset_index()[['mid_date', f'{stat_name}_vy']]
+            if len(var_list)== 3: df_v = masked[var_list[2]].median(dim=["x", "y"]).compute().to_dataframe(name=f'{stat_name}_v').reset_index()[['mid_date', f'{stat_name}_v']]
+
+            # Merge on time coordinate (e.g., 'mid_date')
+            if len(var_list)==3: merged_df = reduce(lambda left, right: pd.merge(left, right, on='mid_date', how='outer'), [df_vx,df_vy,df_v])
+            else: merged_df = pd.merge(df_vx, df_vy, on='mid_date')
+
+            return merged_df
+
+        # # Return as cube
+        # elif return_as == 'cube':
+        #     return self.assign({f'{stat_name}_vx': mad_results['vx'], f'{stat_name}_vy': mad_results['vy']})
+
         else:
-            data = masked
+            raise ValueError("return_as must be 'dataframe' or 'cube'")
 
-        # Define MAD function (works on 2D np arrays: y, x)
+
+    def compute_mad(self, shapefile_path, return_as='dataframe', stat_name='mad', var_list = ['vx', 'vy'], invert=True):
+        """
+        Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
+
+        Parameters:
+
+            shapefile_path (str): Path to shapefile.
+            return_as (str): 'dataframe' or 'cube'.
+            stat_name (str): Base variable name for new data.
+            invert (bool): Whether to invert the shapefile mask.
+
+        Returns:
+            pd.DataFrame or xr.Dataset
+        """
+        # Ensure data has Dask chunks
+        self.ds = self.ds.chunk({'y': -1, 'x': -1, 'mid_date': 10})
+        print(var_list)
+        # Clip with shapefile
+        gdf = gpd.read_file(shapefile_path)
+        gdf = gdf.to_crs(self.ds.rio.crs)
+        masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
+
+        print('Clipped')
+
+        # Define MAD function
         def mad_2d(arr):
             median = np.nanmedian(arr)
-            return np.nanmedian(np.abs(arr - median))
+            return 1.483 * np.nanmedian(np.abs(arr - median))
 
-        # Use apply_ufunc to apply MAD over time slices
-        mad = xr.apply_ufunc(
-            mad_2d,
-            data,
-            input_core_dims=[['y', 'x']],
-            output_core_dims=[[]],
-            vectorize=True,
-            dask='parallelized',
-            output_dtypes=[data.dtype],
-        )
+        mad_results = {}  # Store MAD DataArrays
 
-        mad.name = var_name
+        for var in var_list:
+            data = masked[var]
 
+            mad = xr.apply_ufunc(
+                mad_2d,
+                data,
+                input_core_dims=[['y', 'x']],
+                output_core_dims=[[]],
+                vectorize=True,
+                dask='parallelized',
+                output_dtypes=[data.dtype],
+            )
+
+            mad.name = f'{stat_name}_{var}'
+            mad_results[var] = mad
+
+        # Return as DataFrame
         if return_as == 'dataframe':
-            return mad.compute().to_dataframe(name=var_name).reset_index()
+            df_vx = mad_results['vx'].compute().to_dataframe(name=f'{stat_name}_vx').reset_index()[['mid_date', f'{stat_name}_vx']]
+            df_vy = mad_results['vy'].compute().to_dataframe(name=f'{stat_name}_vy').reset_index()[['mid_date', f'{stat_name}_vy']]
+            if len(var_list)== 3: df_v = mad_results[var_list[2]].compute().to_dataframe(name=f'{stat_name}_v').reset_index()[['mid_date', f'{stat_name}_v']]
 
+            # Merge on time coordinate (e.g., 'mid_date')
+            if len(var_list)==3: merged_df = reduce(lambda left, right: pd.merge(left, right, on='mid_date', how='outer'), [df_vx,df_vy,df_v])
+            else: merged_df = pd.merge(df_vx, df_vy, on='mid_date')
+
+            return merged_df
+
+        # Return as cube
         elif return_as == 'cube':
-            return cube.assign({var_name: mad})
+            return self.assign({f'{stat_name}_vx': mad_results['vx'], f'{stat_name}_vy': mad_results['vy']})
 
         else:
             raise ValueError("return_as must be 'dataframe' or 'cube'")
@@ -2516,6 +2573,8 @@ class CubeDataClass:
 
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
+
+        if self.ds.rio.write_crs: self.ds = self.ds.rio.write_crs(self.ds.proj4) #write the crs if it does not exist
 
         if result[0].columns[0] == "date1":
             self.write_result_ticoi(
