@@ -1103,9 +1103,7 @@ def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = F
     return blocks
 
 
-def load_block(
-    cube: CubeDataClass, x_start: int, x_end: int, y_start: int, y_end: int, flag: xr.Dataset | None = None
-):
+def load_block(cube: CubeDataClass, x_start: int, x_end: int, y_start: int, y_end: int, flag: xr.Dataset | None = None):
 
     """
     Persist a block in memory, i.e. load it in a distributed way.

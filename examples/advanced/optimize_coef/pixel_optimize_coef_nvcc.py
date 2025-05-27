@@ -21,9 +21,7 @@ import pandas as pd
 
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.interpolation_functions import (
-    visualisation_interpolation,
-)
+from ticoi.interpolation_functions import visualisation_interpolation
 
 warnings.filterwarnings("ignore")
 
