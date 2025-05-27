@@ -14,11 +14,13 @@ import os
 import time
 import warnings
 from datetime import date
+from functools import reduce
 from typing import List, Optional, Union
 
 import dask
 import dask.array as da
 import geopandas
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
@@ -42,7 +44,7 @@ from ticoi.mjd2date import mjd2date
 # =========================================================================%% #
 
 
-class cube_data_class:
+class CubeDataClass:
     def __init__(self, cube=None, ds=None):
 
         """
@@ -52,7 +54,7 @@ class cube_data_class:
         :param ds: [xr dataset | None] --- New dataset. If None, copy cube's dataset
         """
 
-        if not isinstance(cube, cube_data_class):
+        if not isinstance(cube, CubeDataClass):
             self.filedir = ""
             self.filename = ""
             self.nx = 250
@@ -737,7 +739,7 @@ class cube_data_class:
             "E. Ducasse": "time",
             "S. Leinss, L. Charrier": "mid_date",
             "IGE": "mid_date",
-        }
+        }  # dictionary to set the name of time_dimension for a given author
 
         if type(filepath) == list:  # Merge several cubes
             self.load(
@@ -755,7 +757,7 @@ class cube_data_class:
             )
 
             for n in range(1, len(filepath)):
-                cube2 = cube_data_class()
+                cube2 = CubeDataClass()
                 sub = [
                     self.ds["x"].min().values,
                     self.ds["x"].max().values,
@@ -811,7 +813,7 @@ class cube_data_class:
                         )
                         self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
 
-                elif filepath.split(".")[-1] == "zarr":
+                elif filepath.split(".")[-1] == "zarr":  # the is not rechunked
                     if chunks == {}:
                         chunks = "auto"  # Change the default value to auto
                     self.ds = xr.open_dataset(
@@ -870,7 +872,7 @@ class cube_data_class:
         """
 
         self.ds = self.ds.unify_chunks()
-        if self.ds.chunksizes[time_dim] != (self.nz,):
+        if self.ds.chunksizes[time_dim] != (self.nz,):  # no chunk in time
             self.ds = self.ds.chunk({time_dim: self.nz})
 
         if not self.is_TICO:
@@ -883,6 +885,9 @@ class cube_data_class:
             if "errorx" not in self.ds.variables:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
+
+        if self.ds.rio.write_crs:
+            self.ds = self.ds.rio.write_crs(self.ds.proj4)  # add the crs to the xarray dataset if missing
 
     def prepare_interpolation_date(
         self,
@@ -1071,7 +1076,7 @@ class cube_data_class:
         if proj == "int":
             data = self.ds.isel(x=i, y=j)[var_to_keep]
         else:
-            i, j = self.convert_coordinates(i, j, proj=proj)
+            i, j = self.convert_coordinates(i, j, proj=proj)  # convert the coordinates to the projection of the cube
             # Interpolate only necessary variables and drop NaN values
             if interp == "nearest":
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
@@ -1649,7 +1654,7 @@ class cube_data_class:
         cubes = []
         for s in range(n_split):
             if isinstance(dim, str):
-                cube = cube_data_class(
+                cube = CubeDataClass(
                     self,
                     self.ds.isel(
                         {
@@ -1667,7 +1672,7 @@ class cube_data_class:
                     print(f"Split cube saved at {savepath}{dim}_{s}.nc")
                 cubes.append(cube)
             elif isinstance(dim, list):
-                cube = cube_data_class(
+                cube = CubeDataClass(
                     self,
                     self.ds.isel(
                         {
@@ -1692,7 +1697,7 @@ class cube_data_class:
         new_proj: Optional[str] = None,
         new_res: Optional[float] = None,
         interp_method: str = "nearest",
-        cube_to_match: Optional["cube_data_class"] = None,
+        cube_to_match: Optional["CubeDataClass"] = None,
     ):
         """
         Repreject the cube_data_self to a given projection system, and (optionally) resample this cube to a given resolution.
@@ -1741,7 +1746,7 @@ class cube_data_class:
     def reproj_vel(
         self,
         new_proj: Optional[str] = None,
-        cube_to_match: Optional["cube_data_class"] = None,
+        cube_to_match: Optional["CubeDataClass"] = None,
         unit: int = 365,
         nb_cpu: int = 8,
     ):
@@ -1807,7 +1812,7 @@ class cube_data_class:
 
     def align_cube(
         self,
-        cube: "cube_data_class",
+        cube: "CubeDataClass",
         unit: int = 365,
         reproj_vel: bool = True,
         reproj_coord: bool = True,
@@ -1840,7 +1845,7 @@ class cube_data_class:
 
         return cube
 
-    def merge_cube(self, cube: "cube_data_class"):
+    def merge_cube(self, cube: "CubeDataClass"):
 
         """
         Merge another cube to the present one. It must have been aligned first (using align_cube)
@@ -2058,6 +2063,160 @@ class cube_data_class:
             )
         ).reshape(self.nx, self.ny)
 
+    def compute_med_stable_areas(
+        self, shapefile_path, return_as="dataframe", stat_name="med", var_list=["vx", "vy"], invert=True
+    ):
+        """
+        Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
+
+        Parameters:
+
+            shapefile_path (str): Path to shapefile.
+            return_as (str): 'dataframe' or 'cube'.
+            stat_name (str): Base variable name for new data.
+            invert (bool): Whether to invert the shapefile mask.
+
+        Returns:
+            pd.DataFrame or xr.Dataset
+        """
+        # Ensure data has Dask chunks
+        # self.ds = self.ds.chunk({'y': -1, 'x': -1, 'mid_date': 10})
+        print(var_list)
+        # Clip with shapefile
+        gdf = gpd.read_file(shapefile_path)
+        gdf = gdf.to_crs(self.ds.rio.crs)
+        masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
+
+        print("Clipped")
+
+        # Return as DataFrame
+        if return_as == "dataframe":
+            df_vx = (
+                masked["vx"]
+                .median(dim=["x", "y"])
+                .compute()
+                .to_dataframe(name=f"{stat_name}_vx")
+                .reset_index()[["mid_date", f"{stat_name}_vx"]]
+            )
+            df_vy = (
+                masked["vy"]
+                .median(dim=["x", "y"])
+                .compute()
+                .to_dataframe(name=f"{stat_name}_vy")
+                .reset_index()[["mid_date", f"{stat_name}_vy"]]
+            )
+            if len(var_list) == 3:
+                df_v = (
+                    masked[var_list[2]]
+                    .median(dim=["x", "y"])
+                    .compute()
+                    .to_dataframe(name=f"{stat_name}_v")
+                    .reset_index()[["mid_date", f"{stat_name}_v"]]
+                )
+
+            # Merge on time coordinate (e.g., 'mid_date')
+            if len(var_list) == 3:
+                merged_df = reduce(
+                    lambda left, right: pd.merge(left, right, on="mid_date", how="outer"), [df_vx, df_vy, df_v]
+                )
+            else:
+                merged_df = pd.merge(df_vx, df_vy, on="mid_date")
+
+            return merged_df
+
+        # # Return as cube
+        # elif return_as == 'cube':
+        #     return self.assign({f'{stat_name}_vx': mad_results['vx'], f'{stat_name}_vy': mad_results['vy']})
+
+        else:
+            raise ValueError("return_as must be 'dataframe' or 'cube'")
+
+    def compute_mad(self, shapefile_path, return_as="dataframe", stat_name="mad", var_list=["vx", "vy"], invert=True):
+        """
+        Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
+
+        Parameters:
+
+            shapefile_path (str): Path to shapefile.
+            return_as (str): 'dataframe' or 'cube'.
+            stat_name (str): Base variable name for new data.
+            invert (bool): Whether to invert the shapefile mask.
+
+        Returns:
+            pd.DataFrame or xr.Dataset
+        """
+        # Ensure data has Dask chunks
+        self.ds = self.ds.chunk({"y": -1, "x": -1, "mid_date": 10})
+        print(var_list)
+        # Clip with shapefile
+        gdf = gpd.read_file(shapefile_path)
+        gdf = gdf.to_crs(self.ds.rio.crs)
+        masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
+
+        print("Clipped")
+
+        # Define MAD function
+        def mad_2d(arr):
+            median = np.nanmedian(arr)
+            return 1.483 * np.nanmedian(np.abs(arr - median))
+
+        mad_results = {}  # Store MAD DataArrays
+
+        for var in var_list:
+            data = masked[var]
+
+            mad = xr.apply_ufunc(
+                mad_2d,
+                data,
+                input_core_dims=[["y", "x"]],
+                output_core_dims=[[]],
+                vectorize=True,
+                dask="parallelized",
+                output_dtypes=[data.dtype],
+            )
+
+            mad.name = f"{stat_name}_{var}"
+            mad_results[var] = mad
+
+        # Return as DataFrame
+        if return_as == "dataframe":
+            df_vx = (
+                mad_results["vx"]
+                .compute()
+                .to_dataframe(name=f"{stat_name}_vx")
+                .reset_index()[["mid_date", f"{stat_name}_vx"]]
+            )
+            df_vy = (
+                mad_results["vy"]
+                .compute()
+                .to_dataframe(name=f"{stat_name}_vy")
+                .reset_index()[["mid_date", f"{stat_name}_vy"]]
+            )
+            if len(var_list) == 3:
+                df_v = (
+                    mad_results[var_list[2]]
+                    .compute()
+                    .to_dataframe(name=f"{stat_name}_v")
+                    .reset_index()[["mid_date", f"{stat_name}_v"]]
+                )
+
+            # Merge on time coordinate (e.g., 'mid_date')
+            if len(var_list) == 3:
+                merged_df = reduce(
+                    lambda left, right: pd.merge(left, right, on="mid_date", how="outer"), [df_vx, df_vy, df_v]
+                )
+            else:
+                merged_df = pd.merge(df_vx, df_vy, on="mid_date")
+
+            return merged_df
+
+        # Return as cube
+        elif return_as == "cube":
+            return self.assign({f"{stat_name}_vx": mad_results["vx"], f"{stat_name}_vy": mad_results["vy"]})
+
+        else:
+            raise ValueError("return_as must be 'dataframe' or 'cube'")
+
     # %% ======================================================================== #
     #                            WRITING RESULTS AS NETCDF                        #
     # =========================================================================%% #
@@ -2075,7 +2234,7 @@ class cube_data_class:
         smooth_filt: np.ndarray | None = None,
         return_result: bool = False,
         verbose: bool = False,
-    ) -> Union["cube_data_class", str]:
+    ) -> Union["CubeDataClass", str]:
 
         """
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
@@ -2120,7 +2279,7 @@ class cube_data_class:
             print("Not the same time dimension for every pixels")
             raise ValueError("Not the same time dimension for every pixels, cannot save cube")
 
-        cubenew = cube_data_class()
+        cubenew = CubeDataClass()
         time_variable = non_null_el["date1"] + (non_null_el["date2"] - non_null_el["date1"]) // 2
         cubenew.ds["date1"] = xr.DataArray(non_null_el["date1"], dims="mid_date", coords={"mid_date": time_variable})
         cubenew.ds["date1"].attrs = {
@@ -2318,7 +2477,7 @@ class cube_data_class:
         savepath: str | None = None,
         result_quality: list | None = None,
         verbose: bool = False,
-    ) -> Union["cube_data_class", str]:
+    ) -> Union["CubeDataClass", str]:
 
         """
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
@@ -2335,7 +2494,7 @@ class cube_data_class:
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
 
-        cubenew = cube_data_class()
+        cubenew = CubeDataClass()
         cubenew.ds["x"] = self.ds["x"]
         cubenew.ds["x"].attrs = {
             "standard_name": "projection_x_coordinate",
@@ -2442,7 +2601,7 @@ class cube_data_class:
         savepath: str | None = None,
         result_quality: list | None = None,
         verbose: bool = False,
-    ) -> Union["cube_data_class", str]:
+    ) -> Union["CubeDataClass", str]:
 
         """
         Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
@@ -2459,6 +2618,9 @@ class cube_data_class:
 
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
+
+        if self.ds.rio.write_crs:
+            self.ds = self.ds.rio.write_crs(self.ds.proj4)  # write the crs if it does not exist
 
         if result[0].columns[0] == "date1":
             self.write_result_ticoi(

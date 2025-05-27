@@ -25,7 +25,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 
 warnings.filterwarnings("ignore")
 
@@ -52,9 +52,7 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 
 ## ------------------------------ Data selection --------------------------- ##
 current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
-# Navigate up to the root of your package (adjust the number of '..' as needed)
 package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
-
 cube_name = os.path.join(package_root, "test_data", "ITS_LIVE_Lowell_Lower_test.nc")  # path to our dataset
 path_save = os.path.join(package_root, "examples", "results", "cube") + "/"  # path where to save our results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
@@ -141,7 +139,7 @@ for common_parameter in ["proj", "delete_outliers", "regu", "solver"]:
 
 start = [time.time()]
 # Load the first cube
-cube = cube_data_class()
+cube = CubeDataClass()
 cube.load(cube_name, **load_kwargs)
 
 # Prepare interpolation dates

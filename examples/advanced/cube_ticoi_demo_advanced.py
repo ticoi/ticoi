@@ -27,7 +27,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import prepare_interpolation_date
 
 # %%========================================================================= #
@@ -176,7 +176,7 @@ if TICOI_process != "load" or (TICOI_process == "load" and type(cube_name) == di
     start.append(time.time())
 
     # Load the cube.s
-    cube = cube_data_class()
+    cube = CubeDataClass()
 
     if TICOI_process == "load" and type(cube_name) == dict:
         cube.load(cube_name["raw"], **load_kwargs)
@@ -255,7 +255,7 @@ elif TICOI_process == "direct_process":
 elif TICOI_process == "load":
     # Load interpolation results
     if (type(cube_name) == dict and "interp" in cube_name.keys()) or type(cube_name) == str:
-        cube_interp = cube_data_class()
+        cube_interp = CubeDataClass()
         cube_interp.load(cube_name["interp"] if type(cube_name) == dict else cube_name, **load_kwargs)
 
         if compute_result_load:

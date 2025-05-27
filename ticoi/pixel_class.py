@@ -676,6 +676,7 @@ class pixel_class:
         :param color: [str] [default is 'orange'] --- Color used for the plot
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
+        :param vminmax: List[int] [default is None] --- Min and max values for the y-axis of the plots
 
         :return fig, ax: Axis and Figure of the plot
         """
@@ -709,10 +710,15 @@ class pixel_class:
             zorder=1,
         )
         plt.subplots_adjust(bottom=0.2)
-        ax.legend(loc="lower left", bbox_to_anchor=(0.02, -0.2), fontsize=14)
+        ax.legend(loc="lower left", bbox_to_anchor=(0.02, -0.25), fontsize=14)
         ax.set_xlabel("Central dates", fontsize=14)
 
-        fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
+        if type_data == "obs":
+            fig.suptitle("Magnitude of raw data velocities", y=0.95, fontsize=16)
+        elif type_data == "invert":
+            fig.suptitle("Magnitude of inverted velocities", y=0.95, fontsize=16)
+        elif type_data == "interp":
+            fig.suptitle("Magnitude of interpolated velocities", y=0.95, fontsize=16)
 
         if self.show:
             plt.show(block=block_plot)
@@ -737,6 +743,7 @@ class pixel_class:
         :param type_data: [str] [default is 'invert'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param zoom_on_results: [bool] [default is False] --- Set the limites of the axis according to the results min and max
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
+        :param vminmax: List[int] [default is None] --- Min and max values for the y-axis of the plots
 
         :return fig, ax: Axis and Figure of the plots
         """
@@ -796,6 +803,7 @@ class pixel_class:
         :param cmap: [str] [default is 'viridis''] --- Color map used to mark the errors in the plots
         :param type_data: [str] [default is 'obs'] --- If 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting
+        :param vminmax: List[int] [default is None] --- Min and max values for the y-axis of the plots
 
         :return fig, ax: Axis and Figure of the plots
         """

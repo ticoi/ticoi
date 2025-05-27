@@ -17,7 +17,7 @@ import os
 import time
 import warnings
 
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.pixel_class import pixel_class
 
 # %%========================================================================= #
@@ -124,17 +124,17 @@ start.append(time.time())
 
 # Load the raw data
 if type(cube_name) == dict and "raw" in cube_name.keys():
-    cube = cube_data_class()
+    cube = CubeDataClass()
     cube.load(cube_name["raw"], **load_kwargs)
 
 # Load inversion results if given
 if type(cube_name) == dict and "invert" in cube_name.keys():
-    cube_invert = cube_data_class()
+    cube_invert = CubeDataClass()
     cube_invert.load(cube_name["invert"], **load_kwargs)
 
 # Load interpolation results
 if type(cube_name) == dict and "interp" in cube_name.keys():
-    cube_interp = cube_data_class()
+    cube_interp = CubeDataClass()
     cube_interp.load(cube_name["interp"] if type(cube_name) == dict else cube_name, **load_kwargs)
 
 stop.append(time.time())
