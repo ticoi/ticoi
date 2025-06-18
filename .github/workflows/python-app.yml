@@ -1,6 +1,3 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
 name: Python application
 
 on:
@@ -14,17 +11,14 @@ permissions:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    env:
+      MAMBA_ROOT_PREFIX: /home/runner/mamba
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
 
-    - name: Initiate empty environment
+    - name: Set up Python 3.10 and Miniconda (no env creation yet)
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-version: latest
@@ -32,29 +26,28 @@ jobs:
         use-mamba: true
         mamba-version: "2.0.5"
         channel-priority: strict
-        activate-environment: ticoi_env
+        activate-environment: false
         python-version: "3.10"
 
-  #GitHub Actions treats the cache key as different → it skips reusing an old conda env and builds a fresh one.
     - name: Get month for resetting cache
       id: get-date
       run: echo "cache_date=$(/bin/date -u '+%Y%m')" >> $GITHUB_ENV
       shell: bash
 
-  #Installing all conda dependencies (especially heavy ones like gdal, graphviz, numpy, etc.) is slow. This step avoids redoing that work every time.
     - name: Cache conda env
       uses: actions/cache@v4
       with:
-        path: ${{ env.CONDA }}/envs
-        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('dev-environment.yml') }}-${{ env.CACHE_NUMBER }}
+        path: /home/runner/mamba/envs
+        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('ticoi_env.yml') }}-${{ env.CACHE_NUMBER }}
       env:
         CACHE_NUMBER: 0
       id: cache
 
-    - name: Update environment (create or update ticoi_env)
+    - name: Create or update environment if cache miss
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         unset PROJ_DATA
-        mamba env update -n ticoi_env -f ticoi_env.yml
+        mamba env create -n ticoi_env -f ticoi_env.yml
 
     - name: Install project (inside env)
       run: mamba run -n ticoi_env pip install -e . --no-dependencies

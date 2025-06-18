@@ -31,7 +31,7 @@ from joblib import Parallel, delayed
 from scipy import stats
 from tqdm import tqdm
 
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
     set_function_for_interpolation,
@@ -892,7 +892,7 @@ def interpolation_to_data(
 
 
 def process(
-    cube: cube_data_class,
+    cube: CubeDataClass,
     i: float | int,
     j: float | int,
     path_save,
@@ -1049,7 +1049,7 @@ def process(
     return returned_list if len(returned_list) > 0 else None
 
 
-def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool = False):
+def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = False):
 
     """
     Split a dataset in blocks of a given size (maximum).
@@ -1103,9 +1103,7 @@ def chunk_to_block(cube: cube_data_class, block_size: float = 1, verbose: bool =
     return blocks
 
 
-def load_block(
-    cube: cube_data_class, x_start: int, x_end: int, y_start: int, y_end: int, flag: xr.Dataset | None = None
-):
+def load_block(cube: CubeDataClass, x_start: int, x_end: int, y_start: int, y_end: int, flag: xr.Dataset | None = None):
 
     """
     Persist a block in memory, i.e. load it in a distributed way.
@@ -1118,7 +1116,7 @@ def load_block(
     """
 
     start = time.time()
-    block = cube_data_class()
+    block = CubeDataClass()
     block.ds = cube.ds.isel(x=slice(x_start, x_end), y=slice(y_start, y_end))
     block.ds = block.ds.persist()
     block.update_dimension()
@@ -1133,7 +1131,7 @@ def load_block(
 
 
 def process_blocks_refine(
-    cube: cube_data_class,
+    cube: CubeDataClass,
     nb_cpu: int = 8,
     block_size: float = 0.5,
     returned: list | str = "interp",
@@ -1158,7 +1156,7 @@ def process_blocks_refine(
     """
 
     async def process_block(
-        block: cube_data_class, returned: list | str = "interp", nb_cpu: int = 8, verbose: bool = False
+        block: CubeDataClass, returned: list | str = "interp", nb_cpu: int = 8, verbose: bool = False
     ):
         xy_values = itertools.product(block.ds["x"].values, block.ds["y"].values)
         # Return only raw data => no need to filter the cube
@@ -1283,7 +1281,7 @@ def visualization_core(
     cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
     figsize: tuple[int, int] = (10, 6),
-    vminmax=None,
+    vminmax: List[int] = None,
 ):
 
     r"""
@@ -1301,6 +1299,7 @@ def visualization_core(
     :param cmap: [str] [default is 'viridis''] --- color map used in the plots
     :param colors: [list of str] [default is ['blueviolet', 'orange']] --- List of colors to used for plotting the time series
     :param figsize: tuple[int, int] [default is (10,6)] --- Size of the figures
+    :param vminmax: List[int] [default is None] --- Min and max values for the y-axis of the plots
     """
 
     pixel_object = pixel_class()
@@ -1310,10 +1309,12 @@ def visualization_core(
         "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
         "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)),
         "obs_vxvy_quality": (lambda pix: pix.plot_vx_vy_quality(cmap=cmap, type_data="obs")),
+        "invertxy": (lambda pix: pix.plot_vx_vy(color=colors[1])),
         "invertxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors)),
         "obsfiltxy_overlaid": (lambda pix: pix.plot_vx_vy_overlaid(colors=colors, type_data="obs_filt")),
         "obsfiltvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, type_data="obs_filt", vminmax=vminmax)),
-        "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors)),
+        "invertvv_overlaid": (lambda pix: pix.plot_vv_overlaid(colors=colors, vminmax=vminmax)),
+        "invertvv": (lambda pix: pix.plot_vv(color=colors[1], vminmax=vminmax)),
         "invert_vv_quality": (lambda pix: pix.plot_vv_quality(cmap=cmap, type_data="invert")),
         "residuals": (lambda pix: pix.plot_residuals(log_scale=log_scale)),
         "xcount_xy": (lambda pix: pix.plot_xcount_vx_vy(cmap=cmap)),
@@ -1328,7 +1329,7 @@ def visualization_core(
 
 
 def save_cube_parameters(
-    cube: "ticoi.cube_data_classxr.cube_data_class",
+    cube: "ticoi.cube_data_classxr.CubeDataClass",
     load_kwargs: dict,
     preData_kwargs: dict,
     inversion_kwargs: dict,
@@ -1411,7 +1412,7 @@ def ticoi_one_pixel(
 
     if already_loaded is None:
         # Load the main cube
-        cube = cube_data_class()
+        cube = CubeDataClass()
         cube.load(cube_name, **load_kwargs)
 
         if verbose:

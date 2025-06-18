@@ -12,7 +12,7 @@ from osgeo import gdal, osr
 from tqdm import tqdm
 
 from ticoi.core import chunk_to_block, load_block
-from ticoi.cube_data_classxr import cube_data_class
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.utils import optimize_coef
 
 
