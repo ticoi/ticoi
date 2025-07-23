@@ -13,6 +13,7 @@ dependencies:
   - jdcal
   - matplotlib=3.*
   - netcdf4
+  - notebook
   - numba=0.*
   - numpy=1.*
   - pandas
