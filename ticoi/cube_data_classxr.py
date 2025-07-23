@@ -1002,7 +1002,7 @@ class CubeDataClass:
 
         return np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
 
-    def EPSG_code(self) -> int:
+    def EPSG_code_(self) -> int:
         """
         Accessor to the EPSG code of the dataset.
         """
