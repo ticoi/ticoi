@@ -20,7 +20,7 @@ import ticoi.pixel_class
 # =========================================================================%% #
 
 
-class dataframe_data:
+class DataframeData:
 
     """Object to define a pd.Dataframe storing velocity observations"""
 
@@ -87,7 +87,7 @@ class dataframe_data:
 # =========================================================================%% #
 
 
-class pixel_class:
+class PixelClass:
 
     """Object class to store the data on a given pixel"""
 
@@ -139,17 +139,17 @@ class pixel_class:
         """
 
         if type_data == "invert":
-            self.datainvert = dataframe_data(dataf_ilf)
+            self.datainvert = DataframeData(dataf_ilf)
             self.datainvert.dataf = self.datainvert.dataf.rename(columns={"error_x": "errorx", "error_y": "errory"})
             datatemp = self.datainvert
         elif type_data == "interp":
-            self.datainterp = dataframe_data(dataf_ilf)
+            self.datainterp = DataframeData(dataf_ilf)
             datatemp = self.datainterp
         elif type_data == "obs":
-            self.dataobs = dataframe_data(dataf_ilf)
+            self.dataobs = DataframeData(dataf_ilf)
             datatemp = self.dataobs
         elif type_data == "obs_filt":
-            self.dataobsfilt = dataframe_data(dataf_ilf)
+            self.dataobsfilt = DataframeData(dataf_ilf)
             datatemp = self.dataobsfilt
         else:
             raise ValueError(
@@ -267,7 +267,7 @@ class pixel_class:
         conversion = 365 if self.unit == "m/y" else 1
         return conversion
 
-    def get_direction(self, data: "ticoi.pixel_class.dataframe_data") -> (np.array, np.array):  # type: ignore
+    def get_direction(self, data: "ticoi.PixelClass.DataframeData") -> (np.array, np.array):  # type: ignore
 
         """
         Get the direction of the provided data

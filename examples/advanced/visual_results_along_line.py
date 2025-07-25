@@ -9,7 +9,7 @@ import warnings
 from pyproj import Transformer
 
 from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.pixel_class import pixel_class
+from ticoi.pixel_class import PixelClass
 from ticoi.utils import draw_heatmap, points_of_shp_line
 
 # %%========================================================================= #
@@ -222,7 +222,7 @@ for n, (i, j) in enumerate(
     print(result.shape[0])
     os.mkdir(f"{path_save}{n*distance_plots}/")
 
-    pixel_object = pixel_class()
+    pixel_object = PixelClass()
     pixel_object.load(
         [result, data_raw],
         save=save,

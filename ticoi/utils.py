@@ -7,7 +7,6 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import inspect
 import json
 import math as m
 import urllib.request
@@ -161,7 +160,6 @@ def draw_heatmap(
     """
     Draw an hovmoller diagram (heatmap).
 
-    :param line_df_vv: pd dataframe, heatmap values
     :param savepath: str or None, path where to save the figure. If None, the figure is not saved
     :param vminmax: [int, int] or [False, False] : min and max values used for the plot
     :param name: str, name of the figure to save

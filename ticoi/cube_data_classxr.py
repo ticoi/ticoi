@@ -9,13 +9,13 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
+import datetime
 import itertools
 import os
 import time
 import warnings
-from datetime import date
 from functools import reduce
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import dask
 import dask.array as da
@@ -66,7 +66,7 @@ class CubeDataClass:
             self.resolution = 50
             self.is_TICO = False
 
-        else:
+        else:  # load the cube information
             self.filedir = cube.filedir
             self.filename = cube.filename
             self.nx = cube.nx
@@ -846,6 +846,7 @@ class CubeDataClass:
                 )
 
                 time_dim = "mid_date" if not self.is_TICO else "second_date"
+
                 # Rechunk again if the size of the cube is changed:
                 if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
                     tc, yc, xc = self.determine_optimal_chunk_size(
@@ -859,6 +860,9 @@ class CubeDataClass:
 
                 if mask is not None:
                     self.mask_cube(mask)
+
+                if self.ds.rio.crs is None:
+                    self.ds.rio.write_crs(self.ds.proj4)
 
                 if verbose:
                     print(f"[Data loading] Author : {self.ds.author}")
@@ -958,7 +962,7 @@ class CubeDataClass:
         else:
             return temp.values
 
-    def date1_(self):
+    def date1_(self) -> np.array:
 
         """
         Accessor to the first dates of acquisition.
@@ -968,7 +972,7 @@ class CubeDataClass:
 
         return np.asarray(self.ds["date1"]).astype("datetime64[D]")
 
-    def date2_(self):
+    def date2_(self) -> np.array:
 
         """
         Accessor to the second dates of acquisition.
@@ -978,7 +982,7 @@ class CubeDataClass:
 
         return np.asarray(self.ds["date2"]).astype("datetime64[D]")
 
-    def datec_(self):
+    def datec_(self) -> np.array:
 
         """
         Accessor to the central dates of the data.
@@ -988,7 +992,7 @@ class CubeDataClass:
 
         return (self.date1_() + self.temp_base_(return_list=False, format_date="D") // 2).astype("datetime64[D]")
 
-    def vv_(self):
+    def vv_(self) -> np.array:
 
         """
         Accessor to the magnitude of the velocities.
@@ -997,6 +1001,13 @@ class CubeDataClass:
         """
 
         return np.sqrt(self.ds["vx"] ** 2 + self.ds["vy"] ** 2)
+
+    def EPSG_code_(self) -> int:
+        """
+        Accessor to the EPSG code of the dataset.
+        """
+
+        return self.ds.rio.crs.to_epsg()
 
     # %% ==================================================================== #
     #                         PIXEL LOADING METHODS                           #
@@ -2427,7 +2438,7 @@ class CubeDataClass:
             "unit": "days",
             "description": "the date in the middle of the two dates between which a velocity is computed",
         }
-        cubenew.ds["grid_mapping"] = self.ds.proj4
+        cubenew.ds["grid_mapping"] = self.ds.proj4  # to match CF convention
         cubenew.ds.attrs = {
             "Conventions": "CF-1.10",
             "title": "Ice velocity time series",
@@ -2437,7 +2448,7 @@ class CubeDataClass:
             "sensor": sensor,
             "proj4": self.ds.proj4,
             "author": "L. Charrier",
-            "history": f"Created on the {date.today()}",
+            "history": f"Created on the {datetime.date.today()}",
         }
         cubenew.nx = self.nx
         cubenew.ny = self.ny
@@ -2569,7 +2580,7 @@ class CubeDataClass:
             "sensor": sensor,
             "proj4": self.ds.proj4,
             "author": "L. Charrier",
-            "history": f"Created on the {date.today()}",
+            "history": f"Created on the {datetime.date.today()}",
         }
         cubenew.nx = self.nx
         cubenew.ny = self.ny
@@ -2577,7 +2588,7 @@ class CubeDataClass:
         cubenew.filename = filename
 
         if savepath is not None:  # save the dataset to a netcdf file
-            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
+            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)  # set the projection
             encoding = {
                 "dx": {"zlib": True, "complevel": 5, "dtype": "float32"},
                 "dy": {"zlib": True, "complevel": 5, "dtype": "float32"},
