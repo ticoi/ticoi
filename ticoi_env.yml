@@ -7,8 +7,8 @@ dependencies:
   - dask
   - fiona=1.9
   - gdal
-  - glaft
   - geopandas>=0.10.0
+  - glaft
   - h5netcdf
   - h5py>=3.11
   - jdcal
