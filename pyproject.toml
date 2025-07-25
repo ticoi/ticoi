@@ -16,7 +16,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "python==3.11",
   "aiohttp",
   "dask",
   "fiona==1.9",
