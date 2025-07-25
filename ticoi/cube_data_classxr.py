@@ -46,8 +46,8 @@ from ticoi.mjd2date import mjd2date
 BASE_CONFIGS = {
     'velocity': {
         'suffixes': ['x', 'y', 'z', 'h'], 'directions': ['East/West', 'North/South', 'Up/Down', 'nSPF'],
-        'unit': 'm/y', 'var_prefix': 'v', 'final_var_tpl': 'v{dim}',
-        'long_name_tpl': 'velocity in the {direction} direction [m/y]'
+        'unit': 'm year-1', 'var_prefix': 'v', 'final_var_tpl': 'v{dim}',
+        'long_name_tpl': 'velocity in the {direction} direction [m year-1]'
     },
     'displacement': {
         'suffixes': ['x', 'y', 'z', 'h'], 'directions': ['East/West', 'North/South', 'Up/Down', 'nSPF'],
@@ -60,9 +60,9 @@ BASE_CONFIGS = {
         'long_name_tpl': 'number of Y observations contributing to X estimation ({dim_upper})'
     },
     'error': {
-        'flag': 'Error_propagation', 'suffixes': ['x', 'y', 'z', 'h'], 'unit': 'm/y',
+        'flag': 'Error_propagation', 'suffixes': ['x', 'y', 'z', 'h'], 'unit': 'm year-1',
         'var_prefix': 'error_', 'final_var_tpl': 'error_{dim}',
-        'long_name_tpl': 'Error propagated for the displacement in {dim_upper} direction [m/y]'
+        'long_name_tpl': 'Error propagated for the displacement in {dim_upper} direction [m year-1]'
     }
 }
 
@@ -1932,9 +1932,9 @@ class CubeDataClass:
 
         :return: xr dataset, with vx_mean, the mean of vx and vy_mean the mean of vy
         """
-
-        vx_mean = self.ds["vx"].mean(dim="mid_date")
-        vy_mean = self.ds["vy"].mean(dim="mid_date")
+        time_dim = "mid_date" if "mid_date" in self.ds.dims else "time"
+        vx_mean = self.ds["vx"].mean(dim=time_dim)
+        vy_mean = self.ds["vy"].mean(dim=time_dim)
         dico_variable = {"vx": vx_mean, "vx": vy_mean}
         if "vv" in return_variable:
             vv_mean = np.sqrt(vx_mean**2 + vy_mean**2)
@@ -2261,435 +2261,12 @@ class CubeDataClass:
     #                            WRITING RESULTS AS NETCDF                        #
     # =========================================================================%% #
 
-    def write_result_ticoi(
-        self,
-        result: list,
-        source: str,
-        sensor: str,
-        filename: str = "Time_series",
-        savepath: str | None = None,
-        result_quality: list | None = None,
-        smooth_res: bool = False,
-        smooth_window_size: int = 3,
-        smooth_filt: np.ndarray | None = None,
-        return_result: bool = False,
-        verbose: bool = False,
-    ) -> Union["CubeDataClass", str]:
-
-        """
-        Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
-        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
-        units has been changed to unit, since it was producing an error while writing the netcdf file
-
-        :param result: [list] --- List of pd xarray, resulut from the TICOI method
-        :param source: [str] --- Name of the source
-        :param sensor: [str] --- Sensors which have been used
-        :param filename: [str] [default is Time_series] --- Filename of file to saved
-        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
-        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
-
-        :return cubenew: [cube_data_class] --- New cube where the results are saved
-        """
-
-        # TODO: need to check the order of dimension: do we need to transpose?
-        non_null_results = [
-            result[i * self.ny + j]["vx"].shape[0]
-            for i in range(self.nx)
-            for j in range(self.ny)
-            if result[i * self.ny + j]["vx"].shape[0] != 0
-        ]  # Temporal size of the results which are not empty
-        first_date_results = [
-            result[i * self.ny + j]["date1"].iloc[0]
-            for i in range(self.nx)
-            for j in range(self.ny)
-            if result[i * self.ny + j]["vx"].shape[0] != 0
-        ]  # Temporal size of the results which are not empty
-        if len(non_null_results) == 0:
-            print("[Writing results] There is no results to write and/or save")
-            return "There is no results to write and/or save"
-
-        if np.min(non_null_results) == np.max(non_null_results) and all(
-            element == first_date_results[0] for element in first_date_results
-        ):  # If the dates of the results are the same for every pixel
-            non_null_el = next(
-                (element for element in result if element.shape[0] != 0), None
-            )  # First result array which is not empty, and have size corresponding to the time period common between every pixel
-            del non_null_results, first_date_results
-        else:
-            print("Not the same time dimension for every pixels")
-            raise ValueError("Not the same time dimension for every pixels, cannot save cube")
-
-        cubenew = CubeDataClass()
-        time_variable = non_null_el["date1"] + (non_null_el["date2"] - non_null_el["date1"]) // 2
-        cubenew.ds["date1"] = xr.DataArray(non_null_el["date1"], dims="mid_date", coords={"mid_date": time_variable})
-        cubenew.ds["date1"].attrs = {
-            "standard_name": "date1",
-            "unit": "days",
-            "long_name": "first date between which the velocity is estimated",
-        }
-        cubenew.ds["date2"] = xr.DataArray(non_null_el["date2"], dims="mid_date", coords={"mid_date": time_variable})
-        cubenew.ds["date2"].attrs = {
-            "standard_name": "date2",
-            "unit": "days",
-            "long_name": "second date between which the velocity is estimated",
-        }
-
-        long_name = [
-            "velocity in the East/West direction [m/y]",
-            "velocity in the North/South direction [m/y]",
-            "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction",
-            "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction",
-            "Error propagated for the displacement in the direction Est/West [m/y]",
-            "Error propagated for  the displacement in the direction North/South [m/y]",
-        ]
-        short_name = ["x_velocity", "y_velocity", "xcount_x", "xcount_y", "error_x", "error_y"]
-
-        variables = ["vx", "vy"]
-        if result_quality is not None:
-            if "X_contribution" in result_quality:
-                variables += ["xcount_x", "xcount_y"]
-            if "Error_propagation" in result_quality:
-                variables += ["error_x", "error_y"]
-
-        for i, var in enumerate(variables):
-            result_arr = np.array(
-                [
-                    result[i * self.ny + j][var]
-                    if result[i * self.ny + j][var].shape[0] != 0
-                    else pd.Series(np.full(non_null_el.shape[0], np.nan))
-                    for i in range(self.nx)
-                    for j in range(self.ny)
-                ]
-            )
-            result_arr = result_arr.reshape((self.nx, self.ny, len(time_variable)))
-
-            # Spatially smooth (apply a convolutional filter on) the data
-            if smooth_res:
-                result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
-                for x in range(self.nx):
-                    for y in range(self.ny):
-                        result[x * self.ny + y][var] = result_arr[x, y, :]
-
-            cubenew.ds[var] = xr.DataArray(
-                result_arr,
-                dims=["x", "y", "mid_date"],
-                coords={"x": self.ds["x"], "y": self.ds["y"], "mid_date": time_variable},
-            )
-            cubenew.ds[var] = cubenew.ds[var].transpose("mid_date", "y", "x")
-            cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": "m/y", "long_name": long_name[i]}
-
-        if result_quality is not None and "Norm_residual" in result_quality:
-            long_name = [
-                "Residual from the inversion AX=Y, where Y is the displacement in the direction Est/West [m]",
-                "Residual from the regularisation term for the displacement in the direction Est/West [m]",
-                "Residual from the inversion AX=Y, where Y is the displacement in the direction North/South [m]",
-                "Residual from the regularisation term for the displacement in the direction North/South [m]",
-            ]
-            short_name = ["ResidualAXY_dx", "ResidualRegu_dx", "ResidualAXY_dy", "ResidualRegu_dy"]
-            for k in range(0, 4):
-                result_arr = np.array(
-                    [
-                        result[i * self.ny + j]["NormR"][k]
-                        if result[i * self.ny + j]["NormR"].shape[0] != 0
-                        else np.nan
-                        for i in range(self.nx)
-                        for j in range(self.ny)
-                    ]
-                )
-                result_arr = result_arr.reshape((self.nx, self.ny))
-
-                # Spatially smooth (apply a convolutional filter on) the data
-                if smooth_res:
-                    result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
-                    for x in range(self.nx):
-                        for y in range(self.ny):
-                            result[x * self.ny + y][var] = result_arr[x, y, :]
-
-                cubenew.ds[short_name[k]] = xr.DataArray(
-                    result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
-                )
-                cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose("y", "x")
-                cubenew.ds[short_name[k]].attrs = {
-                    "standard_name": short_name[k],
-                    "unit": "m",
-                    "long_name": long_name[k],
-                }
-
-        if result_quality is not None and "Error_propagation" in result_quality:
-            long_name = ["Sigma0 Est/West", "Sigma0 North/South [m]", "T value Est/West", "T value North/South"]
-            short_name = ["sigma0_x", "sigma0_y", "t_valuex", "t_valuey"]
-            for k, var in enumerate(short_name):
-
-                result_arr = np.array(
-                    [
-                        result[i * self.ny + j]["sigma0"][~np.isnan(result[i * self.ny + j]["sigma0"])].iloc[k]
-                        if result[i * self.ny + j]["sigma0"].shape[0] != 0
-                        else np.nan
-                        for i in range(self.nx)
-                        for j in range(self.ny)
-                    ]
-                )
-                result_arr = result_arr.reshape((self.nx, self.ny))
-
-                # Spatially smooth (apply a convolutional filter on) the data
-                if smooth_res:
-                    result_arr = smooth_results(result_arr, window_size=smooth_window_size, filt=smooth_filt)
-                    for x in range(self.nx):
-                        for y in range(self.ny):
-                            result[x * self.ny + y][var] = result_arr[x, y, :]
-
-                cubenew.ds[short_name[k]] = xr.DataArray(
-                    result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
-                )
-                cubenew.ds[short_name[k]] = cubenew.ds[short_name[k]].transpose("y", "x")
-                cubenew.ds[short_name[k]].attrs = {
-                    "standard_name": short_name[k],
-                    "unit": "m",
-                    "long_name": long_name[k],
-                }
-        del non_null_el, long_name, result_arr
-
-        cubenew.ds["x"] = self.ds["x"]
-        cubenew.ds["x"].attrs = {
-            "standard_name": "projection_x_coordinate",
-            "unit": "m",
-            "long_name": "x coordinate of projection",
-        }
-        cubenew.ds["y"] = self.ds["y"]
-        cubenew.ds["y"].attrs = {
-            "standard_name": "projection_y_coordinate",
-            "unit": "m",
-            "long_name": "y coordinate of projection",
-        }
-        cubenew.ds["mid_date"] = time_variable.to_numpy()
-        cubenew.ds["mid_date"].attrs = {
-            "standard_name": "central_date",
-            "unit": "days",
-            "description": "the date in the middle of the two dates between which a velocity is computed",
-        }
-        cubenew.ds["grid_mapping"] = self.ds.proj4
-        cubenew.ds.attrs = {
-            "Conventions": "CF-1.10",
-            "title": "Ice velocity time series",
-            "institution": "Université Grenoble Alpes",
-            "references": "Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing, 60, 1-10.\n Charrier, L., Yan, Y., Koeniguer, E. C., Trouve, E., Mouginot, J., & Millan, R. (2022, June). Fusion of multi-temporal and multi-sensor ice velocity observations. In International Annals of the Photogrammetry, Remote Sensing and Spatial Information Sciences.",
-            "source": source,
-            "sensor": sensor,
-            "proj4": self.ds.proj4,
-            "author": "L. Charrier",
-            "history": f"Created on the {date.today()}",
-        }
-        cubenew.nx = self.nx
-        cubenew.ny = self.ny
-        cubenew.nz = cubenew.ds["mid_date"].sizes["mid_date"]
-        cubenew.filename = filename
-
-        if savepath is not None:  # Save the dataset to a netcdf file
-            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
-
-            encoding = {
-                "vx": {"zlib": True, "complevel": 5, "dtype": "float32"},
-                "vy": {"zlib": True, "complevel": 5, "dtype": "float32"},
-            }
-            if result_quality is not None:
-                if "X_contribution" in result_quality:
-                    encoding["xcount_x"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
-                    encoding["xcount_y"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
-                if "Error_propagation" in result_quality:
-                    encoding["error_x"] = {"zlib": True, "complevel": 5, "dtype": "float32"}
-                    encoding["error_y"] = {"zlib": True, "complevel": 5, "dtype": "float32"}
-            start = time.time()
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
-            if verbose:
-                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
-
-        # if return_result:
-        #     return cubenew, result
-        #
-        return cubenew
-
-    def write_result_tico(
-        self,
-        result: list,
-        source: str,
-        sensor: str,
-        filename: str = "Time_series",
-        savepath: str | None = None,
-        result_quality: list | None = None,
-        verbose: bool = False,
-    ) -> Union["CubeDataClass", str]:
-
-        """
-        Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.10
-        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
-        units has been changed to unit, since it was producing an error while wirtting the netcdf file
-
-        :param result: [list] --- List of pd xarray, resulut from the TICOI method
-        :param source: [str] --- Name of the source
-        :param sensor: [str] --- Sensors which have been used
-        :param filename: [str] [default is Time_series] --- Filename of file to saved
-        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
-        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
-
-        :return cubenew: [cube_data_class] --- New cube where the results are saved
-        """
-
-        cubenew = CubeDataClass()
-        cubenew.ds["x"] = self.ds["x"]
-        cubenew.ds["x"].attrs = {
-            "standard_name": "projection_x_coordinate",
-            "unit": "m",
-            "long_name": "x coordinate of projection",
-        }
-        cubenew.ds["y"] = self.ds["y"]
-        cubenew.ds["y"].attrs = {
-            "standard_name": "projection_y_coordinate",
-            "unit": "m",
-            "long_name": "y coordinate of projection",
-        }
-
-        long_name = [
-            "displacement in the East/West direction [m]",
-            "displacement in the North/South direction [m]",
-            "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the East/West direction",
-            "number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)) in the North/South direction",
-        ]
-        short_name = ["x_displacement", "y_displacement", "xcount_x", "xcount_y"]
-        unit = ["m", "m", "no unit", "no unit"]
-
-        start = time.time()
-        second_date_list = [
-            np.datetime64(date, "s") for date in sorted({date for df in result for date in df["date2"]})
-        ]
-
-        df_list = Parallel(n_jobs=-1)(delayed(reconstruct_common_ref)(df, second_date_list) for df in result)
-
-        print(f"[Writing result] Building cumulative displacement time series took: {round(time.time() - start, 3)} s")
-
-        # List of the reference date, i.e. the first date of the cumulative displacement time series
-        result_arr = np.array([df_list[i]["Ref_date"][0] for i in range(len(df_list))]).reshape((self.nx, self.ny))
-        cubenew.ds["reference_date"] = xr.DataArray(
-            result_arr, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
-        )
-        cubenew.ds["reference_date"].attrs = {
-            "standard_name": "reference_date",
-            "unit": "days",
-            "description": "first date of the cumulative displacement time series",
-        }
-
-        # name of variable to store
-        if result_quality is not None and "X_contribution" in result_quality:
-            variables = ["dx", "dy", "xcount_x", "xcount_y"]
-        else:
-            variables = ["dx", "dy"]
-
-        warnings.filterwarnings(
-            "ignore", category=UserWarning
-        )  # to avoid the warning  UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.
-        # Store each variable
-        big_df = pd.concat(df_list, keys=range(len(df_list)))
-        del df_list
-
-        for i, var in enumerate(variables):
-            result_arr = big_df[var].values.reshape((self.nx, self.ny, len(second_date_list)))
-
-            cubenew.ds[var] = xr.DataArray(
-                result_arr, dims=["x", "y", "second_date"], coords=cubenew.ds.coords
-            ).transpose("second_date", "y", "x")
-
-            cubenew.ds[var].attrs = {"standard_name": short_name[i], "unit": unit[i], "long_name": long_name[i]}
-
-        cubenew.ds["grid_mapping"] = self.ds.proj4
-        cubenew.ds.attrs = {
-            "Conventions": "CF-1.10",
-            "title": "Cumulative displacement time series",
-            "institution": "Université Grenoble Alpes",
-            "references": "Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing, 60, 1-10.\n Charrier, L., Yan, Y., Koeniguer, E. C., Trouve, E., Mouginot, J., & Millan, R. (2022, June). Fusion of multi-temporal and multi-sensor ice velocity observations. In International Annals of the Photogrammetry, Remote Sensing and Spatial Information Sciences.",
-            "source": source,
-            "sensor": sensor,
-            "proj4": self.ds.proj4,
-            "author": "L. Charrier",
-            "history": f"Created on the {date.today()}",
-        }
-        cubenew.nx = self.nx
-        cubenew.ny = self.ny
-        cubenew.nz = cubenew.ds.dims["second_date"]
-        cubenew.filename = filename
-
-        if savepath is not None:  # save the dataset to a netcdf file
-            cubenew.ds = cubenew.ds.rio.write_crs(self.ds.proj4)
-            encoding = {
-                "dx": {"zlib": True, "complevel": 5, "dtype": "float32"},
-                "dy": {"zlib": True, "complevel": 5, "dtype": "float32"},
-            }
-            if result_quality is not None and "X_contribution" in result_quality:
-                encoding["xcount_x"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
-                encoding["xcount_y"] = {"zlib": True, "complevel": 5, "dtype": "int16"}
-            start = time.time()
-            cubenew.ds.to_netcdf(f"{savepath}/{filename}.nc", engine="h5netcdf", encoding=encoding)
-            if verbose:
-                print(f"[Writing results] Saved to {savepath}/{filename}.nc took: {round(time.time() - start, 3)} s")
-
-        return cubenew
-
-    def write_results_ticoi_or_tico(
-        self,
-        result: list,
-        source: str,
-        sensor: str,
-        filename: str = "Time_series",
-        savepath: str | None = None,
-        result_quality: list | None = None,
-        verbose: bool = False,
-    ) -> Union["CubeDataClass", str]:
-
-        """
-        Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
-        It recognizes whether the results are irregular or regular and uses the appropriate saving method
-        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
-        units has been changed to unit, since it was producing an error while wirtting the netcdf file
-
-        :param result: [list] --- List of pd xarray, resulut from the TICOI method
-        :param source: [str] --- Name of the source
-        :param sensor: [str] --- Sensors which have been used
-        :param filename: [str] [default is Time_series] --- Filename of file to saved
-        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
-        :param verbose: [bool] [default is None] --- Print information throughout the process (default is False)
-
-        :return cubenew: [cube_data_class] --- New cube where the results are saved
-        """
-
-        if self.ds.rio.write_crs:
-            self.ds = self.ds.rio.write_crs(self.ds.proj4)  # write the crs if it does not exist
-
-        if result[0].columns[0] == "date1":
-            self.write_result_ticoi(
-                result=result,
-                source=source,
-                sensor=sensor,
-                filename=filename,
-                savepath=savepath,
-                result_quality=result_quality,
-                verbose=verbose,
-            )
-        else:
-            self.write_result_tico(
-                result=result,
-                source=source,
-                sensor=sensor,
-                filename=filename,
-                savepath=savepath,
-                result_quality=result_quality,
-                verbose=verbose,
-            )
-        return self
-
-
 class CubeResultsWriter():
     def __init__(self, cube: CubeDataClass):
         self.ds = cube.ds
         self.nx = cube.nx
         self.ny = cube.ny
+        self.proj4 = cube.ds.proj4
         self.variable_configs = {}
     
     def write_result_ticoi(
@@ -2929,46 +2506,72 @@ class CubeResultsWriter():
     def _initialize_cube(self, time_variable: pd.Series, add_date_vars: bool = False, non_null_el: Optional[pd.DataFrame] = None) -> "CubeDataClass":
         """Initialize a data cube with basic coordinates and time variables."""
         cubenew = CubeDataClass()
-        cubenew.ds.coords["x"] = self.ds["x"]
-        cubenew.ds.coords["y"] = self.ds["y"]
-        cubenew.ds.coords["mid_date"] = time_variable.to_numpy()
+        cubenew.nx = self.nx
+        cubenew.ny = self.ny
+        cubenew.proj4 = self.proj4 
+
+        x_attrs = {"standard_name": "projection_x_coordinate", "units": "m", "long_name": "x coordinate of projection"}
+        y_attrs = {"standard_name": "projection_y_coordinate", "units": "m", "long_name": "y coordinate of projection"}
         
-        cubenew.ds["x"].attrs = {"standard_name": "projection_x_coordinate", "unit": "m", "long_name": "x coordinate of projection"}
-        cubenew.ds["y"].attrs = {"standard_name": "projection_y_coordinate", "unit": "m", "long_name": "y coordinate of projection"}
-        cubenew.ds["mid_date"].attrs = {"standard_name": "central_date", "unit": "days", "description": "Central date for measurement"}
+        epoch = pd.Timestamp("1970-01-01")
+        time_values = (time_variable - epoch).dt.total_seconds() / (24 * 3600)
+        time_attrs = {
+            "standard_name": "time", "long_name": "center date of the velocity estimation",
+            "units": "days since 1970-01-01 00:00:00", "calendar": "gregorian"
+        }
+
+        cubenew.ds = xr.Dataset(
+            coords={
+                "x": ("x", self.ds["x"].values, x_attrs),
+                "y": ("y", self.ds["y"].values, y_attrs),
+                "time": ("time", time_values.values, time_attrs)
+            }
+        )
+
+        cubenew.ds.rio.write_crs(self.proj4, inplace=True)
+        if 'spatial_ref' in cubenew.ds.coords:
+            grid_mapping_attrs = cubenew.ds.coords['spatial_ref'].attrs
+            cubenew.ds = cubenew.ds.drop_vars('spatial_ref')
+        
+        cubenew.ds['grid_mapping'] = xr.DataArray(0, attrs=grid_mapping_attrs)
         
         if add_date_vars and non_null_el is not None:
-            for date_col in ["date1", "date2"]:
-                cubenew.ds[date_col] = xr.DataArray(non_null_el[date_col], dims="mid_date", coords={"mid_date": time_variable})
-                cubenew.ds[date_col].attrs = {"standard_name": date_col, "unit": "days", "long_name": f"{date_col} of velocity estimation period"}
+            date1_values = (non_null_el["date1"] - epoch).dt.total_seconds() / (24 * 3600)
+            date2_values = (non_null_el["date2"] - epoch).dt.total_seconds() / (24 * 3600)
+            time_bnds_data = np.vstack([date1_values, date2_values]).T
+            cubenew.ds["time_bnds"] = (("time", "bnds"), time_bnds_data)
+            cubenew.ds["time"].attrs["bounds"] = "time_bnds"
 
-        cubenew.ds["grid_mapping"] = self.ds.proj4
-        cubenew.nx, cubenew.ny = self.nx, self.ny
         return cubenew
 
     def _add_variable_to_cube(self, cube: "CubeDataClass", var: str, data: np.ndarray, time_variable: pd.Series,
                               short_name: str, long_name: str, unit: str):
         """Add a variable as a DataArray to the data cube."""
-        data_array = xr.DataArray(
-            data, dims=["x", "y", "mid_date"],
-            coords={"x": cube.ds["x"], "y": cube.ds["y"], "mid_date": time_variable}
-        )
-        cube.ds[var] = data_array.transpose("mid_date", "y", "x")
-        cube.ds[var].attrs = {
-            "standard_name": short_name, "unit": unit,
-            "long_name": long_name, "grid_mapping": "grid_mapping"
+        data_array = xr.DataArray(data, dims=["x", "y", "time"],
+                                  coords={"x": cube.ds["x"], "y": cube.ds["y"], "time": cube.ds["time"]})
+        cube.ds[var] = data_array.transpose("time", "y", "x")
+        attrs = {
+            "units": unit,
+            "long_name": long_name,
+            "grid_mapping": "grid_mapping"
         }
+        if short_name:
+            attrs["standard_name"] = short_name
+        cube.ds[var].attrs = attrs
 
     def _set_reference_date(self, cube: "CubeDataClass", ref_dates: np.ndarray):
         """Set the reference date for displacement time series."""
-        cube.ds["reference_date"] = xr.DataArray(
-            ref_dates, dims=["x", "y"], coords={"x": self.ds["x"], "y": self.ds["y"]}
-        )
-        cube.ds["reference_date"].attrs = {
-            "standard_name": "reference_date", "unit": "days",
-            "description": "First date of the cumulative displacement time series"
-        }
+        epoch = pd.Timestamp("1970-01-01")
+        # This handles NaT (Not a Time) values, which will become NaN after conversion.
+        numerical_dates = (pd.to_datetime(ref_dates.flatten()) - epoch).total_seconds() / (24 * 3600)
+        numerical_dates_arr = numerical_dates.values.reshape(ref_dates.shape)
 
+        cube.ds["reference_date"] = xr.DataArray(numerical_dates_arr, dims=["x", "y"], coords={"x": cube.ds["x"], "y": cube.ds["y"]})
+        cube.ds["reference_date"].attrs = {
+            "long_name": "First date of the cumulative displacement time series",
+            "units": "days since 1970-01-01 00:00:00",
+        }
+        
     def _validate_input(self, result: list) -> bool:
         return bool(result) and any(not r.empty for r in result)
 
@@ -2991,21 +2594,22 @@ class CubeResultsWriter():
             vars_list, long_names, short_names, final_vars = [], [], [], []
             for dim in dimensions:
                 if dim not in base_config['suffixes']: continue
-                
                 vars_list.append(base_config['var_prefix'] + dim)
                 final_vars.append(base_config['final_var_tpl'].format(dim=dim))
-                
                 direction = base_config.get('directions', [''] * len(dimensions))[base_config['suffixes'].index(dim)]
                 long_names.append(base_config['long_name_tpl'].format(direction=direction, dim_upper=dim.upper()))
-                short_names.append(f"{dim}_{var_type}") # standard_name
+                
+                # FIX: Assign valid CF standard_name or None
+                standard_name = None 
+                # if var_type == 'velocity':
+                #     if dim == 'x': standard_name = 'eastward_velocity'
+                #     elif dim == 'y': standard_name = 'northward_velocity'
+                #     elif dim == 'z': standard_name = 'upward_velocity'
+                short_names.append(standard_name)
 
             if vars_list:
-                configs[var_type] = {
-                    'vars': vars_list, 'long_names': long_names, 
-                    'short_names': short_names, 'unit': base_config['unit'],
-                    'final_vars': final_vars,
-                    'flag': base_config.get('flag')
-                }
+                configs[var_type] = {'vars': vars_list, 'long_names': long_names, 'short_names': short_names,
+                                     'unit': base_config['unit'], 'final_vars': final_vars, 'flag': base_config.get('flag')}
         return configs
 
     def _detect_available_variables(self, sample_result: Optional[pd.DataFrame], result_quality: Optional[List[str]]) -> Dict[str, List[str]]:
@@ -3031,27 +2635,55 @@ class CubeResultsWriter():
             "Conventions": "CF-1.10", "title": "Ice velocity and displacement time series",
             "institution": "Université Grenoble Alpes", "source": source, "sensor": sensor,
             "proj4": self.ds.proj4, "author": "L. Charrier", "history": f"Created on {date.today()}",
-            "dimensions": f"{len(dimensions)}D ({', '.join(dimensions)})"
+            "dimensions": f"{len(dimensions)}D ({', '.join(dimensions)})",
+            "references": "Charrier, L., et al. (2025)"
         }
 
     def _save_cube(self, cube: "CubeDataClass", savepath: str, filename: str, verbose: bool):
         """Saves the data cube to a NetCDF file with appropriate encoding."""
-        if hasattr(cube.ds, 'rio'):
-            cube.ds.rio.write_crs(self.ds.proj4)
-        
         encoding = {}
         for var in cube.ds.data_vars:
-            if var in cube.ds.coords or var == 'grid_mapping':
-                continue
-            
-            if var.startswith('xcount'):
-                encoding[var] = {"zlib": True, "complevel": 5, "dtype": "int16"}
-            else:
-                encoding[var] = {"zlib": True, "complevel": 5, "dtype": "float32"}
-
+            if var in cube.ds.coords or var == 'grid_mapping': continue
+            encoding[var] = {"zlib": True, "complevel": 5, "dtype": "int16" if var.startswith('xcount') else "float32"}
+        
+        if 'time_bnds' in cube.ds:
+            encoding['time_bnds'] = {'_FillValue': None}
+        
         filepath = f"{savepath}/{filename}.nc"
         cube.ds.to_netcdf(filepath, engine="h5netcdf", encoding=encoding)
         if verbose: print(f"[Writing results] Saved to {filepath}")
+    
+    def _parse_proj4_to_cf_attrs(self) -> dict:
+        """convert proj4 string to CF attributes."""
+        attrs = {}
+        proj_map = {'proj': 'grid_mapping_name', 'lat_0': 'latitude_of_projection_origin',
+                    'lon_0': 'longitude_of_projection_origin', 'lat_ts': 'standard_parallel',
+                    'x_0': 'false_easting', 'y_0': 'false_northing', 'datum': 'datum'}
+        value_map = {'stere': 'polar_stereographic'}
+        
+        # BUG FIX: Robustly parse proj4 string to handle flags without values
+        params = {}
+        for item in self.proj4.replace('+', '').strip().split():
+            if '=' in item:
+                key, value = item.split('=', 1)
+                params[key] = value
+            else:
+                params[item] = True # Treat flags like 'no_defs' as boolean
+
+        for key, value in params.items():
+            if key in proj_map:
+                try:
+                    # Attempt to convert to float, otherwise use string value
+                    cf_value = float(value_map.get(value, value))
+                except (ValueError, TypeError):
+                    cf_value = value_map.get(value, value)
+                attrs[proj_map[key]] = cf_value
+        
+        if attrs.get('datum') == 'WGS84':
+            attrs.update({'semi_major_axis': 6378137.0, 'inverse_flattening': 298.257223563})
+        
+        attrs['crs_wkt'] = self.proj4
+        return attrs
     
     def _smooth_array(self, array: np.ndarray, window_size: int, custom_filter: Optional[np.ndarray]) -> np.ndarray:
         return smooth_results(array, window_size=window_size, filt=custom_filter)

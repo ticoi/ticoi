@@ -217,40 +217,6 @@ if save:
 start.append(time.time())
 
 if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
-    several = type(returned) == list and len(returned) >= 2
-    if "invert" in returned:
-        cube_invert = cube.write_result_tico(
-            result["invert"] if several else result,
-            source,
-            sensor,
-            filename=f"{result_fn}_invert" if several else result_fn,
-            savepath=path_save if save else None,
-            result_quality=inversion_kwargs["result_quality"],
-            verbose=inversion_kwargs["verbose"],
-        )
-    if "interp" in returned:
-        cube_interp = cube.write_result_ticoi(
-            result["interp"] if several else result,
-            source_interp,
-            sensor,
-            filename=f"{result_fn}_interp" if several else result_fn,
-            savepath=path_save if save else None,
-            result_quality=inversion_kwargs["result_quality"],
-            verbose=inversion_kwargs["verbose"],
-        )
-
-# Plot the mean velocity as an example
-if save_mean_velocity and cube_interp is not None:
-    cube_interp.average_cube(return_format="geotiff", return_variable=["vv"], save=True, path_save=path_save)
-
-stop.append(time.time())
-if save or save_mean_velocity:
-    print(f"[cube_ticoi_demo] Results saved at {path_save}")
-    print(f"[cube_ticoi_demo] Writing cube to netCDF file took {round(stop[-1] - start[-1], 3)} s")
-
-start.append(time.time())
-
-if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
     print(f"[cube_ticoi_demo] Writing results to netCDF file with result_writer")
     several = type(returned) == list and len(returned) >= 2
     writer = CubeResultsWriter(cube)
@@ -260,7 +226,7 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
             source,
             sensor,
             result_quality=inversion_kwargs["result_quality"],
-            filename=f"{result_fn}_invert" if several else result_fn,
+            filename=f"{result_fn}_invert1" if several else result_fn,
             savepath=path_save if save else None,
             verbose=inversion_kwargs["verbose"],
         )
@@ -270,7 +236,7 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
             source_interp,
             sensor,
             result_quality=inversion_kwargs["result_quality"],
-            filename=f"{result_fn}_interp" if several else result_fn,
+            filename=f"{result_fn}_interp1" if several else result_fn,
             savepath=path_save if save else None,
             verbose=inversion_kwargs["verbose"],
         )
