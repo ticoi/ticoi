@@ -2,6 +2,7 @@ aiohttp #to access data on the cloud
 dask
 fiona
 gdal
+glaft
 geopandas>=0.10.0
 geopandas >=0.10.0
 h5netcdf
