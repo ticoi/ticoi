@@ -1,36 +1,65 @@
-
-# I copied the pyproj file from Laurane's fork for
-# this and then added two lines at the bottom for tests
-
-
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-version = "0.0.1"
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
 description = "A package to run an Temporal Inversion based on the temporal ClOsure of the measurement network, and Interpolation (TICOI)"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
+dynamic = ["version"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+]
+dependencies = [
+  "python==3.11",
+  "aiohttp",
+  "dask",
+  "fiona==1.9",
+  "geopandas>=0.10.0",
+  "h5netcdf",
+  "h5py>=3.11",
+  "jdcal",
+  "matplotlib==3.*",
+  "netcdf4",
+  "notebook",
+  "numba==0.*",
+  "numpy==1.*",
+  "pandas",
+  "pip",
+  "pyproj>=3.4",
+  "rasterio>=1.3",
+  "requests",
+  "rioxarray",
+  "scikit-learn",
+  "scipy==1.*",
+  "seaborn",
+  "shapely",
+  "statsmodels",
+  "tqdm",
+  "xarray",
+  "zarr"
 ]
 
 [project.urls]
-Homepage = "https://github.com/ticoi/ticoi.git"
-Issues = "https://github.com/pypa/sampleproject/issues"
+Homepage = "https://github.com/ticoi/ticoi"
+Issues = "https://github.com/ticoi/ticoi/issues"
+
+[tool.hatch.version]
+path = "ticoi/__about__.py"
+
+[tool.hatch.envs.dev]
+inherit = ["default"]
+dependencies = [
+  "ruff",
+  "pytest",
+  "pre-commit",
+  "ipykernel",
+]
 
 [tool.pytest.ini_options]
 testpaths = "."
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["ticoi"]
-exclude = []
-namespaces= false
