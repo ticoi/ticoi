@@ -91,7 +91,21 @@ class CubeResultsWriter:
         verbose: bool = False,
     ) -> Union["CubeDataClass", str, Tuple["CubeDataClass", list]]:
         """
-        Write TICOI (velocity) results to an xarray dataset.
+        Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.11
+        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.11/cf-conventions.pdf
+
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param savepath: [Optional[str]] [default is None] --- Path to save file
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight)):param savepath: string, path where to save the file
+        :param smooth_res: [bool] [default is False] --- Smooth the residuals before saving
+        :param smooth_window_size:[int] [default is 3] --- Size of the smoothing kernel
+        :param return_result: [bool] [default is False] --- If True, return result
+        :param verbose: [bool] [default is False] --- Print information throughout the process
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
         if not self._validate_input(result):
             return "No results to write or save."
@@ -129,11 +143,23 @@ class CubeResultsWriter:
         filename: str = "Time_series_invert",
         savepath: Optional[str] = None,
         result_quality: Optional[List[str]] = None,
+        return_result: bool = False,
         verbose: bool = False,
     ) -> Union["CubeDataClass", str]:
         """
-        Write TICO (cumulative displacement) results to an xarray dataset.
-        This method is fully vectorized for high performance.
+        Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.11
+        http://cfconventions.org/Data/cf-conventions/cf-conventions-1.11/cf-conventions.pdf
+
+        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param source: [str] --- Name of the source
+        :param sensor: [str] --- Sensors which have been used
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param savepath: [Optional[str]] [default is None] --- Path to save file
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
+        :param return_result: [bool] [default is False] --- If True, return result
+        :param verbose: [bool] [default is False] --- Print information throughout the process
+
+        :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
         if not self._validate_input(result):
             return "No results to write or save."
@@ -161,7 +187,6 @@ class CubeResultsWriter:
                     cubenew,
                     var_name,
                     data_array,
-                    config["short_names"][idx],
                     config["long_names"][idx],
                     config["unit"],
                 )
@@ -175,10 +200,17 @@ class CubeResultsWriter:
         if savepath:
             self._save_cube(cubenew, savepath, filename, verbose)
 
-        return cubenew
+        return (cubenew, result) if return_result else cubenew
 
     def _process_2d_quality_metrics(self, cube: "CubeDataClass", result: list, result_quality: List[str]):
-        """Processes and adds 2D quality metrics to the data cube."""
+        """
+        Processes and adds 2D quality metrics to the data cube.
+        :param cube: [CubeDataClass] --- Cube data class
+        :param result:
+        :param result_quality:
+        :return:
+        """
+
         if "Norm_residual" not in result_quality:
             return
 
@@ -203,7 +235,7 @@ class CubeResultsWriter:
             cube.ds[var_name] = xr.DataArray(data_arr, dims=["x", "y"], coords={"x": cube.ds["x"], "y": cube.ds["y"]})
             cube.ds[var_name] = cube.ds[var_name].transpose("y", "x")
             cube.ds[var_name].attrs = {
-                "standard_name": var_name,
+                "short_name": var_name,
                 "unit": config["unit"],
                 "long_name": config["long_names"][i],
                 "grid_mapping": "grid_mapping",
@@ -347,7 +379,6 @@ class CubeResultsWriter:
                     cube,
                     final_var,
                     result_arr,
-                    config["short_names"][i],
                     config["long_names"][i],
                     config["unit"],
                 )
@@ -407,16 +438,14 @@ class CubeResultsWriter:
         cube: "CubeDataClass",
         var: str,
         data: np.ndarray,
-        short_name: str,
         long_name: str,
         unit: str,
     ):
         """
         Add a variable as a DataArray to the data cube.
-        :param cube:
+        :param cube: [CubeDataClass] --- Cube data class
         :param var: [str] --- variable name
         :param data:
-        :param short_name:
         :param long_name:
         :param unit:
         :return:
@@ -427,7 +456,7 @@ class CubeResultsWriter:
         cube.ds[var] = data_array.transpose("time", "y", "x")
         attrs = {"units": unit, "long_name": long_name, "grid_mapping": "grid_mapping"}
 
-        attrs["short_name"] = var #no standard_name exist
+        attrs["short_name"] = var #no standard_name exist for our variables
         cube.ds[var].attrs = attrs
 
     def _set_reference_date(self, cube: "CubeDataClass", ref_dates: np.ndarray):
@@ -499,18 +528,17 @@ class CubeResultsWriter:
                 long_names.append(base_config["long_name_tpl"].format(direction=direction, dim_upper=dim.upper()))
 
                 # FIX: Assign valid CF standard_name or None
-                standard_name = None
+                # standard_name = None
                 # if var_type == 'velocity':
                 #     if dim == 'x': standard_name = 'eastward_velocity'
                 #     elif dim == 'y': standard_name = 'northward_velocity'
                 #     elif dim == 'z': standard_name = 'upward_velocity'
-                short_names.append(standard_name)
+                # short_names.append(standard_name)
 
             if vars_list:
                 configs[var_type] = {
                     "vars": vars_list,
                     "long_names": long_names,
-                    "short_names": short_names,
                     "unit": base_config["unit"],
                     "final_vars": final_vars,
                     "flag": base_config.get("flag"),
@@ -546,6 +574,13 @@ class CubeResultsWriter:
         return available
 
     def _set_metadata(self, cube: "CubeDataClass", source: str, sensor: str, dimensions: List[str]):
+        """
+        Set the global attributes of the cube
+        :param cube: [CubeDataClass] --- Cube data class
+        :param source: [str] --- processing steps that have been applied
+        :param sensor: [str] --- satellite sensors used to compute the original  displacements
+        :param dimensions: List[str] -- dimensions of the cube
+        """
         cube.ds.attrs = {
             "Conventions": "CF-1.10",
             "title": "Ice velocity and displacement time series",
@@ -560,7 +595,14 @@ class CubeResultsWriter:
         }
 
     def _save_cube(self, cube: "CubeDataClass", savepath: str, filename: str, verbose: bool):
-        """Saves the data cube to a NetCDF file with appropriate encoding."""
+        """
+        Saves the data cube to a NetCDF file with appropriate encoding.
+        :param cube: [CubeDataClass] --- Cube data class
+        :param savepath:
+        :param filename:
+        :param verbose:
+        :return:
+        """
         encoding = {}
         for var in cube.ds.data_vars:
             if var in cube.ds.coords or var == "grid_mapping":
