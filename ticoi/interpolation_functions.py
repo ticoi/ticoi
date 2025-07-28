@@ -161,7 +161,7 @@ def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd
     return dataf_lp
 
 
-def smooth_results(result: np.ndarray, window_size: int = 3, filt: np.ndarray | None = None):
+def smooth_results(result: np.ndarray, window_size: int = 3):
 
     r"""
     Spatially smooth the data by averaging (applying a convolution filter to) each pixel with its neighborhood.
@@ -169,13 +169,11 @@ def smooth_results(result: np.ndarray, window_size: int = 3, filt: np.ndarray | 
 
     :param result: [np array] --- Results for a variable (pandas dataframe of TICOI results transformed, as in cube_data_class.write_result_ticoi)
     :param window_size: [int] [default is 3] --- Size of the window for mean filtering
-    :param filt: [np array | None] [default is None] --- Customized filter to apply on the data (ex: Gaussian filter)
 
     :return result: [np array] --- Smoothened result
     """
 
-    if filt is None:  # Apply a mean filter
-        filt = np.full((window_size, window_size), 1 / window_size**2)
+    filt = np.full((window_size, window_size), 1 / window_size**2)
 
     # Filter the data at each date
     for t in range(result.shape[-1]):

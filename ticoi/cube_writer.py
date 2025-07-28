@@ -87,7 +87,6 @@ class CubeResultsWriter:
         result_quality: Optional[List[str]] = None,
         smooth_res: bool = False,
         smooth_window_size: int = 3,
-        smooth_filt: Optional[np.ndarray] = None,
         return_result: bool = False,
         verbose: bool = False,
     ) -> Union["CubeDataClass", str, Tuple["CubeDataClass", list]]:
@@ -109,10 +108,10 @@ class CubeResultsWriter:
 
         available_vars = self._detect_available_variables(non_null_el, result_quality)
         self._process_velocity_variables(
-            cubenew, result, available_vars, time_base, smooth_res, smooth_window_size, smooth_filt
+            cubenew, result, available_vars, time_base, smooth_res, smooth_window_size
         )
 
-        if result_quality:
+        if result_quality: #if there are quality metrics
             self._process_2d_quality_metrics(cubenew, result, result_quality)
 
         self._set_metadata(cubenew, source, sensor, dimensions)
@@ -145,7 +144,7 @@ class CubeResultsWriter:
 
         self.variable_configs = self._generate_variable_configs(dimensions)
 
-        sample = next((r for r in result if not r.empty), None)
+        sample = next((r for r in result if not r.empty), None)#first results not empty
         available_vars = self._detect_available_variables(sample, result_quality)
 
         reconstructed_data, time_base, ref_dates = self._vectorized_reconstruct(result, available_vars)
@@ -291,6 +290,10 @@ class CubeResultsWriter:
     def _prepare_variable_array(self, result: list, var: str, time_len: int) -> np.ndarray:
         """
         Efficiently prepares a 3D numpy array for a given variable from the result list.
+        :param result: [list] ---  list with results from ticoi or tico
+        :param var : [str] --- variable name
+        :param time_len : [int] --- length of the time axis
+        :return: 3D numpy array
         """
         final_array = np.full((self.nx, self.ny, time_len), np.nan, dtype=np.float32)
         for i in range(self.nx):
@@ -312,7 +315,17 @@ class CubeResultsWriter:
         smooth_window_size: int,
         smooth_filt: Optional[np.ndarray],
     ):
-        """Process and add all detected velocity-related variables to the data cube."""
+        """
+        Process and add all detected velocity-related variables to the data cube.
+        :param cube : [CubeDataClass] --- cube we are saving
+        :param result : [list] --- list with results from ticoi or tico
+        :param add_date_vars :[bool] --- If yes, add also the two dates between each the velocity have been estimated
+        :param time_variable : [pd.Series] --- centered dates for each estimation
+        :param smooth_res:
+        :param smooth_window_size:
+
+        :return:
+        """
         time_len = len(time_variable)
 
         for var_type, var_list in available_vars.items():
@@ -324,10 +337,10 @@ class CubeResultsWriter:
                 if final_var not in var_list:
                     continue
                 original_var_name = config["vars"][i]
-                result_arr = self._prepare_variable_array(result, original_var_name, time_len)
+                result_arr = self._prepare_variable_array(result, original_var_name, time_len) #create a 3D np array
 
                 if smooth_res and var_type == "velocity":
-                    result_arr = self._smooth_array(result_arr, smooth_window_size, smooth_filt)
+                    result_arr = self._smooth_array(result_arr, smooth_window_size) #smooth the result by applying a spatial smoothing
                     self._update_result_list(result, original_var_name, result_arr)
 
                 self._add_variable_to_cube(
@@ -343,7 +356,13 @@ class CubeResultsWriter:
     def _initialize_cube(
         self, time_variable: pd.Series, add_date_vars: bool = False, non_null_el: Optional[pd.DataFrame] = None
     ) -> "CubeDataClass":
-        """Initialize a data cube with basic coordinates and time variables."""
+        """
+        Initialize a data cube with basic coordinates and time variables.
+        :param time_variable [pd.Series]: centered dates for each estimation
+        :param add_date_vars [bool]: If yes, add also the two dates between each the velocity have been estimated
+        :param non_null_el [Optional[pd.DataFrame]]: results which are not null
+        :return:
+        """
         cubenew = CubeDataClass()
         cubenew.nx = self.nx
         cubenew.ny = self.ny
@@ -369,11 +388,10 @@ class CubeResultsWriter:
             }
         )
 
+        #Set grid mapping variable
         cubenew.ds.rio.write_crs(self.proj4, inplace=True)
-        if "spatial_ref" in cubenew.ds.coords:
         grid_mapping_attrs = cubenew.ds.coords["spatial_ref"].attrs
         cubenew.ds = cubenew.ds.drop_vars("spatial_ref")
-
         cubenew.ds["grid_mapping"] = xr.DataArray(0, attrs=grid_mapping_attrs)
 
         if add_date_vars and non_null_el is not None:
@@ -494,11 +512,18 @@ class CubeResultsWriter:
         return configs
 
     def _detect_available_variables(
-        self, sample_result: Optional[pd.DataFrame], result_quality: Optional[List[str]]
+        self, sample_result: pd.DataFrame, result_quality: Optional[List[str]]
     ) -> Dict[str, List[str]]:
+        """
+        Detect variable names inside the cube result
+        :param sample_result [pd.DataFrame]: result for one particular date
+        :param result_quality: option for result quality
+        :return:
+        """
         if sample_result is None:
             return {}
 
+        #Get available variable
         available = {}
         for var_type, config in self.variable_configs.items():
             # Always include base types if they exist
@@ -583,6 +608,13 @@ class CubeResultsWriter:
         return attrs
 
     def _smooth_array(self, array: np.ndarray, window_size: int, custom_filter: Optional[np.ndarray]) -> np.ndarray:
+        """
+
+        :param array:
+        :param window_size [int]:
+        :param custom_filter:
+        :return:
+        """
         return smooth_results(array, window_size=window_size, filt=custom_filter)
 
     def _update_result_list(self, result: list, var: str, smoothed_array: np.ndarray):
