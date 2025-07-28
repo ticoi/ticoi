@@ -1,4 +1,4 @@
-name: ticoi
+name: ticoi_env
 channels:
   - conda-forge
 dependencies:
