@@ -94,7 +94,7 @@ class CubeResultsWriter:
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.11
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.11/cf-conventions.pdf
 
-        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :param source: [str] --- Name of the source
         :param sensor: [str] --- Sensors which have been used
         :param filename: [str] [default is Time_series] --- Filename of file to saved
@@ -150,7 +150,7 @@ class CubeResultsWriter:
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.11
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.11/cf-conventions.pdf
 
-        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :param source: [str] --- Name of the source
         :param sensor: [str] --- Sensors which have been used
         :param filename: [str] [default is Time_series] --- Filename of file to saved
@@ -206,7 +206,7 @@ class CubeResultsWriter:
         """
         Processes and adds 2D quality metrics to the data cube.
         :param cube: [CubeDataClass] --- Cube data class
-        :param result:
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :param result_quality:
         :return:
         """
@@ -257,7 +257,11 @@ class CubeResultsWriter:
     ) -> Tuple[Dict[str, np.ndarray], pd.Series, np.ndarray]:
         """
         A fully vectorized replacement for the original `reconstruct_common_ref` loop.
+        :param result: [list] --- List of pd xarray, result from the TICOI method
+        :param available_vars:
+        :return:
         """
+
         all_dates = sorted(list({date for df in result if not df.empty for date in df["date2"]}))
         time_axis = pd.Series(all_dates, dtype="datetime64[ns]")
         time_len = len(time_axis)
@@ -350,7 +354,7 @@ class CubeResultsWriter:
         """
         Process and add all detected velocity-related variables to the data cube.
         :param cube : [CubeDataClass] --- cube we are saving
-        :param result : [list] --- list with results from ticoi or tico
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :param add_date_vars :[bool] --- If yes, add also the two dates between each the velocity have been estimated
         :param time_variable : [pd.Series] --- centered dates for each estimation
         :param smooth_res:
@@ -475,12 +479,17 @@ class CubeResultsWriter:
         }
 
     def _validate_input(self, result: list) -> bool:
+        """
+        Check if the inputs are valid
+        :param result: [list] --- List of pd xarray, results from the TICOI method
+        :return:
+        """
         return bool(result) and any(not r.empty for r in result)
 
     def _get_time_base(self, result: list) -> Tuple[pd.Series, pd.DataFrame]:
         """
         Get the centered date (time_variable) and the results which are not null
-        :param result [list]: list with results from ticoi or tico
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :return: entered date (time_variable) and the results which are not null
         """
         non_null_el = next((r for r in result if not r.empty), None)
@@ -492,7 +501,7 @@ class CubeResultsWriter:
     def _detect_dimensions(self, result: list) -> List[str]:
         """
         Detect the dimension in cube result
-        :param result [list]: list with results from ticoi or tico
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :return:
         """
         sample = next((r for r in result if not r.empty), None)
@@ -582,7 +591,7 @@ class CubeResultsWriter:
         :param dimensions: List[str] -- dimensions of the cube
         """
         cube.ds.attrs = {
-            "Conventions": "CF-1.10",
+            "Conventions": "CF-1.11",
             "title": "Ice velocity and displacement time series",
             "institution": "Université Grenoble Alpes",
             "source": source,
@@ -689,7 +698,7 @@ class CubeResultsWriter:
         http://cfconventions.org/Data/cf-conventions/cf-conventions-1.10/cf-conventions.pdf
         units has been changed to unit, since it was producing an error while wirtting the netcdf file
 
-        :param result: [list] --- List of pd xarray, resulut from the TICOI method
+        :param result: [list] --- List of pd xarray, results from the TICOI method
         :param source: [str] --- Name of the source
         :param sensor: [str] --- Sensors which have been used
         :param filename: [str] [default is Time_series] --- Filename of file to saved
