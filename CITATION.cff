@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Charrier"
+  given-names: "Laurane"
+- family-names: "Guo"
+  given-names: "Lei"
+title: "TICOI Software"
+version: 1.0.0
+url: "https://github.com/ticoi/ticoi.git"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Charrier
+      given-names: Laurane
+    - family-names: Dehecq
+      given-names: Amaury
+    - family-names: Guo
+      given-names: Lei
+    - family-names: Brun
+      given-names: Fanny
+    - family-names: Millan
+      given-names: Romain
+    - family-names: Lioret
+      given-names: Nathan
+    - family-names: Copland
+      given-names: Luke
+    - family-names: Maier
+      given-names: Nathan
+    - family-names: Dow
+      given-names: Christine
+    - family-names: Halas
+      given-names: Paul
+  doi: "10.5194/egusphere-2024-3409"
+  title: "TICOI: an operational Python package to generate regularized glacier velocity time series"
+  journal: "EGUsphere"
+  year: 2025
+  month: 7
+  start: 1 # First page number
+  end: 40 # Last page number
+  volume: 1
