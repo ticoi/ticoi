@@ -15,8 +15,7 @@ import os
 import time
 import warnings
 from functools import reduce
-from typing import List, Optional, Union, Dict, Tuple
-
+from typing import Dict, List, Optional, Tuple, Union
 
 import dask
 import dask.array as da
@@ -39,7 +38,6 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.interpolation_functions import reconstruct_common_ref, smooth_results
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
-
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -2229,4 +2227,3 @@ class CubeDataClass:
 
         else:
             raise ValueError("return_as must be 'dataframe' or 'cube'")
-
