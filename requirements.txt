@@ -3,7 +3,6 @@ dask
 fiona
 gdal
 geopandas>=0.10.0
-glaft
 h5netcdf
 h5py >= 3.11
 jdcal
