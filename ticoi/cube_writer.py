@@ -64,6 +64,7 @@ QUALITY_METRIC_CONFIGS = {
     }
 }
 
+
 # %% ======================================================================== #
 #                            WRITING RESULTS AS NETCDF                        #
 # =========================================================================%% #
@@ -78,17 +79,17 @@ class CubeResultsWriter:
         self.variable_configs = {}
 
     def write_result_ticoi(
-        self,
-        result: list,
-        source: str,
-        sensor: str,
-        filename: str = "Time_series",
-        savepath: Optional[str] = None,
-        result_quality: Optional[List[str]] = None,
-        smooth_res: bool = False,
-        smooth_window_size: int = 3,
-        return_result: bool = False,
-        verbose: bool = False,
+            self,
+            result: list,
+            source: str,
+            sensor: str,
+            filename: str = "Time_series",
+            savepath: Optional[str] = None,
+            result_quality: Optional[List[str]] = None,
+            smooth_res: bool = False,
+            smooth_window_size: int = 3,
+            return_result: bool = False,
+            verbose: bool = False,
     ) -> Union["CubeDataClass", str, Tuple["CubeDataClass", list]]:
         """
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.11
@@ -114,7 +115,8 @@ class CubeResultsWriter:
         if verbose:
             print(f"[Writing results] Detected dimensions: {dimensions}")
 
-        self.variable_configs = self._generate_variable_configs(dimensions) #set variable long_names,short_names, and unit
+        self.variable_configs = self._generate_variable_configs(
+            dimensions)  # set variable long_names,short_names, and unit
 
         time_base, non_null_el = self._get_time_base(result)
 
@@ -125,7 +127,7 @@ class CubeResultsWriter:
             cubenew, result, available_vars, time_base, smooth_res, smooth_window_size
         )
 
-        if result_quality: #if there are quality metrics
+        if result_quality:  # if there are quality metrics
             self._process_2d_quality_metrics(cubenew, result, result_quality)
 
         self._set_metadata(cubenew, source, sensor, dimensions)
@@ -136,15 +138,15 @@ class CubeResultsWriter:
         return (cubenew, result) if return_result else cubenew
 
     def write_result_tico(
-        self,
-        result: list,
-        source: str,
-        sensor: str,
-        filename: str = "Time_series_invert",
-        savepath: Optional[str] = None,
-        result_quality: Optional[List[str]] = None,
-        return_result: bool = False,
-        verbose: bool = False,
+            self,
+            result: list,
+            source: str,
+            sensor: str,
+            filename: str = "Time_series_invert",
+            savepath: Optional[str] = None,
+            result_quality: Optional[List[str]] = None,
+            return_result: bool = False,
+            verbose: bool = False,
     ) -> Union["CubeDataClass", str]:
         """
         Write the result from TICOI, stored in result, in a xarray dataset matching the conventions CF-1.11
@@ -170,13 +172,13 @@ class CubeResultsWriter:
 
         self.variable_configs = self._generate_variable_configs(dimensions)
 
-        sample = next((r for r in result if not r.empty), None)#first results not empty
+        sample = next((r for r in result if not r.empty), None)  # first results not empty
         available_vars = self._detect_available_variables(sample, result_quality)
 
-        reconstructed_data, time_base, ref_dates = self._vectorized_reconstruct(result, available_vars)
+        reconstructed_data, time_base, ref_dates = self._vectorized_reconstruct(result, available_vars) #reconstruct cumulative displacement time series
 
         cubenew = self._initialize_cube(time_variable=time_base)
-        self._set_reference_date(cubenew, ref_dates)
+        self._set_reference_date(cubenew, ref_dates) #set reference date (i.e. the first date of the cumulative displacement time series
 
         final_var_map = self._build_final_var_map()
 
@@ -207,7 +209,7 @@ class CubeResultsWriter:
         Processes and adds 2D quality metrics to the data cube.
         :param cube: [CubeDataClass] --- Cube data class
         :param result: [list] --- List of pd xarray, results from the TICOI method
-        :param result_quality:
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
         :return:
         """
 
@@ -253,12 +255,12 @@ class CubeResultsWriter:
         return final_var_map
 
     def _vectorized_reconstruct(
-        self, result: list, available_vars: Dict
+            self, result: list, available_vars: Dict
     ) -> Tuple[Dict[str, np.ndarray], pd.Series, np.ndarray]:
         """
         A fully vectorized replacement for the original `reconstruct_common_ref` loop.
         :param result: [list] --- List of pd xarray, result from the TICOI method
-        :param available_vars:
+        :param available_vars:[Dict] --- dictionary of available variables
         :return:
         """
 
@@ -283,20 +285,20 @@ class CubeResultsWriter:
         reconstructed_data = {
             final_name: np.full((self.nx, self.ny, time_len), np.nan, dtype=np.float32)
             for final_name in final_var_names.values()
-        }
+        }  # initialize the reconstructed array as 3D array
         ref_dates_array = np.full((self.nx, self.ny), np.nan, dtype="datetime64[ns]")
 
         max_pixel_len = 0
         if result and any(not df.empty for df in result):
-            max_pixel_len = max(len(df) for df in result if not df.empty)
+            max_pixel_len = max(len(df) for df in result if not df.empty)  # maximal temporal length of each pixel
 
-        if max_pixel_len == 0:
+        if max_pixel_len == 0: #empty cube
             return {}, time_axis, ref_dates_array
 
         packed_data = {
             v: np.full((self.nx * self.ny, max_pixel_len), np.nan, dtype=np.float32) for v in vars_to_process
-        }
-        packed_dates = np.full((self.nx * self.ny, max_pixel_len), np.nan, dtype="datetime64[ns]")
+        } # flatten spatial dimensions
+        packed_dates = np.full((self.nx * self.ny, max_pixel_len), np.nan, dtype="datetime64[ns]") # flatten spatial dimensions
         pixel_lengths = np.zeros(self.nx * self.ny, dtype=int)
 
         for i, df in enumerate(result):
@@ -309,8 +311,9 @@ class CubeResultsWriter:
                     if v in df:
                         packed_data[v][i, :n] = df[v].values
 
-        cumulative_data = {v: np.nancumsum(arr, axis=1) for v, arr in packed_data.items()}
+        cumulative_data = {v: np.nancumsum(arr, axis=1) for v, arr in packed_data.items()} #cumulative summation of displacement along time
 
+        #put the results in a 3D array
         for i in range(self.nx * self.ny):
             n = pixel_lengths[i]
             if n > 0:
@@ -343,22 +346,22 @@ class CubeResultsWriter:
         return final_array
 
     def _process_velocity_variables(
-        self,
-        cube: "CubeDataClass",
-        result: list,
-        available_vars: Dict,
-        time_variable: pd.Series,
-        smooth_res: bool,
-        smooth_window_size: int,
+            self,
+            cube: "CubeDataClass",
+            result: list,
+            available_vars: Dict,
+            time_variable: pd.Series,
+            smooth_res: bool,
+            smooth_window_size: int,
     ):
         """
         Process and add all detected velocity-related variables to the data cube.
         :param cube : [CubeDataClass] --- cube we are saving
         :param result: [list] --- List of pd xarray, results from the TICOI method
-        :param add_date_vars :[bool] --- If yes, add also the two dates between each the velocity have been estimated
+        :param available_vars:[Dict] --- dictionary of available variables
         :param time_variable : [pd.Series] --- centered dates for each estimation
-        :param smooth_res:
-        :param smooth_window_size:
+        :param smooth_res: [bool] [default is False] --- Smooth the residuals before saving
+        :param smooth_window_size:[int] [default is 3] --- Size of the smoothing kernel
 
         :return:
         """
@@ -373,10 +376,11 @@ class CubeResultsWriter:
                 if final_var not in var_list:
                     continue
                 original_var_name = config["vars"][i]
-                result_arr = self._prepare_variable_array(result, original_var_name, time_len) #create a 3D np array
+                result_arr = self._prepare_variable_array(result, original_var_name, time_len)  # create a 3D np array
 
                 if smooth_res and var_type == "velocity":
-                    result_arr = self._smooth_array(result_arr, smooth_window_size) #smooth the result by applying a spatial smoothing
+                    result_arr = self._smooth_array(result_arr,
+                                                    smooth_window_size)  # smooth the result by applying a spatial smoothing
                     self._update_result_list(result, original_var_name, result_arr)
 
                 self._add_variable_to_cube(
@@ -388,7 +392,7 @@ class CubeResultsWriter:
                 )
 
     def _initialize_cube(
-        self, time_variable: pd.Series, add_date_vars: bool = False, non_null_el: Optional[pd.DataFrame] = None
+            self, time_variable: pd.Series, add_date_vars: bool = False, non_null_el: Optional[pd.DataFrame] = None
     ) -> "CubeDataClass":
         """
         Initialize a data cube with basic coordinates and time variables.
@@ -422,7 +426,7 @@ class CubeResultsWriter:
             }
         )
 
-        #Set grid mapping variable
+        # Set grid mapping variable
         cubenew.ds.rio.write_crs(self.proj4, inplace=True)
         grid_mapping_attrs = cubenew.ds.coords["spatial_ref"].attrs
         cubenew.ds = cubenew.ds.drop_vars("spatial_ref")
@@ -438,20 +442,20 @@ class CubeResultsWriter:
         return cubenew
 
     def _add_variable_to_cube(
-        self,
-        cube: "CubeDataClass",
-        var: str,
-        data: np.ndarray,
-        long_name: str,
-        unit: str,
+            self,
+            cube: "CubeDataClass",
+            var: str,
+            data: np.ndarray,
+            long_name: str,
+            unit: str,
     ):
         """
         Add a variable as a DataArray to the data cube.
         :param cube: [CubeDataClass] --- Cube data class
         :param var: [str] --- variable name
-        :param data:
-        :param long_name:
-        :param unit:
+        :param data: [np.ndarray] --- data array to add as variable
+        :param long_name: [str] --- long name of the variable
+        :param unit: [str] --- unit of the variable
         :return:
         """
         data_array = xr.DataArray(
@@ -460,11 +464,16 @@ class CubeResultsWriter:
         cube.ds[var] = data_array.transpose("time", "y", "x")
         attrs = {"units": unit, "long_name": long_name, "grid_mapping": "grid_mapping"}
 
-        attrs["short_name"] = var #no standard_name exist for our variables
+        attrs["short_name"] = var  # no standard_name exist for our variables
         cube.ds[var].attrs = attrs
 
     def _set_reference_date(self, cube: "CubeDataClass", ref_dates: np.ndarray):
-        """Set the reference date for displacement time series."""
+        """
+        Set the reference date for displacement time series.
+        :param cube: [CubeDataClass] --- Cube data class
+        :param ref_dates: [np.ndarray] --- reference dates
+        :return:
+        """
         epoch = pd.Timestamp("1970-01-01")
         # This handles NaT (Not a Time) values, which will become NaN after conversion.
         numerical_dates = (pd.to_datetime(ref_dates.flatten()) - epoch).total_seconds() / (24 * 3600)
@@ -502,7 +511,7 @@ class CubeResultsWriter:
         """
         Detect the dimension in cube result
         :param result: [list] --- List of pd xarray, results from the TICOI method
-        :return:
+        :return: list of dimensions
         """
         sample = next((r for r in result if not r.empty), None)
         if sample is None:
@@ -523,7 +532,7 @@ class CubeResultsWriter:
         """
         Generate config files
         :param dimensions [List[str]]:
-        :return:
+        :return: dict o configs
         """
         configs = {}
         for var_type, base_config in BASE_CONFIGS.items():
@@ -555,18 +564,18 @@ class CubeResultsWriter:
         return configs
 
     def _detect_available_variables(
-        self, sample_result: pd.DataFrame, result_quality: Optional[List[str]]
+            self, sample_result: pd.DataFrame, result_quality: Optional[List[str]]
     ) -> Dict[str, List[str]]:
         """
         Detect variable names inside the cube result
         :param sample_result [pd.DataFrame]: result for one particular date
-        :param result_quality: option for result quality
+        :param result_quality: [list | str | None] [default is None] --- Which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
         :return:
         """
         if sample_result is None:
             return {}
 
-        #Get available variable
+        # Get available variable
         available = {}
         for var_type, config in self.variable_configs.items():
             # Always include base types if they exist
@@ -607,9 +616,9 @@ class CubeResultsWriter:
         """
         Saves the data cube to a NetCDF file with appropriate encoding.
         :param cube: [CubeDataClass] --- Cube data class
-        :param savepath:
-        :param filename:
-        :param verbose:
+        :param savepath: [Optional[str]] [default is None] --- Path to save file
+        :param filename: [str] [default is Time_series] --- Filename of file to saved
+        :param verbose: [bool] [default is False] --- Print information throughout the process
         :return:
         """
         encoding = {}
@@ -664,17 +673,23 @@ class CubeResultsWriter:
         attrs["crs_wkt"] = self.proj4
         return attrs
 
-    def _smooth_array(self, array: np.ndarray, window_size: int, custom_filter: Optional[np.ndarray]) -> np.ndarray:
+    def _smooth_array(self, array: np.ndarray, smooth_window_size: int) -> np.ndarray:
         """
 
-        :param array:
-        :param window_size [int]:
-        :param custom_filter:
+        :param array: [np.ndarray] --- array to be smoothed
+        :param smooth_window_size:[int] [default is 3] --- size of the smoothing kernel
         :return:
         """
-        return smooth_results(array, window_size=window_size, filt=custom_filter)
+        return smooth_results(array, window_size=smooth_window_size)
 
     def _update_result_list(self, result: list, var: str, smoothed_array: np.ndarray):
+        """
+
+        :param result: [list] --- list of pd xarray, results from the TICOI method
+        :param var: [str] --- name of the variable
+        :param smoothed_array: [np.ndarray] --- smoothed array
+        :return:
+        """
         for x in range(self.nx):
             for y in range(self.ny):
                 idx = x * self.ny + y
@@ -682,14 +697,14 @@ class CubeResultsWriter:
                     result[idx][var] = smoothed_array[x, y, :]
 
     def write_results_ticoi_or_tico(
-        self,
-        result: list,
-        source: str,
-        sensor: str,
-        filename: str = "Time_series",
-        savepath: str | None = None,
-        result_quality: list | None = None,
-        verbose: bool = False,
+            self,
+            result: list,
+            source: str,
+            sensor: str,
+            filename: str = "Time_series",
+            savepath: str | None = None,
+            result_quality: list | None = None,
+            verbose: bool = False,
     ) -> Union["CubeDataClass", str]:
 
         """
@@ -707,9 +722,6 @@ class CubeResultsWriter:
 
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
-
-        if self.ds.rio.write_crs:
-            self.ds = self.ds.rio.write_crs(self.ds.proj4)  # write the crs if it does not exist
 
         if result[0].columns[0] == "date1":
             self.write_result_ticoi(
