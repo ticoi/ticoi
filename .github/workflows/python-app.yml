@@ -38,7 +38,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: /home/runner/mamba/envs
-        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('ticoi_env.yml') }}-${{ env.CACHE_NUMBER }}
+        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('environment.yml') }}-${{ env.CACHE_NUMBER }}
       env:
         CACHE_NUMBER: 0
       id: cache
@@ -47,7 +47,7 @@ jobs:
       if: steps.cache.outputs.cache-hit != 'true'
       run: |
         unset PROJ_DATA
-        mamba env create -n ticoi_env -f ticoi_env.yml
+        mamba env create -n environment -f environment.yml
 
     - name: Install project (inside env)
       run: mamba run -n environment pip install -e . --no-dependencies
