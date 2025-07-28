@@ -48,7 +48,7 @@ from ticoi.inversion_functions import (
     mu_regularisation,
     weight_for_inversion,
 )
-from ticoi.pixel_class import pixel_class
+from ticoi.pixel_class import PixelClass
 
 warnings.filterwarnings("ignore")
 
@@ -1302,7 +1302,7 @@ def visualization_core(
     :param vminmax: List[int] [default is None] --- Min and max values for the y-axis of the plots
     """
 
-    pixel_object = pixel_class()
+    pixel_object = PixelClass()
     pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data)
 
     dico_visual = {

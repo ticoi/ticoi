@@ -16,7 +16,7 @@ import pandas as pd
 import scipy.ndimage as ndi
 from scipy import interpolate
 
-from ticoi.pixel_class import pixel_class
+from ticoi.pixel_class import PixelClass
 
 
 def reconstruct_common_ref(
@@ -215,7 +215,7 @@ def visualisation_interpolation(
     :param vminmax: [List[int, int]] [default is None] --- Min and max values for the y-axis of the plots
     """
 
-    pixel_object = pixel_class()
+    pixel_object = PixelClass()
     pixel_object.load(
         list_dataf, save=save, show=show, path_save=path_save, type_data=["obs", "interp"], figsize=figsize
     )

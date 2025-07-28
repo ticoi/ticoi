@@ -3,7 +3,7 @@ dask
 fiona
 gdal
 geopandas>=0.10.0
-geopandas >=0.10.0
+glaft
 h5netcdf
 h5py >= 3.11
 jdcal
@@ -17,7 +17,6 @@ pip
 pyproj>=3.4,<4
 rasterio>=1.3,<2
 requests #to access data on the cloud
-rioxarray
 rioxarray
 scikit-learn
 scipy==1.*
