@@ -101,7 +101,7 @@ class CubeResultsWriter:
         if verbose:
             print(f"[Writing results] Detected dimensions: {dimensions}")
 
-        self.variable_configs = self._generate_variable_configs(dimensions)
+        self.variable_configs = self._generate_variable_configs(dimensions) #set variable long_names,short_names, and unit
 
         time_base, non_null_el = self._get_time_base(result)
 
@@ -371,8 +371,8 @@ class CubeResultsWriter:
 
         cubenew.ds.rio.write_crs(self.proj4, inplace=True)
         if "spatial_ref" in cubenew.ds.coords:
-            grid_mapping_attrs = cubenew.ds.coords["spatial_ref"].attrs
-            cubenew.ds = cubenew.ds.drop_vars("spatial_ref")
+        grid_mapping_attrs = cubenew.ds.coords["spatial_ref"].attrs
+        cubenew.ds = cubenew.ds.drop_vars("spatial_ref")
 
         cubenew.ds["grid_mapping"] = xr.DataArray(0, attrs=grid_mapping_attrs)
 
@@ -425,6 +425,11 @@ class CubeResultsWriter:
         return bool(result) and any(not r.empty for r in result)
 
     def _get_time_base(self, result: list) -> Tuple[pd.Series, pd.DataFrame]:
+        """
+        Get the centered date (time_variable) and the results which are not null
+        :param result [list]: list with results from ticoi or tico
+        :return: entered date (time_variable) and the results which are not null
+        """
         non_null_el = next((r for r in result if not r.empty), None)
         if non_null_el is None:
             return pd.Series([], dtype="datetime64[ns]"), None
