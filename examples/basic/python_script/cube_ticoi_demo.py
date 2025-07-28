@@ -25,7 +25,8 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr import CubeDataClass, CubeResultsWriter
+from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.cube_writer import CubeResultsWriter
 
 warnings.filterwarnings("ignore")
 
