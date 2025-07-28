@@ -161,11 +161,12 @@ class CubeResultsWriter:
                     cubenew,
                     var_name,
                     data_array,
-                    time_base,
                     config["short_names"][idx],
                     config["long_names"][idx],
                     config["unit"],
                 )
+
+
             elif verbose:
                 print(f"Warning: Configuration for variable '{var_name}' not found. Skipping.")
 
@@ -313,7 +314,6 @@ class CubeResultsWriter:
         time_variable: pd.Series,
         smooth_res: bool,
         smooth_window_size: int,
-        smooth_filt: Optional[np.ndarray],
     ):
         """
         Process and add all detected velocity-related variables to the data cube.
@@ -347,7 +347,6 @@ class CubeResultsWriter:
                     cube,
                     final_var,
                     result_arr,
-                    time_variable,
                     config["short_names"][i],
                     config["long_names"][i],
                     config["unit"],
@@ -408,20 +407,27 @@ class CubeResultsWriter:
         cube: "CubeDataClass",
         var: str,
         data: np.ndarray,
-        time_variable: pd.Series,
         short_name: str,
         long_name: str,
         unit: str,
     ):
-        """Add a variable as a DataArray to the data cube."""
+        """
+        Add a variable as a DataArray to the data cube.
+        :param cube:
+        :param var: [str] --- variable name
+        :param data:
+        :param short_name:
+        :param long_name:
+        :param unit:
+        :return:
+        """
         data_array = xr.DataArray(
             data, dims=["x", "y", "time"], coords={"x": cube.ds["x"], "y": cube.ds["y"], "time": cube.ds["time"]}
         )
         cube.ds[var] = data_array.transpose("time", "y", "x")
         attrs = {"units": unit, "long_name": long_name, "grid_mapping": "grid_mapping"}
 
-        if short_name:
-            attrs["standard_name"] = short_name
+        attrs["short_name"] = var #no standard_name exist
         cube.ds[var].attrs = attrs
 
     def _set_reference_date(self, cube: "CubeDataClass", ref_dates: np.ndarray):
