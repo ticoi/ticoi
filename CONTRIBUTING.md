@@ -10,7 +10,7 @@ These are some of the many ways to contribute:
 * :mag: Fixing typos and improving to the documentation
 * :bulb: Writing code for everyone to use
 
-* 
+*
 Below is a guide to contributing to TICOI step by step, ensuring tests are passing.
 
 ## Overview: making a contribution
