@@ -1,4 +1,5 @@
 # TICOI
+[![Python test](https://github.com/ticoi/ticoi/actions/workflows/python-app.yml/badge.svg?branch=main)](https://github.com/ticoi/ticoi/actions/workflows/python-app.yml)
 
 Post-processing method based on the temporal closure to fuse multi-temporal and multi-sensor velocity measurements,
 which may have been computed from  different processing chains.
