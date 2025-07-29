@@ -9,19 +9,17 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import json
 import os
 import time
-import urllib
 import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ticoi.core import interpolation_core, inversion_core, visualization_core
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.interpolation_functions import visualisation_interpolation
+from src.ticoi import visualisation_interpolation
+from src.ticoi.core import interpolation_core, inversion_core, visualization_core
+from src.ticoi.cube_data_classxr import CubeDataClass
 
 warnings.filterwarnings("ignore")
 

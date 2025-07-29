@@ -31,13 +31,13 @@ from joblib import Parallel, delayed
 from scipy import stats
 from tqdm import tqdm
 
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.interpolation_functions import (
+from src.ticoi.cube_data_classxr import CubeDataClass
+from src.ticoi.interpolation_functions import (
     reconstruct_common_ref,
     set_function_for_interpolation,
     visualisation_interpolation,
 )
-from ticoi.inversion_functions import (
+from src.ticoi.inversion_functions import (
     TukeyBiweight,
     class_linear_operator,
     construction_a_lf,
@@ -48,7 +48,7 @@ from ticoi.inversion_functions import (
     mu_regularisation,
     weight_for_inversion,
 )
-from ticoi.pixel_class import PixelClass
+from src.ticoi.pixel_class import PixelClass
 
 warnings.filterwarnings("ignore")
 

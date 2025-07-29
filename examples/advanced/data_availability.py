@@ -59,13 +59,12 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import xarray as xr
 from joblib import Parallel, delayed
 from osgeo import gdal, osr
 from tqdm import tqdm
 
-from ticoi.core import process_blocks_refine
-from ticoi.cube_data_classxr import CubeDataClass
+from src.ticoi.core import process_blocks_refine
+from src.ticoi.cube_data_classxr import CubeDataClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #

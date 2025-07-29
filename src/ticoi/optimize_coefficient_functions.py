@@ -1,19 +1,13 @@
 import asyncio
 import itertools
-import os
-import time
-import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
 from joblib import Parallel, delayed
-from osgeo import gdal, osr
 from tqdm import tqdm
 
-from ticoi.core import chunk_to_block, load_block
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.utils import optimize_coef
+from src.ticoi.core import chunk_to_block, load_block
+from src.ticoi.utils import optimize_coef
 
 
 async def process_block(

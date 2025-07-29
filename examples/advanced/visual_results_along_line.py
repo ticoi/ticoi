@@ -4,13 +4,10 @@ Visualization of the results along a given line (generally the flow line of the 
 
 import os
 import time
-import warnings
 
-from pyproj import Transformer
-
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.pixel_class import PixelClass
-from ticoi.utils import draw_heatmap, points_of_shp_line
+from src.ticoi import draw_heatmap, points_of_shp_line
+from src.ticoi.cube_data_classxr import CubeDataClass
+from src.ticoi.pixel_class import PixelClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #

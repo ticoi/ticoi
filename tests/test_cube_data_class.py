@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from ticoi.cube_data_classxr import (
+from src.ticoi.cube_data_classxr import (
     CubeDataClass,  # Assuming cube_data_class is defined in your_module
 )
 

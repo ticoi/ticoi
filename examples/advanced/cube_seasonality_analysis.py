@@ -23,15 +23,14 @@ import numpy as np
 import pandas as pd
 import scipy.fft as fft
 import scipy.signal as signal
-import xarray as xr
 from joblib import Parallel, delayed
 from osgeo import gdal, osr
 from scipy.optimize import curve_fit
 from tqdm import tqdm
 
-from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.interpolation_functions import prepare_interpolation_date
+from src.ticoi import prepare_interpolation_date
+from src.ticoi.core import process, process_blocks_refine, save_cube_parameters
+from src.ticoi.cube_data_classxr import CubeDataClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #

@@ -16,7 +16,7 @@ import pandas as pd
 import scipy.ndimage as ndi
 from scipy import interpolate
 
-from ticoi.pixel_class import PixelClass
+from src.ticoi.pixel_class import PixelClass
 
 
 def reconstruct_common_ref(

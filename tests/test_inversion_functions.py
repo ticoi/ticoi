@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from ticoi.core import mu_regularisation
-from ticoi.inversion_functions import (
+from src.ticoi.core import mu_regularisation
+from src.ticoi.inversion_functions import (
     construction_a_lf,
     construction_dates_range_np,
     inversion_one_component,

@@ -1,5 +1,5 @@
 import copy
-from typing import List, Optional, Union
+from typing import List
 
 import matplotlib
 import matplotlib.colors as mcolors
@@ -13,7 +13,7 @@ import seaborn as sns
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error
 
-import ticoi.pixel_class
+from src import ticoi
 
 # %%========================================================================= #
 #                           DATAFRAME_DATA OBJECT                             #

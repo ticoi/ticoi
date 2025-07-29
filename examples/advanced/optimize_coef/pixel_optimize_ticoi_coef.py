@@ -13,13 +13,9 @@ import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import sklearn.metrics as sm
-import xarray as xr
 
-from ticoi.core import interpolation_to_data, inversion_core
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.utils import optimize_coef
+from src.ticoi import optimize_coef
+from src.ticoi.cube_data_classxr import CubeDataClass
 
 # %%===================================================================== #
 #                               PARAMETERS                                #

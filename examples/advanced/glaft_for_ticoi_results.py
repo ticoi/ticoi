@@ -6,7 +6,7 @@ import glaft
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ticoi.cube_data_classxr import CubeDataClass
+from src.ticoi.cube_data_classxr import CubeDataClass
 
 # ======== User Settings (please review this section every time) ========
 current_dir = os.path.dirname(os.path.abspath(__file__))  # current file

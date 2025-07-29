@@ -17,8 +17,8 @@ import os
 import time
 import warnings
 
-from ticoi.cube_data_classxr import CubeDataClass
-from ticoi.pixel_class import PixelClass
+from src.ticoi.cube_data_classxr import CubeDataClass
+from src.ticoi.pixel_class import PixelClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #
