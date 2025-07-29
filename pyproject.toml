@@ -1,17 +1,17 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools>=61.0", "wheel"]
 build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
+version = "0.0.5"
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
 description = "A package to run an Temporal Inversion based on the temporal ClOsure of the measurement network, and Interpolation (TICOI)"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "GPL-3.0-only" }
-dynamic = ["version"]
+license = {text = "GPL-3.0-only" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent"]
@@ -48,9 +48,6 @@ dependencies = [
 Homepage = "https://github.com/ticoi/ticoi.git"
 Issues = "https://github.com/pypa/sampleproject/issues"
 
-[tool.hatch.version]
-path = "src/ticoi/__about__.py"
-
 [tool.hatch.envs.dev]
 inherit = ["default"]
 dependencies = [
@@ -62,3 +59,6 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = "."
+
+[tool.hatch.publish.index-repositories]
+testpypi = "https://test.pypi.org/legacy/"

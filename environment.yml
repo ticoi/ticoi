@@ -2,7 +2,7 @@ name: ticoi
 channels:
   - conda-forge
 dependencies:
-  - python=3.11
+  - python=3.10
   - aiohttp
   - dask
   - fiona=1.9

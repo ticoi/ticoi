@@ -1374,8 +1374,8 @@ def ticoi_one_pixel(
     cube_name: str,
     i: int,
     j: int,
-    save,
-    path_save: str,
+    save: bool = False,
+    path_save: str = None,
     show: bool = True,
     option_visual: list = ["invertvv_overlaid"],
     verbose: bool = False,
@@ -1479,7 +1479,8 @@ def ticoi_one_pixel(
     # Proceed to interpolation
     dataf_lp = interpolation_core(result, **interpolation_kwargs)
 
-    dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
+    if save:
+        dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
 
     if verbose:
         stop.append(time.time())
