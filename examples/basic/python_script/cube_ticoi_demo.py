@@ -24,9 +24,10 @@ import warnings
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from src.ticoi import CubeResultsWriter
-from src.ticoi.core import process, process_blocks_refine, save_cube_parameters
-from src.ticoi.cube_data_classxr import CubeDataClass
+from ticoi import example
+from ticoi.core import process, process_blocks_refine, save_cube_parameters
+from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.cube_writer import CubeResultsWriter
 
 warnings.filterwarnings("ignore")
 
@@ -54,7 +55,7 @@ save_mean_velocity = True  # Save a .tiff file with the mean resulting velocitie
 ## ------------------------------ Data selection --------------------------- ##
 current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
 package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
-cube_name = os.path.join(package_root, "test_data", "ITS_LIVE_Lowell_Lower_test.nc")  # path to our dataset
+cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
 path_save = os.path.join(package_root, "examples", "results", "cube") + "/"  # path where to save our results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
 

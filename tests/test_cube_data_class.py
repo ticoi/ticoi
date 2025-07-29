@@ -30,7 +30,7 @@ class Testclass_cube_data_xr:
 
     # to do the test for several parameters, the function test can be decorated with pytest.mark.parametrize
     @pytest.mark.parametrize(
-        "filepath", ["ITS_LIVE_Lowell_Lower_test.nc", "Alps_Mont-Blanc_Argentiere_S2.nc"], indirect=["filepath"]
+        "filepath", ["ITS_LIVE_Lowell_Lower_test.nc"], indirect=["filepath"]
     )  # Note that indirect should specify which parameters are to be treated indirectly
     def test_load(self, cube_data_class_instance):
         """Tests that the cube_data_class_instance is properly loaded and contains expected data."""

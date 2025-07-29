@@ -28,9 +28,9 @@ from osgeo import gdal, osr
 from scipy.optimize import curve_fit
 from tqdm import tqdm
 
-from src.ticoi import prepare_interpolation_date
-from src.ticoi.core import process, process_blocks_refine, save_cube_parameters
-from src.ticoi.cube_data_classxr import CubeDataClass
+from ticoi import prepare_interpolation_date
+from ticoi.core import process, process_blocks_refine, save_cube_parameters
+from ticoi.cube_data_classxr import CubeDataClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #

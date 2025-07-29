@@ -63,8 +63,8 @@ from joblib import Parallel, delayed
 from osgeo import gdal, osr
 from tqdm import tqdm
 
-from src.ticoi.core import process_blocks_refine
-from src.ticoi.cube_data_classxr import CubeDataClass
+from ticoi.core import process_blocks_refine
+from ticoi.cube_data_classxr import CubeDataClass
 
 # %%========================================================================= #
 #                                   PARAMETERS                                #

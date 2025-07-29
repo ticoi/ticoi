@@ -24,8 +24,9 @@ import warnings
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from src.ticoi.core import process, process_blocks_refine, save_cube_parameters
-from src.ticoi.cube_data_classxr import CubeDataClass
+from ticoi.core import process, process_blocks_refine, save_cube_parameters
+from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.cube_writer import CubeResultsWriter
 
 warnings.filterwarnings("ignore")
 
@@ -218,8 +219,10 @@ start.append(time.time())
 
 if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
     several = type(returned) == list and len(returned) >= 2
+    writer = CubeResultsWriter(cube)
+
     if "invert" in returned:
-        cube_invert = cube.write_result_tico(
+        cube_invert = writer.write_result_tico(
             result["invert"] if several else result,
             source,
             sensor,
@@ -229,7 +232,7 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
             verbose=inversion_kwargs["verbose"],
         )
     if "interp" in returned:
-        cube_interp = cube.write_result_ticoi(
+        cube_interp = writer.write_result_ticoi(
             result["interp"] if several else result,
             source_interp,
             sensor,
