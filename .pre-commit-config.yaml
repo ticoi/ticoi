@@ -17,13 +17,9 @@ repos:
       - id: check-added-large-files
       - id: check-case-conflict
       - id: check-executables-have-shebangs
-      - id: check-json
       - id: check-merge-conflict
-      - id: check-symlinks
       - id: check-toml
-      - id: check-vcs-permalinks
       - id: check-yaml
-      - id: requirements-txt-fixer
 
   # Replace relative imports
   - repo: https://github.com/MarcoGorelli/absolufy-imports
