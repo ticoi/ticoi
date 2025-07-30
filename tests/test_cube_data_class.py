@@ -71,9 +71,9 @@ class Testclass_cube_data_xr:
         data, mean, dates_range = cube_data_class_instance.load_pixel(x, y)
         assert len(data) == 2, "Data is not a list of two elements"
         assert data[0].shape[1] == 2, "data_dates is not an array with two columns"
-        assert (
-            str(data[0][0, 0].dtype) == "datetime64[D]" or str(data[0][0, 0].dtype) == "datetime64[s]"
-        ), "data_dates is not an array with two columns"
+        assert str(data[0][0, 0].dtype) == "datetime64[D]" or str(data[0][0, 0].dtype) == "datetime64[s]", (
+            "data_dates is not an array with two columns"
+        )
         assert data[1].shape[1] == 5
         actual = data[1][0, :]
         np.testing.assert_array_almost_equal(actual, expected, decimal=1)

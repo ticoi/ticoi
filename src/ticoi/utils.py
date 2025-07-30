@@ -27,7 +27,6 @@ from ticoi.cube_data_classxr import CubeDataClass
 
 
 def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_lines: bool = False) -> np.ndarray:
-
     """
     Compute the moving average of the velocities from data between the given dates.
 
@@ -46,7 +45,6 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
         moy = []
 
         while i < data.shape[0] and dates[i_date, 1] >= data[i, 0]:  # If the velocity observation is between two dates
-
             if dates[i_date, 0] <= data[i, 1]:
                 moy.append(data[i, v_pos])
             i += 1
@@ -65,7 +63,6 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
 
 
 def find_granule_by_point(input_point):  # [lon,lat]
-
     """
     Takes an input dictionary (a geojson catalog) and a point to represent AOI and returns a list of the s3 urls corresponding to
     zarr datacubes whose footprint covers the AOI.
@@ -85,7 +82,6 @@ def find_granule_by_point(input_point):  # [lon,lat]
         point_geom = Point(input_point[0], input_point[1])
         point_gdf = gpd.GeoDataFrame(crs="epsg:4326", geometry=[point_geom])
         for granule in itslive_catalog["features"]:
-
             bbox_ls = granule["geometry"]["coordinates"][0]
             bbox_geom = Polygon(bbox_ls)
             bbox_gdf = gpd.GeoDataFrame(index=[0], crs="epsg:4326", geometry=[bbox_geom])
@@ -128,7 +124,7 @@ def points_of_shp_line(shp_file, proj="EPSG:4326", distance=50, nb_points=None, 
         raise ValueError("One of 'distance' or 'nb_points' parameters must not be None.")
 
     # Projection of the shapeline coordinates into the cube coordinates system
-    if proj != None and CRS(proj) != geolns.crs:
+    if proj is not None and CRS(proj) != geolns.crs:
         geolns = geolns.to_crs(CRS(proj))
 
     # Retrieve the points from the line (interpolation)
@@ -156,7 +152,6 @@ def draw_heatmap(
     x_tick_frequency=10,
     y_tick_frequency=3,
 ):
-
     """
     Draw an hovmoller diagram (heatmap).
 
@@ -242,7 +237,6 @@ def RMSE_TICOI_GT(
     vminmax: list | None = None,
     savedir: str | None = None,
 ):
-
     """
     Compute the RMSE between TICOI results with a given coefficient and "ground truth" data.
 
@@ -442,7 +436,6 @@ def VVC_TICOI(
     interpolation_kwargs: dict,
     regu: int | str | None = None,
 ):
-
     """
     Compute TICOI for one particular coefficient, and compute the VVC
     :param data:
@@ -500,7 +493,6 @@ def optimize_coef(
     nb_cpu: int = 8,
     **visual_options,
 ):
-
     """
     Optimization of the regularization coefficient value for the TICOI post-processing method, either by comparing the results
     to a "ground truth" (method='ground_truth') or a zero velocity in stable ground ('stable_ground'), or by computing the

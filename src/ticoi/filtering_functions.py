@@ -21,7 +21,6 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 
 def numpy_ewma_vectorized(series: np.ndarray, halflife: int = 30) -> np.ndarray:
-
     """
     Calculate the exponentially weighted moving average of a series using vectorized operations.
 
@@ -53,7 +52,6 @@ def ewma_smooth(
     sigma: int = 3,
     order: int | None = 3,
 ) -> np.ndarray:
-
     """
     Calculates an exponentially weighted moving average (EWMA) of a series at specific time points.
 
@@ -85,7 +83,6 @@ def gaussian_smooth(
     sigma: int = 3,
     order: int | None = 3,
 ) -> np.ndarray:
-
     """
     Perform Gaussian smoothing on a time series data.
 
@@ -121,7 +118,6 @@ def lowess_smooth(
     sigma: int = 3,
     order: int | None = 3,
 ) -> np.ndarray:
-
     try:
         t_win = 60
         frac = t_win / len(t_interp)
@@ -144,7 +140,6 @@ def median_smooth(
     sigma: int = 3,
     order: int | None = 3,
 ) -> np.ndarray:
-
     """
     Calculate a smoothed series using median filtering.
 
@@ -177,7 +172,6 @@ def savgol_smooth(
     sigma: int = 3,
     order: int | None = 3,
 ) -> np.ndarray:
-
     """
     Perform Savitzky-Golay smoothing on a time series.
 
@@ -249,7 +243,7 @@ def ica_denoise(
         # denoised_output = np.interp(t_out, t_interp, series_denoised_flat)
 
         return denoised_output[t_out]
-    except Exception as e:
+    except Exception:
         return np.zeros(len(t_out))
 
 
@@ -264,7 +258,6 @@ def dask_smooth(
     order: int = 3,
     axis: int = 2,
 ) -> da.array:
-
     """
     Apply smoothing to the input Dask array along the specified axis using the specified method.
 
@@ -309,7 +302,6 @@ def dask_smooth_wrapper(
     order: int = 3,
     axis: int = 2,
 ):
-
     """
     A function that wraps a Dask array to apply a smoothing function.
 
@@ -374,7 +366,6 @@ def dask_smooth_wrapper(
 
 
 def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
-
     """
     Remove the observations if it is 3 time the standard deviation from the average of observations over this pixel
     :param obs: cube data to filter
@@ -393,7 +384,6 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
 
 def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
-
     """
     Remove the observations if it is 3 time the MAD from the median of observations over this pixel
     :param obs: cube data to filter
@@ -415,8 +405,7 @@ def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
 
 def NVVC_angle_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
-) -> (np.array):
-
+) -> np.array:
     """
     Combine angle filter and zscore
     If the VVC is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
@@ -458,8 +447,7 @@ def NVVC_angle_filt(
 
 def NVVC_angle_mzscore_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, mz_thres: int = 3.5, axis: int = 2
-) -> (np.array):
-
+) -> np.array:
     """
     Combine angle filter and zscore
     If the VVC is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
@@ -500,7 +488,6 @@ def NVVC_angle_mzscore_filt(
 
 
 def median_magnitude_filt(obs_cpx: np.array, median_magnitude_thres: int = 3, axis: int = 2):
-
     """
     Remove the observation if it median_magnitude_thres times bigger than the mean velocity at pixel, or if it is
     1/median_magnitude_thres times smaller than the mean velocity at pixel
@@ -523,7 +510,6 @@ def median_magnitude_filt(obs_cpx: np.array, median_magnitude_thres: int = 3, ax
 
 
 def median_angle_filt(obs_cpx: np.array, angle_thres: int = 45, axis: int = 2):
-
     """
     Remove the observation if it is angle_thres away from the median vector
     :param obs_cpx: cube data to filter
@@ -684,7 +670,7 @@ def dask_filt_warpper(
         )
     else:
         raise ValueError(
-            f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
+            "Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
         )
 
     return inlier_mask.compute()

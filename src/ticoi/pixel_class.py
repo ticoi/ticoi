@@ -19,14 +19,12 @@ from sklearn.metrics import mean_squared_error
 
 
 class DataframeData:
-
     """Object to define a pd.Dataframe storing velocity observations"""
 
     def __init__(self, dataf: pd.DataFrame = pd.DataFrame()):
         self.dataf = dataf
 
     def set_temporal_baseline_central_date_offset_bar(self):
-
         """Set temporal baselines ('temporal_baseline'), centrale date (date_cori), and offset bar ('offset_bar'), used for plotting"""
 
         delta = self.dataf["date2"] - self.dataf["date1"]  # temporal baseline of the observations
@@ -35,12 +33,11 @@ class DataframeData:
             self.dataf["temporal_baseline"] = np.asarray((delta).dt.days).astype(
                 "int"
             )  # temporal baseline as an integer
-        except:
+        except TypeError:
             self.dataf["temporal_baseline"] = np.array([delta[i].days for i in range(delta.shape[0])])
         self.dataf["offset_bar"] = delta // 2  # to plot the temporal baseline of the plots
 
     def set_vx_vy_invert(self, type_data: str = "invert", conversion: int = 365):
-
         """
         Convert displacements into velocity
 
@@ -60,7 +57,6 @@ class DataframeData:
         self.dataf["vy"] = self.dataf["vy"] * conversion
 
     def set_vv(self):
-
         """Set velocity magnitude variable (here vv) in the dataframe"""
 
         self.dataf["vv"] = np.round(
@@ -68,7 +64,6 @@ class DataframeData:
         )  # Compute the magnitude of the velocity
 
     def set_minmax(self):
-
         """Set the attribute minimum and maximum fir vx, vy, and possibly vv"""
 
         self.vxymin = int(self.dataf["vx"].min())
@@ -86,7 +81,6 @@ class DataframeData:
 
 
 class PixelClass:
-
     """Object class to store the data on a given pixel"""
 
     def __init__(
@@ -99,7 +93,6 @@ class PixelClass:
         A: np.ndarray | None = None,
         dataobs: pd.DataFrame | None = None,
     ):
-
         """
         Initialize the pixel_class object with general plotting parameters, or set them to default values if no parameters are given.
 
@@ -126,7 +119,6 @@ class PixelClass:
     def set_data_from_pandas_df(
         self, dataf_ilf: pd.DataFrame, type_data: str = "invert", conversion: int = 365, variables: List[str] = ["vv"]
     ):
-
         """
         Set the data as a pandas DataFrame (using methods from the dataframe_data object).
 
@@ -176,7 +168,6 @@ class PixelClass:
         variables: List[str] | None = ["vv", "vx", "vy"],
         A: np.ndarray | None = None,
     ):
-
         """
         Load the data from dataf and format it in a dataframe_data object using the set_data_from_pandas_df method, depending on the type of data (type_data).
         Initialize the object with general plotting parameters.
@@ -198,9 +189,9 @@ class PixelClass:
 
         conversion = self.get_conversion()  # Conversion factor
         if isinstance(dataf, list) and len(dataf) > 1:
-            assert isinstance(type_data, list) and (
-                len(dataf) == len(type_data)
-            ), f"If 'dataf' is a list, 'type_data' must be a list of the same length"
+            assert isinstance(type_data, list) and (len(dataf) == len(type_data)), (
+                "If 'dataf' is a list, 'type_data' must be a list of the same length"
+            )
 
             for i in range(len(dataf)):
                 if dataformat == "df":
@@ -208,9 +199,9 @@ class PixelClass:
                         dataf[i], type_data=type_data[i], conversion=conversion, variables=variables
                     )
         elif (isinstance(dataf, list) and len(dataf) == 1) or isinstance(dataf, pd.DataFrame):
-            assert (isinstance(type_data, list) and len(type_data) == 1) or isinstance(
-                type_data, str
-            ), "If 'dataf' is a dataframe or list of a single dataframe, 'type_data' must either be a list of a single string element, or a string"
+            assert (isinstance(type_data, list) and len(type_data) == 1) or isinstance(type_data, str), (
+                "If 'dataf' is a dataframe or list of a single dataframe, 'type_data' must either be a list of a single string element, or a string"
+            )
 
             if dataformat == "df":
                 self.set_data_from_pandas_df(
@@ -223,7 +214,6 @@ class PixelClass:
             raise ValueError(f"'dataf' must be a list or a pandas dataframe, not {type(dataf)}")
 
     def get_dataf_invert_or_obs_or_interp(self, type_data: str = "obs") -> (pd.DataFrame, str):  # type: ignore
-
         """
         Get dataframe either obs or invert
 
@@ -255,7 +245,6 @@ class PixelClass:
                 return self.datainterp, "Results from TICOI"
 
     def get_conversion(self):
-
         """
         Get conversion factor
 
@@ -265,8 +254,7 @@ class PixelClass:
         conversion = 365 if self.unit == "m/y" else 1
         return conversion
 
-    def get_direction(self, data: "ticoi.PixelClass.DataframeData") -> (np.array, np.array):  # type: ignore
-
+    def get_direction(self, data: "PixelClass.DataframeData") -> (np.array, np.array):  # type: ignore
         """
         Get the direction of the provided data
 
@@ -288,7 +276,6 @@ class PixelClass:
         return directionm, directionm_mean
 
     def get_filtered_results(self, filt: str | None = None):
-
         """
         Filter TICOI results using a given filter.
 
@@ -311,7 +298,6 @@ class PixelClass:
         vv = self.datainterp.dataf["vv"]  # Velocity magnitude
         vv_c = vv - np.mean(vv)  # Centered velocities
 
-        N = len(dates)
         Ts = dates[1] - dates[0]
 
         # Filter the results...
@@ -332,7 +318,6 @@ class PixelClass:
         filt: str | None = None,
         verbose: bool = False,
     ):
-
         """
         Compute the Fourier Transform (TF) of the interpolated results after applying a Hanning window.
 
@@ -366,9 +351,9 @@ class PixelClass:
 
         if verbose:
             f = freq[np.argmax(np.abs(vv_win_tf))]
-            print(f"TF maximum for f = {round(f, 5)} day-1 (period of {round(1/f, 2)} days)")
+            print(f"TF maximum for f = {round(f, 5)} day-1 (period of {round(1 / f, 2)} days)")
             print(
-                f"Amplitude of the TF at this frequency : {round(2/N * np.abs(vv_tf[np.argmax(np.abs(vv_win_tf))]), 2)} m/y"
+                f"Amplitude of the TF at this frequency : {round(2 / N * np.abs(vv_tf[np.argmax(np.abs(vv_win_tf))]), 2)} m/y"
             )
 
         return vv_tf, vv_win_tf, freq, N
@@ -381,7 +366,6 @@ class PixelClass:
         several_freq: int = 1,
         verbose: bool = False,
     ):
-
         """
         Match a sinus (with fixed frequency or not) or a composition of several sinus (fundamental and harmonics) to the resulting TICOI data (and raw data)
         to measure its amplitude, the position of its maximum, the RMSE with the original data...
@@ -403,14 +387,11 @@ class PixelClass:
 
         # sine_fconst if impose_frequency else sine_fvar, popt, popt_raw, [dates, dates_c, dates_raw], vv_filt, stats, stats_raw
 
-        vv = self.datainterp.dataf["vv"]
         vv_filt, vv_c, dates_c, dates = self.get_filtered_results(filt=filt)
 
         N = len(dates)
-        Ts = dates[1] - dates[0]
 
         if impose_frequency:
-
             # Sinus function (can add harmonics)
             def sine_fconst(t, *args, freqs=1, f=1 / 365.25):
                 sine = args[0] * np.sin(2 * np.pi * f * t + args[1])
@@ -505,7 +486,7 @@ class PixelClass:
             del sine_year
 
             if verbose:
-                print(f"Period of the best matching sinus : {round(1/f, 2)} days")
+                print(f"Period of the best matching sinus : {round(1 / f, 2)} days")
                 print(f"Amplitude : {round(max_value, 2)} m/y")
                 print(f"Maximum at day {max_day.days}")
                 print(f"RMSE : {round(RMSE, 2)} m/y")
@@ -529,7 +510,6 @@ class PixelClass:
     # =========================================================================%% #
 
     def plot_vx_vy(self, color: str = "orange", type_data: str = "invert", block_plot: bool = True):
-
         """
         Plot vx and vy in two plots of the same figure.
 
@@ -592,7 +572,6 @@ class PixelClass:
         zoom_on_results: bool = False,
         block_plot: bool = True,
     ):
-
         """
         Plot vx and vy in two plots of the same figure where inverted/interpolated results overlay the observations (raw data).
 
@@ -649,7 +628,7 @@ class PixelClass:
         )
         ax[1].legend(loc="lower left", bbox_to_anchor=(0.0, -0.65), fontsize=14)
         fig.suptitle(
-            f"X and Y components of {'interpolated' if type_data=='interp' else 'inverted'} results, along with raw data",
+            f"X and Y components of {'interpolated' if type_data == 'interp' else 'inverted'} results, along with raw data",
             y=0.95,
             fontsize=16,
         )
@@ -667,7 +646,6 @@ class PixelClass:
     def plot_vv(
         self, color: str = "orange", type_data: str = "invert", block_plot: bool = True, vminmax: list | None = None
     ):
-
         """
         Plot the velocity magnitude.
 
@@ -687,7 +665,7 @@ class PixelClass:
         else:
             ax.set_ylim(vminmax[0], vminmax[1])
         ax.set_ylabel(f"Velocity magnitude  [{self.unit}]", fontsize=14)
-        p = ax.plot(
+        ax.plot(
             data.dataf["date_cori"],
             data.dataf["vv"],
             linestyle="",
@@ -733,7 +711,6 @@ class PixelClass:
         block_plot: bool = True,
         vminmax: list | None = None,
     ):
-
         """
         Plot the velocity magnitude of inverted/interpolated results, overlaying the velocity magnitude of the observations (raw data).
 
@@ -756,7 +733,7 @@ class PixelClass:
 
         if zoom_on_results:
             ax.set_ylim(data.vvymin, data.vvymax)
-        p = ax.plot(
+        ax.plot(
             data.dataf["date_cori"],
             data.dataf["vv"],
             linestyle="",
@@ -765,7 +742,7 @@ class PixelClass:
             lw=0.7,
             markersize=2,
             color=colors[1],
-            label=f"Results from the inversion",
+            label="Results from the inversion",
         )
         ax.errorbar(
             data.dataf["date_cori"],
@@ -794,7 +771,6 @@ class PixelClass:
         return fig, ax
 
     def plot_vv_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
-
         """
         Plot error on top of velocity vx and vy.
 
@@ -806,9 +782,9 @@ class PixelClass:
         :return fig, ax: Axis and Figure of the plots
         """
 
-        assert (
-            "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns
-        ), "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
+        assert "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns, (
+            "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
+        )
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
@@ -837,7 +813,6 @@ class PixelClass:
         return fig, ax
 
     def plot_vx_vy_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
-
         """
         Plot error on top of velocity magnitude vv
 
@@ -848,9 +823,9 @@ class PixelClass:
         :return fig, ax: Axis and Figure of the plots
         """
 
-        assert (
-            "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns
-        ), "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
+        assert "errorx" in self.dataobs.dataf.columns and "errory" in self.dataobs.dataf.columns, (
+            "'errorx' and/or 'errory' values are missing in the data, impossible to plot the errors"
+        )
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
@@ -887,7 +862,6 @@ class PixelClass:
     def plot_direction(
         self, color: str = "orange", type_data: str = "obs", block_plot: bool = True, plot_mean: bool = True
     ):
-
         """
         Plot the direction of the velocities for each of the data at this point.
 
@@ -931,7 +905,6 @@ class PixelClass:
         block_plot: bool = True,
         plot_mean: bool = True,
     ):
-
         """
         Plot the velocity direction of inverted/interpolated results, overlaying the velocity direction of the observations (raw data).
 
@@ -985,9 +958,9 @@ class PixelClass:
         dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="interp")
         data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values
 
-        assert (
-            "error_x" and "x_count" not in data.columns
-        ), "No quality metrics to display, please re run ticoi using the options Error_propagation or X_contribution"
+        assert "error_x" and "x_count" not in data.columns, (
+            "No quality metrics to display, please re run ticoi using the options Error_propagation or X_contribution"
+        )
 
         if "error_x" in data.columns:
             data["error_x"] = np.sqrt(data["error_x"])
@@ -1015,9 +988,8 @@ class PixelClass:
 
         fig, ax = plt.subplots(figsize=(10, 6))
         if "error_x" in data.columns:
-
-            if not "xcount_x" in data.columns:
-                p = ax.plot(
+            if "xcount_x" not in data.columns:
+                ax.plot(
                     data["date_cori"],
                     data["vv"],
                     linestyle="",
@@ -1057,7 +1029,7 @@ class PixelClass:
             cbar = fig.colorbar(scat, ax=ax, boundaries=bounds, orientation="horizontal", pad=0.15, shrink=0.7)
             cbar.set_label("Number of image-pair velocities used", fontsize=14)
 
-        ax.set_ylabel(f"Velocity magnitude [m/y]", fontsize=18)
+        ax.set_ylabel("Velocity magnitude [m/y]", fontsize=18)
         # Show plot if specified
         if self.show:
             plt.show(block=False)
@@ -1073,7 +1045,6 @@ class PixelClass:
     # =========================================================================%% #
 
     def plot_xcount_vx_vy(self, cmap: str = "viridis", block_plot: bool = True):
-
         """
         Plot the observation contribution to the inversion on top of velocities x and y components.
 
@@ -1083,12 +1054,12 @@ class PixelClass:
         :return fig, ax: Axis and Figure of the plot
         """
 
-        assert (
-            self.datainvert is not None
-        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vx_vy()"
-        assert (
-            "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns
-        ), "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
+        assert self.datainvert is not None, (
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vx_vy()"
+        )
+        assert "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns, (
+            "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
+        )
 
         fig, ax = plt.subplots(2, 1, figsize=self.figsize)
         ax[0].set_ylabel(f"Vx [{self.unit}]", fontsize=14)
@@ -1126,7 +1097,6 @@ class PixelClass:
         return fig, ax
 
     def plot_xcount_vv(self, cmap: str = "viridis", block_plot: bool = True):
-
         """
         Plot the observation contribution to the inversion on top of the velocity magnitude.
 
@@ -1136,12 +1106,12 @@ class PixelClass:
         :return fig, ax: Axis and Figure of the plot
         """
 
-        assert (
-            self.datainvert is not None
-        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
-        assert (
-            "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns
-        ), "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
+        assert self.datainvert is not None, (
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        )
+        assert "xcount_x" in self.datainvert.dataf.columns and "xcount_y" in self.datainvert.dataf.columns, (
+            "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
+        )
 
         fig, ax = plt.subplots(figsize=self.figsize)
         ax.set_ylabel(f"Velocity magnitude [{self.unit}]", fontsize=14)
@@ -1167,7 +1137,6 @@ class PixelClass:
         return fig, ax
 
     def plot_weights_inversion(self, cmap: str = "plasma_r", block_plot: bool = True):
-
         """
         Plot initial and final weights used in the inversion.
 
@@ -1177,9 +1146,9 @@ class PixelClass:
         :return ax_f, fig_f, ax_l, fig_l: Axis and Figure of the plots (weights from f: the first inversion, l: the last inversion)
         """
 
-        assert (
-            self.datainvert is not None
-        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        assert self.datainvert is not None, (
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        )
 
         ## ----------------------- Weights used during the first inversion ------------------------- ##
         fig_f, ax_f = plt.subplots(2, 1, figsize=(8, 4))
@@ -1280,7 +1249,6 @@ class PixelClass:
         return ax_f, fig_f, ax_l, fig_l
 
     def plot_residuals(self, log_scale: bool = False, block_plot: bool = True):
-
         """
         Statistics about the residuals from the inversion:
             - Plot of the final residuals overlaid in colors on vx and vy measurements ('residuals_vx_vy_final_residual.png').
@@ -1293,9 +1261,9 @@ class PixelClass:
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
         """
 
-        assert (
-            self.datainvert is not None
-        ), "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        assert self.datainvert is not None, (
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        )
         assert self.A is not None, "Please provide A (design matrix) when loading the pixel_class"
 
         dataf = self.dataobs.dataf.replace("L. Charrier, J. Mouginot, R.Millan, A.Derkacheva", "IGE")
@@ -1473,7 +1441,7 @@ class PixelClass:
             ax[1].set_yscale("log")
         ax[0].set_ylabel(f"Residual vx [{self.unit}]", fontsize=16)
         ax[1].set_ylabel(f"Residual vy [{self.unit}]", fontsize=16)
-        ax[1].set_xlabel(f"Quality indicator", fontsize=16)
+        ax[1].set_xlabel("Quality indicator", fontsize=16)
         plt.subplots_adjust(bottom=0.2)
         ax[1].legend(loc="lower left", bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=12, ncol=5)
         if self.show:
@@ -1510,7 +1478,7 @@ class PixelClass:
             ax[1].set_yscale("log")
         ax[0].set_ylabel(f"Residual vx [{self.unit}]", fontsize=16)
         ax[1].set_ylabel(f"Residual vy [{self.unit}]", fontsize=16)
-        ax[1].set_xlabel(f"Temporal baseline [days]", fontsize=16)
+        ax[1].set_xlabel("Temporal baseline [days]", fontsize=16)
         plt.subplots_adjust(bottom=0.2)
         ax[1].legend(loc="lower left", bbox_to_anchor=(0.12, 0), bbox_transform=fig.transFigure, fontsize=12, ncol=5)
         if self.show:
@@ -1526,7 +1494,6 @@ class PixelClass:
     # =========================================================================%% #
 
     def plot_filtered_results(self, filt: str | None = None, impose_frequency: bool = True):
-
         """
         Plot the filtered TICOI results, with a given filter.
 
@@ -1570,7 +1537,6 @@ class PixelClass:
         return fig, ax
 
     def plot_TF(self, filt=None, verbose=False):
-
         """
         Plot the Fourier Transform (TF) of the TICOI results after filtering with a given filter.
 
@@ -1597,7 +1563,7 @@ class PixelClass:
         ax.set_xlabel("Frequency [day-1]", fontsize=16)
         ax.set_ylabel("Amplitude [m/y]", fontsize=16)
         ax.legend(loc="best")
-        ax.set_title(f"Fourier Transform of the TICOI-resulting velocities", fontsize=16)
+        ax.set_title("Fourier Transform of the TICOI-resulting velocities", fontsize=16)
 
         if self.show:
             plt.show()
@@ -1614,7 +1580,6 @@ class PixelClass:
         several_freq: int = 1,
         verbose: bool = False,
     ):
-
         """
         Plot the best matching sinus to the TICOI results (and to the raw data if required), by fixing the frequency to 1/365.25 days-1 or looking for the best matching one.
 
@@ -1674,7 +1639,7 @@ class PixelClass:
             label="Best matching sinus to TICOI results",
         )
         ax.vlines(
-            pd.date_range(start=stats[0], end=self.datainterp.dataf["date2"].max(), freq=f"{int(1/f)}D"),
+            pd.date_range(start=stats[0], end=self.datainterp.dataf["date2"].max(), freq=f"{int(1 / f)}D"),
             np.min(self.datainterp.dataf["vv"]),
             np.max(self.datainterp.dataf["vv"]),
             "black",
@@ -1711,7 +1676,6 @@ class PixelClass:
         markers_size: List[int] = [5, 4, 3, 4, 3, 4, 4, 7, 4],
         verbose: bool = True,
     ):
-
         """
         Plot the velocity curves of each year on top of ones another and compute some statistics about it ().
 

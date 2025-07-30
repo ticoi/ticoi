@@ -27,7 +27,6 @@ async def process_block(
     nb_cpu=8,
     preData_kwargs=None,
 ):
-
     """Optimize the coef on a given block"""
 
     if optimization_method == "stable_ground":  # We only compute stable ground pixels
@@ -97,7 +96,6 @@ async def process_blocks_main(
     block_size=0.5,
     verbose=False,
 ):
-
     """Main function for the optimization of the coef using a block processing approach"""
 
     blocks = chunk_to_block(cube, block_size=block_size, verbose=True)
@@ -107,7 +105,7 @@ async def process_blocks_main(
     loop = asyncio.get_event_loop()
 
     for n in range(len(blocks)):
-        print(f"Processing block {n+1}/{len(blocks)}")
+        print(f"Processing block {n + 1}/{len(blocks)}")
 
         # Load the first block and start the loop
         if n == 0:
@@ -116,7 +114,7 @@ async def process_blocks_main(
 
         block, block_flag, duration = await future
         if verbose:
-            print(f"Block {n+1} loaded in {duration:.2f} s")
+            print(f"Block {n + 1} loaded in {duration:.2f} s")
 
         if n < len(blocks) - 1:
             # Load the next block while processing the current block
@@ -228,9 +226,9 @@ def find_good_coefs(
             good_coefs = coefs[measures > good_measure]
 
     elif select_method == "vvc_angle_thresh":
-        assert (
-            mean_angle is not None
-        ), "Mean angle to median direction over the area must be given for 'vvc_angle_thresh' selection method"
+        assert mean_angle is not None, (
+            "Mean angle to median direction over the area must be given for 'vvc_angle_thresh' selection method"
+        )
 
         dVVC = abs(-np.sin(mean_angle) / (2 * np.sqrt(2 * (1 + np.cos(mean_angle)))) * thresh)
         if visual:
@@ -240,9 +238,9 @@ def find_good_coefs(
         return find_good_coefs(coefs, measures, method="vvc", select_method="absolute", thresh=dVVC)
 
     elif select_method == "vvc_disp_thresh":
-        assert (
-            mean_disp is not None
-        ), "Mean displacements over the area must be given for 'vvc_disp_thresh' selection method"
+        assert mean_disp is not None, (
+            "Mean displacements over the area must be given for 'vvc_disp_thresh' selection method"
+        )
 
         vx, vy = mean_disp
         v0 = np.array([vx - thresh, vy + thresh])

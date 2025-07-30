@@ -44,7 +44,6 @@ from ticoi.mjd2date import mjd2date
 
 class CubeDataClass:
     def __init__(self, cube=None, ds=None):
-
         """
         Initialisation of the main attributes, or copy cube's attributes and ds dataset if given.
 
@@ -77,7 +76,6 @@ class CubeDataClass:
             self.is_TICO = cube.is_TICO
 
     def update_dimension(self, time_dim: str = "mid_date"):
-
         """
         Update the attributes corresponding to cube dimensions: nx, ny, and nz
 
@@ -93,7 +91,6 @@ class CubeDataClass:
             raise ValueError("Your cube is empty, please check the subset or buffer coordinates you provided")
 
     def subset(self, proj: str, subset: list):
-
         """
         Crop the dataset according to 4 coordinates describing a rectangle.
 
@@ -124,7 +121,6 @@ class CubeDataClass:
             print(f"[Data loading] The given subset is not part of cube {self.filename}")
 
     def buffer(self, proj: str, buffer: list):
-
         """
         Crop the dataset around a given pixel, the amount of surroundings pixels kept is given by the buffer.
 
@@ -162,7 +158,6 @@ class CubeDataClass:
         time_dim: str = "mid_date",
         verbose: bool = False,
     ) -> (int, int, int):  # type: ignore
-
         """
         A function to determine the optimal chunk size for a given time series array based on its size.
         This function is from gtsa DOI 10.5281/zenodo.8188085.
@@ -234,7 +229,6 @@ class CubeDataClass:
         proj: str = "EPSG:4326",
         verbose: bool = False,
     ):
-
         """
         Load a cube dataset written by ITS_LIVE.
 
@@ -348,7 +342,6 @@ class CubeDataClass:
         proj: str = "EPSG:4326",
         verbose: bool = False,
     ):
-
         """
         Load a cube dataset written by R. Millan et al.
 
@@ -479,7 +472,6 @@ class CubeDataClass:
         proj: str = "EPSG:4326",
         verbose: bool = False,
     ):
-
         """
         Load a cube dataset written by E. Ducasse et al. (Pleiades data)
 
@@ -581,7 +573,6 @@ class CubeDataClass:
         proj: str = "EPSG:4326",
         verbose: bool = False,
     ):
-
         """
         Load a cube dataset written by L.Charrier et al.
 
@@ -597,7 +588,7 @@ class CubeDataClass:
         """
 
         if verbose:
-            print(f'[Data loading] Path to cube file {"(TICO cube)" if self.is_TICO else ""} : {filepath}')
+            print(f"[Data loading] Path to cube file {'(TICO cube)' if self.is_TICO else ''} : {filepath}")
 
         # information about the cube
         self.filedir = os.path.dirname(filepath)
@@ -701,7 +692,6 @@ class CubeDataClass:
         reproj_vel: bool = False,
         verbose: bool = False,
     ):
-
         """
         Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
 
@@ -724,9 +714,9 @@ class CubeDataClass:
         """
         self.__init__()
 
-        assert (
-            type(filepath) == list or type(filepath) == str
-        ), f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
+        assert isinstance(filepath, list) or isinstance(filepath, str), (
+            f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
+        )
 
         time_dim_name = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
@@ -739,7 +729,7 @@ class CubeDataClass:
             "IGE": "mid_date",
         }  # dictionary to set the name of time_dimension for a given author
 
-        if type(filepath) == list:  # Merge several cubes
+        if isinstance(filepath, list):  # Merge several cubes
             self.load(
                 filepath[0],
                 chunks=chunks,
@@ -866,7 +856,6 @@ class CubeDataClass:
                     print(f"[Data loading] Author : {self.ds.author}")
 
     def standardize_cube_for_processing(self, time_dim="mid_date"):
-
         """
         Prepare the xarray dataset for the processing: transpose the dimension, add a variable temporal_baseline, errors if they do not exist
 
@@ -894,7 +883,6 @@ class CubeDataClass:
     def prepare_interpolation_date(
         self,
     ) -> (np.datetime64, np.datetime64):  # type: ignore
-
         """
         Define the first and last date required for the interpolation, as the first date and last in the observations.
         The purpose is to have homogenized results
@@ -918,7 +906,6 @@ class CubeDataClass:
     # =====================================================================%% #
 
     def sensor_(self) -> list:
-
         """
         Accessor to the sensors whoch captured the data.
 
@@ -928,7 +915,6 @@ class CubeDataClass:
         return self.ds["sensor"].values.tolist()
 
     def source_(self) -> list:
-
         """
         Accessor to the source of the data.
 
@@ -938,7 +924,6 @@ class CubeDataClass:
         return self.ds["source"].values.tolist()
 
     def temp_base_(self, return_list: bool = True, format_date: str = "float") -> list | np.ndarray:
-
         """
         Get the temporal baseline of the dataset.
 
@@ -961,7 +946,6 @@ class CubeDataClass:
             return temp.values
 
     def date1_(self) -> np.array:
-
         """
         Accessor to the first dates of acquisition.
 
@@ -971,7 +955,6 @@ class CubeDataClass:
         return np.asarray(self.ds["date1"]).astype("datetime64[D]")
 
     def date2_(self) -> np.array:
-
         """
         Accessor to the second dates of acquisition.
 
@@ -981,7 +964,6 @@ class CubeDataClass:
         return np.asarray(self.ds["date2"]).astype("datetime64[D]")
 
     def datec_(self) -> np.array:
-
         """
         Accessor to the central dates of the data.
 
@@ -991,7 +973,6 @@ class CubeDataClass:
         return (self.date1_() + self.temp_base_(return_list=False, format_date="D") // 2).astype("datetime64[D]")
 
     def vv_(self) -> np.array:
-
         """
         Accessor to the magnitude of the velocities.
 
@@ -1012,7 +993,6 @@ class CubeDataClass:
     # =====================================================================%% #
 
     def convert_coordinates(self, i: int | float, j: int | float, proj: str, verbose: bool = False) -> (float, float):  # type: ignore
-
         """
         Convert the coordinate (i, j) which are in projection proj, to projection of the cube dataset.
 
@@ -1052,7 +1032,6 @@ class CubeDataClass:
         visual: bool = False,
         output_format="np",
     ) -> (Optional[list], Optional[list], Optional[np.array], Optional[np.array], Optional[np.array]):  # type: ignore
-
         """
         Load data at pixel (i, j) and compute prior to inversion (rolling mean, mean, dates range...).
 
@@ -1159,7 +1138,6 @@ class CubeDataClass:
         direction: xr.Dataset | None = None,
         **kwargs,
     ):
-
         """
         Delete outliers according to a certain criterium.
 
@@ -1246,13 +1224,12 @@ class CubeDataClass:
                         self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
                 else:
                     raise ValueError(
-                        f"Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
+                        "Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
 
     def mask_cube(self, mask: xr.DataArray | str):
-
         """
         Mask some of the data of the cube (putting it to np.nan).
 
@@ -1291,7 +1268,6 @@ class CubeDataClass:
             )
 
     def reproject_geotiff_to_cube(self, file_path):
-
         """
         Reproject the geotiff file to the same geometry of the cube
         :param: file_path: [str] --- path of the geotifffile to be wrapped
@@ -1316,7 +1292,6 @@ class CubeDataClass:
         return dst_data
 
     def compute_flow_direction(self, vx_file: str | None = None, vy_file: str | None = None) -> xr.DataArray:
-
         """
         Compute the average flow direction from the input vx and vy files or just from the observations
         :param: vx_file | vy_file: [str] --- path of the flow velocity file, should be geotiff format
@@ -1351,7 +1326,6 @@ class CubeDataClass:
         return direction
 
     def create_flag(self, flag: str = None, field_name: str | None = None, default_value: str | int | None = None):
-
         """
         Create a flag dataset based on the provided shapefile and shapefile field.
         Which is usually used to divide the pixels into different types, especially for surging glaciers.
@@ -1438,7 +1412,6 @@ class CubeDataClass:
         select_baseline: int | None = 180,
         verbose: bool = False,
     ) -> xr.Dataset:
-
         """
            Filter the original data before the inversion:
         -delete outliers according to the provided criterion
@@ -1465,7 +1438,6 @@ class CubeDataClass:
         """
 
         def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = 180) -> (np.ndarray, np.ndarray):  # type: ignore
-
             """
             A function to calculate spatial mean, resample data, and calculate smoothed velocity.
 
@@ -1485,8 +1457,8 @@ class CubeDataClass:
             if select_baseline is not None:  # select data with a temporal baseline lower than a threshold
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(baseline < select_baseline)
-                while len(idx[0]) < 3 * len(date_out) & (
-                    select_baseline < 200
+                while (
+                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 200)
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
                 mid_dates = mid_dates.isel(mid_date=idx[0])
@@ -1641,7 +1613,7 @@ class CubeDataClass:
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
 
-        if obs_filt != None:
+        if obs_filt is not None:
             obs_filt.load()
         self.ds = self.ds.load()  # Crash memory without loading
         # persist() is particularly useful when using a distributed cluster because the data will be loaded into distributed memory across your machines and be much faster to use than reading repeatedly from disk.
@@ -1649,7 +1621,6 @@ class CubeDataClass:
         return obs_filt, flag
 
     def split_cube(self, n_split: int = 2, dim: str | list = "x", savepath: str | None = None):
-
         """
         Split the cube into smaller cubes (taking less memory to load) according to the given dimensions.
 
@@ -1784,7 +1755,7 @@ class CubeDataClass:
         # temp = self.temp_base_()
         temp = np.array([30] * self.nz)
 
-        def transform_slice(z):
+        def transform_slice(z, temp, grid, transformer):
             """Transform the velocity slice for a single time step."""
             # compute the coordinate for the ending point of the vector
             endx = (self.ds["vx"].isel(mid_date=z) * temp[z] / unit) + grid[0]
@@ -1798,7 +1769,11 @@ class CubeDataClass:
 
             return vx, vy
 
-        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(transform_slice)(z) for z in range(self.nz)))
+        results = np.array(
+            Parallel(n_jobs=nb_cpu, verbose=0)(
+                delayed(transform_slice, temp, grid, transformer)(z) for z in range(self.nz)
+            )
+        )
         # Unpack the results
         vx, vy = results[:, 0, :, :], results[:, 1, :, :]
 
@@ -1828,7 +1803,6 @@ class CubeDataClass:
         interp_method: str = "nearest",
         nb_cpu: int = 8,
     ):
-
         """
         Reproject cube to match the resolution, projection, and region of self.
 
@@ -1855,7 +1829,6 @@ class CubeDataClass:
         return cube
 
     def merge_cube(self, cube: "CubeDataClass"):
-
         """
         Merge another cube to the present one. It must have been aligned first (using align_cube)
 
@@ -1869,10 +1842,10 @@ class CubeDataClass:
         self.ds = self.ds.chunk(chunks={"mid_date": self.ds["mid_date"].size})
         self.nz = self.ds["mid_date"].size
         if (
-            type(self.filedir) != list
-            and type(self.filename) != list
-            and type(self.author) != list
-            and type(self.source) != list
+            isinstance(self.filedir, list)
+            and isinstance(self.filename, list)
+            and isinstance(self.author, list)
+            and isinstance(self.source, list)
         ):
             self.filedir = [self.filedir]
             self.filename = [self.filename]
@@ -1890,7 +1863,6 @@ class CubeDataClass:
         save: bool = True,
         path_save: str | None = None,
     ):
-
         """
         Compute the mean velocity at each pixel of he cube.
 
@@ -1904,7 +1876,7 @@ class CubeDataClass:
         time_dim = "mid_date" if "mid_date" in self.ds.dims else "time"
         vx_mean = self.ds["vx"].mean(dim=time_dim)
         vy_mean = self.ds["vy"].mean(dim=time_dim)
-        dico_variable = {"vx": vx_mean, "vx": vy_mean}
+        dico_variable = {"vx": vx_mean, "vy": vy_mean}
         if "vv" in return_variable:
             vv_mean = np.sqrt(vx_mean**2 + vy_mean**2)
             dico_variable["vv"] = vv_mean
@@ -1954,7 +1926,6 @@ class CubeDataClass:
         freq: str = "MS",
         method: str = "mean",
     ) -> pd.DataFrame:
-
         """
         Compute a heatmap of the average monthly velocity, average all the velocities which are overlapping a given month
 
@@ -1993,10 +1964,11 @@ class CubeDataClass:
         del interval_output, date_range, data
 
         def data_temporalpoint(k: int, points_heatmap):
-
             """Get the data at a given spatial point contained in points_heatmap"""
 
-            geopoint = points_heatmap["geometry"].iloc[
+            geopoint = points_heatmap[
+                "geometry"
+            ].iloc[
                 k
             ]  # Return a point at the specified distance along a linear geometric object. # True -> interpretate k/n as fraction and not meters
 
@@ -2040,7 +2012,6 @@ class CubeDataClass:
 
     # @jit(nopython=True)
     def nvvc(self, nb_cpu=8, verbose=True):
-
         """
         Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
 

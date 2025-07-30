@@ -146,7 +146,7 @@ def weight_for_inversion(
     """
 
     # Weight based on data quality
-    if weight_origine == True and not inside_Tukey:
+    if weight_origine and not inside_Tukey:
         if conf:  # Based on data quality given in confidence indicator, i.e. between 0 and 1 (1 is highest quality)
             Weight = data[:, pos]
         else:  # The data quality corresponds to errors in m/y or m/d
@@ -166,7 +166,7 @@ def weight_for_inversion(
     # Apriori weights (ex : detection of temporal decorrelation)
     elif temporal_decorrelation is not None:
         Weight = temporal_decorrelation
-    elif weight_origine == True:
+    elif weight_origine:
         Weight = data[:, pos]
     else:  # If no apriori knowledge, identity matrix
         Weight = np.ones(data.shape[0])
@@ -201,7 +201,6 @@ def hat_matrix(A: np.ndarray, coef: int, mu: np.ndarray, W: np.ndarray | None = 
         A = sp.csc_matrix(A)
         return A @ inv(A.T @ A + coef * mu.T @ mu) @ A.T
     else:
-
         A = A[W != 0]
         ATW = np.multiply(A.T, W[W != 0][np.newaxis, :]).astype("float32")
         A = sp.csc_matrix(A)
@@ -475,7 +474,7 @@ def inversion_one_component(
     else:
         v = data
 
-    if type(Weight) == int and Weight == 1:
+    if type(Weight) is not int and Weight == 1:
         Weight = np.ones(v.shape[0])  # Equivalent to an Ordinary Least Square
 
     if regu == "1accelnotnull":  # Apriori on the acceleration
@@ -497,7 +496,9 @@ def inversion_one_component(
         F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float32")
         D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float32")
         F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
-        X = sp.linalg.lsmr(F, D)[
+        X = sp.linalg.lsmr(
+            F, D
+        )[
             0
         ]  # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
 
@@ -514,7 +515,7 @@ def inversion_one_component(
             if verbose:
                 print("Is F convex?", is_convex(F.toarray()))
             D = np.hstack([np.multiply(W, v[condi]), D_regu])  # stack ax and regu, and remove rows with only
-        if type(ini) == list:  # if rolling mean
+        if type(ini) is not list:  # if rolling mean
             x0 = ini[v_pos - 2]
         elif ini.shape[0] == 2:  # if only the average of the entire time series
             x0 = np.full(len(dates_range) - 1, ini[v_pos - 2], dtype="float32")
@@ -595,8 +596,6 @@ def inversion_two_components(
             print("ill conditioned")
             print("rank A", np.linalg.matrix_rank(A))
 
-    l_dates_range = len(dates_range)
-
     c = np.concatenate([A, np.zeros(A.shape)], axis=0)
     A = np.concatenate([c, np.concatenate([np.zeros(A.shape), A], axis=0)], axis=1)
     dates_range = np.concatenate([dates_range, dates_range])
@@ -624,7 +623,7 @@ def inversion_two_components(
             "float64"
         )  # stack ax and regu, and remove rows with only
 
-        if type(ini) == list:
+        if type(ini) is not list:
             x0 = np.concatenate(ini)
         elif ini.shape[0] == 2:
             x0 = np.full(F.shape[1], ini[v_pos - 2], dtype="float64")
@@ -658,7 +657,7 @@ def inversion_two_components(
     else:
         residu_norm = None
 
-    if residu_norm == None:
+    if residu_norm is not None:
         return X[: X.shape[0] // 2], X[X.shape[0] // 2 :], None, None
     else:
         return (

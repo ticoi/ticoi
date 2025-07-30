@@ -23,7 +23,6 @@ def reconstruct_common_ref(
     result: pd.DataFrame,
     second_date_list: List[np.datetime64] | None = None,
 ) -> pd.DataFrame:
-
     """
     Build the Cumulative Displacements (CD) time series with a Common Reference (CR) from a Leap Frog time series
 
@@ -85,7 +84,6 @@ def set_function_for_interpolation(
     interpolate.interp1d | interpolate.UnivariateSpline,
     interpolate.interp1d | interpolate.UnivariateSpline,
 ):  # type: ignore
-
     """
     Get the function to interpolate the each of the time series.
 
@@ -98,11 +96,11 @@ def set_function_for_interpolation(
     :return fdx_xcount, fdx_ycount: [functions | None] --- The functions which need to be used to interpolate the contributed values in X
     """
 
-    assert type(option_interpol) == str and option_interpol in [
+    assert type(option_interpol) is str and option_interpol in [
         "spline_smooth",
         "spline",
         "nearest",
-    ], f"The filepath must be a string among the options: 'spline_smooth','spline','nearest'."
+    ], "The filepath must be a string among the options: 'spline_smooth','spline','nearest'."
 
     # Compute the functions used to interpolate
     # Define the interpolation functions based on the interpolation option
@@ -131,7 +129,6 @@ def set_function_for_interpolation(
 
 
 def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd.Series) -> pd.DataFrame:
-
     """
 
     :param dataf_lp: [pd dataframe] --- Interpolated results
@@ -162,7 +159,6 @@ def full_with_nan(dataf_lp: pd.DataFrame, first_date: pd.Series, second_date: pd
 
 
 def smooth_results(result: np.ndarray, window_size: int = 3):
-
     r"""
     Spatially smooth the data by averaging (applying a convolution filter to) each pixel with its neighborhood.
     /!\ This method only works with cubes where both starting and ending dates exactly correspond for each pixel (ie TICOI results)
@@ -199,7 +195,6 @@ def visualisation_interpolation(
     figsize: tuple[int] = (10, 6),
     vminmax: List[int] = None,
 ):
-
     """
     Plot some relevant information about TICOI results.
 

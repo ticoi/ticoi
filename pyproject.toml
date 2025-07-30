@@ -53,11 +53,11 @@ dependencies = [
   "ruff",
   "pytest",
   "pre-commit",
-  "ipykernel",
 ]
+[tool.ruff]
+line-length = 120
 
 [tool.pytest.ini_options]
-testpaths = "."
-
-[tool.hatch.publish.index-repositories]
-testpypi = "https://test.pypi.org/legacy/"
+filterwarnings = [
+    "error",
+    "ignore::UserWarning"]

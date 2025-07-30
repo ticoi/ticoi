@@ -14,7 +14,6 @@ def match_sine(
     d_raw: pd.DataFrame | None = None,
     variable: str = "vv",
 ):
-
     """
        Match a sine curve to TICOI results to look for a periodicity among the velocities. The period can either
     be set to 365.25 days, or estimated along with the other parameters (amplitude, phase, offset).
@@ -46,16 +45,13 @@ def match_sine(
     Ts = dates[1] - dates[0]
 
     # Filtering to remove inter-annual variations
-    try:
-        if filt == "highpass":
-            b, a = signal.butter(4, [1 / (1.5 * 365), 1 / (2.001 * Ts)], "bandpass", fs=1 / Ts, output="ba")
-            vv_filt = signal.filtfilt(b, a, vv - np.mean(vv))
-        elif filt == "lowpass":
-            sos = signal.butter(4, 1 / (2.001 * Ts), "lowpass", fs=1 / Ts, output="sos")
-            vv_filt = signal.sosfilt(sos, vv - np.mean(vv))
-        else:
-            vv_filt = vv
-    except:
+    if filt == "highpass":
+        b, a = signal.butter(4, [1 / (1.5 * 365), 1 / (2.001 * Ts)], "bandpass", fs=1 / Ts, output="ba")
+        vv_filt = signal.filtfilt(b, a, vv - np.mean(vv))
+    elif filt == "lowpass":
+        sos = signal.butter(4, 1 / (2.001 * Ts), "lowpass", fs=1 / Ts, output="sos")
+        vv_filt = signal.sosfilt(sos, vv - np.mean(vv))
+    else:
         vv_filt = vv
 
     # Frequency is set to 1/365.25 (one year)
@@ -149,7 +145,6 @@ def match_sine(
 
 
 def rolling_std(raw, dataf_lp, local_var_method="uniform_7d"):
-
     """
        Compute Amplitude to local VARiations index, which compares the amplitude of the best matching sinus to the standard
     deviation of the noise using one of the four given methods.
@@ -196,7 +191,6 @@ def rolling_std(raw, dataf_lp, local_var_method="uniform_7d"):
 
 
 def AtoVar(A, raw, dataf_lp, local_var_method="uniform_7d"):
-
     """
        Compute Amplitude to local VARiations index, which compares the amplitude of the best matching sinus to the standard
     deviation of the noise using one of the four given methods.

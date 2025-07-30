@@ -21,7 +21,7 @@ import asyncio
 import itertools
 import time
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -74,7 +74,6 @@ def inversion_iteration(
     ini: np.ndarray | None = None,
     verbose: bool = False,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None):
-
     """
     Compute an iteration of the inversion : update the weights using the weights from the previous iteration and the studentized residual, update the results in consequence
     and compute the residu's norm if required.
@@ -105,7 +104,6 @@ def inversion_iteration(
         return Residu
 
     def weightf(residu: np.ndarray, Weight: np.ndarray) -> np.ndarray:
-
         """
         Compute weight according to the residual
 
@@ -157,7 +155,7 @@ def inversion_iteration(
             )
 
     elif solver == "LSMR_ini":
-        if ini == None:  # Initialization with the result from the previous inversion
+        if ini is None:  # Initialization with the result from the previous inversion
             result_dx, residu_normx = inversion_one_component(
                 A,
                 dates_range,
@@ -275,7 +273,6 @@ def inversion_core(
     visual: bool = False,
     verbose: bool = False,
 ) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
-
     """
     Computes A in AX = Y and does the inversion using a given solver and regularization.
 
@@ -305,7 +302,6 @@ def inversion_core(
     """
 
     if data[0].size:  # If there are available data on this pixel
-
         # Split the data, with one dtype per array
         if len(data) == 3:
             data_dates, data_values, data_str = data
@@ -358,7 +354,7 @@ def inversion_core(
             if (
                 result_quality is not None
                 and not apriori_weight_in_second_iteration
-                and not "Error_propagation" in result_quality
+                and "Error_propagation" not in result_quality
             ):
                 data_values = np.delete(
                     data_values, [2, 3], 1
@@ -440,8 +436,8 @@ def inversion_core(
         # Second Iteration
         if iteration:
             if (
-                apriori_weight_in_second_iteration
-            ) and apriori_weight:  # use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
+                (apriori_weight_in_second_iteration) and apriori_weight
+            ):  # use apriori weight based on the error or quality indicator, Tukeybiweight(error/MAD(error)/ 0.6745)
                 Weightx2 = weight_for_inversion(
                     weight_origine=apriori_weight, conf=conf, data=data_values, pos=2, inside_Tukey=False
                 )
@@ -543,7 +539,6 @@ def inversion_core(
         if result_quality is not None and "Error_propagation" in result_quality:
 
             def Prop_weight(F, weight, Residu, error):
-
                 error = np.max([Residu, error], axis=0)  # take the maximum between residuals and errors
                 W = weight.astype("float32")
                 FTWF = np.multiply(F.T, W[np.newaxis, :]) @ F
@@ -653,7 +648,6 @@ def interpolation_core(
     redundancy: int | None = 5,
     result_quality: list | None = None,
 ):
-
     """
     Interpolate Irregular Leap Frog time series (result of an inversion) to Regular LF time series using Cumulative Displacement times series.
 
@@ -830,7 +824,6 @@ def interpolation_to_data(
     unit: int = 365,
     result_quality: list | None = None,
 ):
-
     """
     Interpolate Irregular Leap Frog time series (result of an inversion) to the dates of given data (useful to compare
     TICOI results to a "ground truth").
@@ -923,7 +916,6 @@ def process(
     visual: bool = False,
     verbose: bool = False,
 ):
-
     """
     :params i, j: [float | int] --- Coordinates of the point in pixel
     :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
@@ -1050,7 +1042,6 @@ def process(
 
 
 def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = False):
-
     """
     Split a dataset in blocks of a given size (maximum).
 
@@ -1064,13 +1055,10 @@ def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = F
     GB = 1073741824
     blocks = []
     if cube.ds.nbytes > block_size * GB:
-
         try:
             num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
         except ValueError:
-            cube = (
-                cube.ds.unify_chunks()
-            )  # ValueError: Object has inconsistent chunks along dimension x. This can be fixed by calling unify_chunks().
+            cube = cube.ds.unify_chunks()  # ValueError: Object has inconsistent chunks along dimension x. This can be fixed by calling unify_chunks().
 
         chunk_bytes = num_elements * cube.ds["vx"].dtype.itemsize
 
@@ -1085,7 +1073,7 @@ def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = F
         nblocks = nblocks_x * nblocks_y
         if verbose:
             print(
-                f'[Block process] Divide into {nblocks} blocks\n   blocks size: {x_step * cube.ds.chunks["x"][0]} x {y_step * cube.ds.chunks["y"][0]}'
+                f"[Block process] Divide into {nblocks} blocks\n   blocks size: {x_step * cube.ds.chunks['x'][0]} x {y_step * cube.ds.chunks['y'][0]}"
             )
 
         for i in range(nblocks_y):
@@ -1104,7 +1092,6 @@ def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = F
 
 
 def load_block(cube: CubeDataClass, x_start: int, x_end: int, y_start: int, y_end: int, flag: xr.Dataset | None = None):
-
     """
     Persist a block in memory, i.e. load it in a distributed way.
 
@@ -1136,10 +1123,9 @@ def process_blocks_refine(
     block_size: float = 0.5,
     returned: list | str = "interp",
     preData_kwargs: dict = None,
-    inversion_kwargs: dict = None,
+    inversion_kwargs: dict | None = None,
     verbose: bool = False,
 ):
-
     """
     Separate the cube in several blocks computed synchronously one after the other by loading one block while the other is computed (with
     parallelization) in order to avoid memory overconsumption and kernel crashing, and benefit from smaller computation time.
@@ -1160,7 +1146,7 @@ def process_blocks_refine(
     ):
         xy_values = itertools.product(block.ds["x"].values, block.ds["y"].values)
         # Return only raw data => no need to filter the cube
-        if "raw" in returned and (type(returned) == str or len(returned) == 1):  # Only load the raw data
+        if "raw" in returned and (isinstance(returned, str) or len(returned) == 1):  # Only load the raw data
             xy_values_tqdm = tqdm(xy_values, total=(block.nx * block.ny))
             result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
                 delayed(block.load_pixel)(
@@ -1219,7 +1205,7 @@ def process_blocks_refine(
 
         loop = asyncio.get_event_loop()
         for n in range(len(blocks)):
-            print(f"[Block process] Processing block {n+1}/{len(blocks)}")
+            print(f"[Block process] Processing block {n + 1}/{len(blocks)}")
 
             # Load the first block and start the loop
             if n == 0:
@@ -1227,7 +1213,7 @@ def process_blocks_refine(
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
 
             block, block_flag, duration = await future
-            print(f"Block {n+1} loaded in {duration:.2f} s")
+            print(f"Block {n + 1} loaded in {duration:.2f} s")
 
             if n < len(blocks) - 1:
                 # Load the next block while processing the current block
@@ -1281,9 +1267,8 @@ def visualization_core(
     cmap: str = "viridis",
     colors: List[str] = ["blueviolet", "orange"],
     figsize: tuple[int, int] = (10, 6),
-    vminmax: List[int] = None,
+    vminmax: List[int] | None = None,
 ):
-
     r"""
     Visualization function for the output of pixel_ticoi
     /!\ Many figures can be plotted
@@ -1329,12 +1314,12 @@ def visualization_core(
 
 
 def save_cube_parameters(
-    cube: "ticoi.cube_data_classxr.CubeDataClass",
+    cube: "CubeDataClass",
     load_kwargs: dict,
     preData_kwargs: dict,
     inversion_kwargs: dict,
     returned: list | None = None,
-) -> (str, str):
+) -> Tuple[str, str]:
     """
 
     :param cube: [cube_data_class] --- cube dataset
@@ -1349,22 +1334,22 @@ def save_cube_parameters(
 
     source = f"Temporal inversion on cube {cube.filename} using TICOI"
     source += (
-        f' with a selection of dates among {load_kwargs["pick_date"]},'
+        f" with a selection of dates among {load_kwargs['pick_date']},"
         if load_kwargs["pick_date"] is not None
-        else "" + f' with a selection of the temporal baselines among {load_kwargs["pick_temp_bas"]}'
+        else "" + f" with a selection of the temporal baselines among {load_kwargs['pick_temp_bas']}"
         if load_kwargs["pick_temp_bas"] is not None
-        else ("" + f' with a subset of {load_kwargs["subset"]}')
+        else ("" + f" with a subset of {load_kwargs['subset']}")
         if load_kwargs["subset"] is not None
         else ""
     )
 
     if inversion_kwargs["apriori_weight"]:
         source += " and apriori weight"
-    source += f'. The regularisation coefficient is {inversion_kwargs["coef"]}.'
+    source += f". The regularisation coefficient is {inversion_kwargs['coef']}."
     if "interp" in returned:
-        source += f'The interpolation method used is {inversion_kwargs["option_interpol"]}.'
-        source += f'The interpolation baseline is {inversion_kwargs["interval_output"]} days.'
-        source += f'The temporal spacing (redundancy) is {inversion_kwargs["redundancy"]} days.'
+        source += f"The interpolation method used is {inversion_kwargs['option_interpol']}."
+        source += f"The interpolation baseline is {inversion_kwargs['interval_output']} days."
+        source += f"The temporal spacing (redundancy) is {inversion_kwargs['redundancy']} days."
 
     source += f"The preparation are argument are: {preData_kwargs}"
     return source, sensor
@@ -1375,9 +1360,9 @@ def ticoi_one_pixel(
     i: int,
     j: int,
     save: bool = False,
-    path_save: str = None,
+    path_save: str | None = None,
     show: bool = True,
-    option_visual: list = ["invertvv_overlaid"],
+    option_visual: List = ["invertvv_overlaid"],
     verbose: bool = False,
     load_kwargs: dict = {},
     load_pixel_kwargs: dict = {},

@@ -540,7 +540,7 @@ class CubeResultsWriter:
         """
         configs = {}
         for var_type, base_config in BASE_CONFIGS.items():
-            vars_list, long_names, short_names, final_vars = [], [], [], []
+            vars_list, long_names, final_vars = [], [], []
             for dim in dimensions:
                 if dim not in base_config["suffixes"]:
                     continue  # if the dimension is not defined
@@ -710,7 +710,6 @@ class CubeResultsWriter:
         result_quality: list | None = None,
         verbose: bool = False,
     ) -> Union["CubeDataClass", str]:
-
         """
         Write the result from TICOI or TICO, stored in result, in a xarray dataset matching the conventions CF-1.10
         It recognizes whether the results are irregular or regular and uses the appropriate saving method

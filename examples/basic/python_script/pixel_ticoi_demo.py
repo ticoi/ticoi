@@ -184,7 +184,7 @@ if save:
 
 start.append(time.time())
 
-if interpolation_kwargs["interval_output"] == False:
+if not interpolation_kwargs["interval_output"]:
     interpolation_kwargs["interval_output"] = 1
 start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))

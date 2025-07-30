@@ -225,8 +225,8 @@ if save:
 start.append(time.time())
 
 if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
-    print(f"[cube_ticoi_demo] Writing results to netCDF file with result_writer")
-    several = type(returned) == list and len(returned) >= 2
+    print("[cube_ticoi_demo] Writing results to netCDF file with result_writer")
+    several = isinstance(returned, list) and len(returned) >= 2
     writer = CubeResultsWriter(cube)
     if "invert" in returned:
         cube_invert = writer.write_result_tico(
