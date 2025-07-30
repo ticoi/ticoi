@@ -22,8 +22,8 @@ from joblib import Parallel, delayed
 from pyproj import CRS
 from shapely.geometry import Point, Polygon
 
-from src.ticoi.core import interpolation_core, interpolation_to_data, inversion_core
-from src.ticoi.cube_data_classxr import CubeDataClass
+from ticoi.core import interpolation_core, interpolation_to_data, inversion_core
+from ticoi.cube_data_classxr import CubeDataClass
 
 
 def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_lines: bool = False) -> np.ndarray:

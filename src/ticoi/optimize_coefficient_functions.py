@@ -6,8 +6,8 @@ import numpy as np
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from src.ticoi.core import chunk_to_block, load_block
-from src.ticoi.utils import optimize_coef
+from ticoi.core import chunk_to_block, load_block
+from ticoi.utils import optimize_coef
 
 
 async def process_block(

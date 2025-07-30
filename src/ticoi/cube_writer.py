@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from src.ticoi.cube_data_classxr import CubeDataClass
-from src.ticoi.interpolation_functions import smooth_results
+from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.interpolation_functions import smooth_results
 
 # %% ======================================================================== #
 #                              Hardcoded configs                              #

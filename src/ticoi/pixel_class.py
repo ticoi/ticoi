@@ -13,8 +13,6 @@ import seaborn as sns
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error
 
-from src import ticoi
-
 # %%========================================================================= #
 #                           DATAFRAME_DATA OBJECT                             #
 # =========================================================================%% #
