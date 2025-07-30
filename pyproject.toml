@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-version = "0.1.4"
+version = "0.2.2"
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
@@ -30,7 +30,6 @@ dependencies = [
   "numba",
   "numpy",
   "pandas",
-  "pip",
   "pyproj",
   "rasterio",
   "requests",

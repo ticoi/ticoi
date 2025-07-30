@@ -49,14 +49,20 @@ warnings.filterwarnings("ignore")
 
 TICOI_process = "block_process"
 
-save = True  # If True, save TICOI results to a netCDF file
-save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
+save = False  # If True, save TICOI results to a netCDF file
+save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
-current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
-package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
-path_save = os.path.join(package_root, "examples", "results", "cube") + "/"  # path where to save our results
+path_save = (
+    os.path.join(
+        os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")),
+        "examples",
+        "results",
+        "cube",
+    )
+    + "/"
+)  # path where to save our results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
 
 proj = "EPSG:3413"  # EPSG system of the given coordinates

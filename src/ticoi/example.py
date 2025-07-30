@@ -11,7 +11,7 @@ _EXAMPLES_DIRECTORY = os.path.abspath(os.path.join(os.path.dirname(__file__), ".
 
 # Absolute filepaths to the example files.
 _FILEPATHS_DATA = {
-    "ITS_LIVE_Lowell_Lower": os.path.join(_EXAMPLES_DIRECTORY, "Argentiere", "ITS_LIVE_Lowell_Lower_test.nc")
+    "ITS_LIVE_Lowell_Lower": os.path.join(_EXAMPLES_DIRECTORY, "Lowell", "ITS_LIVE_Lowell_Lower_test.nc")
 }
 
 available = list(_FILEPATHS_DATA.keys())
@@ -35,6 +35,7 @@ def download_examples(overwrite: bool = False) -> None:
     # Create a temporary directory to extract the tarball in.
     with tempfile.TemporaryDirectory() as tmp_dir:
         tar_path = os.path.join(tmp_dir, "data.tar.gz")
+        print(tar_path)
 
         response = urllib.request.urlopen(url)
         # If the response was right, download the tarball to the temporary directory
@@ -47,15 +48,16 @@ def download_examples(overwrite: bool = False) -> None:
         # Extract the tarball
         with tarfile.open(tar_path) as tar:
             tar.extractall(tmp_dir)
+            print(f"Extracting example files in {tmp_dir}")
 
         # Find the first directory in the temp_dir (should only be one) and construct the example data dir paths.
         for dir_name in ["Argentiere", "Lowell"]:
             tmp_dir_name = os.path.join(
                 tmp_dir,
                 [dirname for dirname in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, dirname))][0],
-                "test_data",
                 dir_name,
             )
+            print(tmp_dir_name)
 
             # Copy the temporary extracted data to the example directory.
             shutil.copytree(tmp_dir_name, os.path.join(_EXAMPLES_DIRECTORY, dir_name))
@@ -70,7 +72,7 @@ def get_path(name: str) -> str:
     """
 
     if name in list(_FILEPATHS_DATA.keys()):
-        # download_examples()
+        download_examples()
         return _FILEPATHS_DATA[name]
     else:
         raise ValueError('Data name should be one of "' + '" , "'.join(list(_FILEPATHS_DATA.keys())) + '".')

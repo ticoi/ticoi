@@ -29,14 +29,14 @@ from ticoi.interpolation_functions import visualisation_interpolation
 cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
 path_save = None  # path where to save our results if save = True
 
-i, j = -138.18069, 60.29076  # coordinate in pixel
+i, j = -138.17069, 60.29076  # coordinate in pixel
 proj = "EPSG:4326"  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 100  # Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outliers = {"median_angle": 45}
+delete_outliers = None
 
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
