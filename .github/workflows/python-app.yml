@@ -50,13 +50,13 @@ jobs:
         mamba env create -n environment -f environment.yml
 
     - name: Install project (inside env)
-      run: mamba run -n ticoi_env pip install -e . --no-dependencies
+      run: mamba run -n environment pip install -e . --no-dependencies
 
     - name: Install test dependencies (inside env)
-      run: mamba run -n ticoi_env pip install pytest
+      run: mamba run -n environment pip install pytest
 
     - name: Check import works
-      run: mamba run -n ticoi_env python -c "import ticoi"
+      run: mamba run -n environment python -c "import ticoi"
 
     - name: Test with pytest
-      run: mamba run -n ticoi_env pytest
+      run: mamba run -n environment pytest
