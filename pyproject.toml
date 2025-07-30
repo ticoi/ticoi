@@ -1,16 +1,16 @@
 [build-system]
-requires = ["hatchling", "setuptools>=61.0", "wheel"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-version = "0.0.5"
+version = "0.1.3"
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
 description = "A package to run an Temporal Inversion based on the temporal ClOsure of the measurement network, and Interpolation (TICOI)"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = {text = "GPL-3.0-only" }
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -19,7 +19,7 @@ classifiers = [
 dependencies = [
   "aiohttp",
   "dask",
-  "fiona==1.9",
+  "fiona",
   "geopandas>=0.10.0",
   "h5netcdf",
   "h5py>=3.11",
