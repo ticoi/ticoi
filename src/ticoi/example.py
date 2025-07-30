@@ -70,7 +70,7 @@ def get_path(name: str) -> str:
     """
 
     if name in list(_FILEPATHS_DATA.keys()):
-        download_examples()
+        # download_examples()
         return _FILEPATHS_DATA[name]
     else:
         raise ValueError('Data name should be one of "' + '" , "'.join(list(_FILEPATHS_DATA.keys())) + '".')
