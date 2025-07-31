@@ -278,10 +278,16 @@ class CubeDataClass:
 
         # np.char.strip is used to remove the null character ('�') from each element and np.core.defchararray.add to
         # concatenate array of different types
-        sensor = np._core.defchararray.add(
-            np.char.strip(self.ds["mission_img1"].values.astype(str), "�"),
-            np.char.strip(self.ds["satellite_img1"].values.astype(str), "�"),
-        ).astype("U10")
+        try:
+            sensor = np._core.defchararray.add(
+                np.char.strip(self.ds["mission_img1"].values.astype(str), "�"),
+                np.char.strip(self.ds["satellite_img1"].values.astype(str), "�"),
+            ).astype("U10")
+        except AttributeError:  # in old numpy version module 'numpy._core' has no attribute 'defchararray'
+            sensor = np.core.defchararray.add(
+                np.char.strip(self.ds["mission_img1"].values.astype(str), "�"),
+                np.char.strip(self.ds["satellite_img1"].values.astype(str), "�"),
+            ).astype("U10")
         sensor[sensor == "L7"] = "Landsat-7"
         sensor[sensor == "L8"] = "Landsat-8"
         sensor[sensor == "L9"] = "Landsat-9"
