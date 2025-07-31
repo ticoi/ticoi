@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-version = "0.2.3"
+dynamic = ["version"]
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
@@ -20,6 +20,7 @@ dependencies = [
   "dask",
   "geopandas",
   "jdcal",
+  "joblib",
   "h5netcdf",
   "matplotlib",
   "notebook",
@@ -31,6 +32,7 @@ dependencies = [
   "requests",
   "rioxarray",
   "scipy",
+  "scikit-learn",
   "seaborn",
   "shapely",
   "statsmodels",
@@ -38,9 +40,16 @@ dependencies = [
   "xarray",
   "zarr"
 ]
+
+
+
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
 Issues = "https://github.com/pypa/sampleproject/issues"
+
+
+[tool.hatch.version]
+path = "src/ticoi/__about__.py"
 
 [tool.hatch.envs.dev]
 inherit = ["default"]

@@ -5,6 +5,7 @@ dependencies:
   - dask
   - geopandas
   - jdcal
+  - joblib
   - h5netcdf
   - matplotlib
   - notebook
