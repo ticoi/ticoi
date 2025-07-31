@@ -4,7 +4,6 @@ Store geotiff files in a netcdf file in a format compatible with the loader used
 This script is only a template. The user need to modify the lines TO MODIFY according to their data.
 
 """
-
 import glob
 import time
 from datetime import date, datetime
