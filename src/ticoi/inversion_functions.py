@@ -493,8 +493,8 @@ def inversion_one_component(
         )
 
     if solver == "LSMR":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float32")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float32")
+        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float64")
+        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float64")
         F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
         X = sp.linalg.lsmr(
             F, D
@@ -518,7 +518,7 @@ def inversion_one_component(
         if isinstance(ini, list):  # if rolling mean
             x0 = ini[v_pos - 2]
         elif ini.shape[0] == 2:  # if only the average of the entire time series
-            x0 = np.full(len(dates_range) - 1, ini[v_pos - 2], dtype="float32")
+            x0 = np.full(len(dates_range) - 1, ini[v_pos - 2], dtype="float64")
         else:
             x0 = ini
 
