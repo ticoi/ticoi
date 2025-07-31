@@ -783,10 +783,10 @@ class CubeDataClass:
             with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
                 if filepath.split(".")[-1] == "nc":
                     try:
-                        self.ds = xr.open_dataset(filepath, chunks=chunks)
+                        self.ds = xr.open_dataset(filepath, engine="h5netcdf", chunks=chunks)
                     except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
                         chunks = {}
-                        self.ds = xr.open_dataset(filepath, chunks=chunks)  # Set no chunks
+                        self.ds = xr.open_dataset(filepath, engine="h5netcdf", chunks=chunks)  # Set no chunks
 
                     if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
                         self.ds.attrs["author"] = self.ds.attrs.pop("Author")

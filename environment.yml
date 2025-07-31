@@ -8,7 +8,6 @@ dependencies:
   - h5netcdf
   - matplotlib
   - notebook
-  - netcdf4
   - numba
   - numpy
   - pandas
