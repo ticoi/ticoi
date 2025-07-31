@@ -40,7 +40,7 @@ for file in files:
 
     # set the variable name
     ds = ds.assign_coords(time=mid_date)
-    ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})  # TO MODIFY
+    ds = ds.rename({"band_1": "vx", "band_2": "vy", "time": "mid_date"})  # TO MODIFY, if the bands are not correct
     ds = ds.expand_dims("mid_date")
 
     # convert to displacement
