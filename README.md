@@ -59,26 +59,26 @@ pip install git+https://github.com/ticoi/ticoi.git
 
 **- notebook**
 
-* [How to process one pixel of a NetCDF file](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/basic/notebook/pixel_demo_local_ncdata.ipynb)
-* [How to process one pixel of ITS_LIVE data, stored on a cloud](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/basic/notebook/pixel_demo_its_live_on_cloud.ipynb)
+* [How to process one pixel of a NetCDF file](examples/basic/notebook/pixel_demo_local_ncdata.ipynb)
+* [How to process one pixel of ITS_LIVE data, stored on a cloud](examples/basic/notebook/pixel_demo_its_live_on_cloud.ipynb)
 
 **- python_script**
 
-* [How to process one cube](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/basic/python_script/cube_ticoi_demo.py)
-* [How to process one pixel](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/basic/python_script/pixel_ticoi_demo.py)
+* [How to process one cube](examples/basic/python_script/cube_ticoi_demo.py)
+* [How to process one pixel](examples/basic/python_script/pixel_ticoi_demo.py)
 
 ### Advanced examples
 
-* [How to process one ITS_LIVE cube directly from the cloud](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/advanced/cube_ticoi_demo_its_live.py)
-* [How to format several geotiff files into a netCDF file](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/advanced/cube_prep_from_geotiff.py)
-* [How to apply GLAFT on TICOI results](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/advanced/glaft_for_ticoi_results.py)
+* [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/cube_ticoi_demo_its_live.py)
+* [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
+* [How to apply GLAFT on TICOI results](examples/advanced/glaft_for_ticoi_results.py)
 
 ## TO USE YOUR ONE DATASET
 
 ### You have geotiff files
 
 You need to convert them into netcdf, by
-modified [this script](/home/charriel/Documents/Scripts_dossier/ticoi_lch/examples/advanced/cube_prep_from_geotiff.py).
+modified [this script](examples/advanced/cube_prep_from_geotiff.py).
 
 ### You have netcdf files
 
@@ -89,14 +89,14 @@ variables should be "vx", "vy", and should contain the projection information in
 ## HYPERPARAMETERS AND OUTPUTS
 
 * to understand to output of pixel_demo please
-  check [README_output](/home/charriel/Documents/Scripts_dossier/ticoi_lch/README_output.md)
+  check [README_output](README_output.md)
 * to understand the parameters you can change, please
-  check [README_possible_parameters](/home/charriel/Documents/Scripts_dossier/ticoi_lch/README_possible_parameters.md)
+  check [README_possible_parameters](README_possible_parameters.md)
 
 
 ## TO CONTRIBUTE
 
-If you have an idea to improve this package, you are welcome to contribute! See guidelines [here](/home/charriel/Documents/Scripts_dossier/ticoi_lch/CONTRIBUTING.md). 
+If you have an idea to improve this package, you are welcome to contribute! See guidelines [here](CONTRIBUTING.md). 
 
 [packaging guide]: https://packaging.python.org
 
