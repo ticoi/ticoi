@@ -52,7 +52,7 @@ inherit = ["default"]
 dependencies = [
   "ruff",
   "pytest",
-  "pre-commit",
+  "pre-commit"
 ]
 [tool.ruff]
 line-length = 120
