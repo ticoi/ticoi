@@ -133,7 +133,7 @@ inversion_kwargs = {
 nb_cpu = 12  # Number of CPU to be used for parallelization
 block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
-if not os.path.exists(path_save):
+if save and not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # Update of dictionary with common parameters
