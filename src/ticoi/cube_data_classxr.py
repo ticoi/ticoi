@@ -278,7 +278,7 @@ class CubeDataClass:
 
         # np.char.strip is used to remove the null character ('�') from each element and np.core.defchararray.add to
         # concatenate array of different types
-        sensor = np.core.defchararray.add(
+        sensor = np._core.defchararray.add(
             np.char.strip(self.ds["mission_img1"].values.astype(str), "�"),
             np.char.strip(self.ds["satellite_img1"].values.astype(str), "�"),
         ).astype("U10")

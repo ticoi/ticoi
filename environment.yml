@@ -2,12 +2,8 @@ name: ticoi
 channels:
   - conda-forge
 dependencies:
-  - aiohttp
   - dask
-  - fiona
   - geopandas
-  - h5netcdf
-  - h5py
   - jdcal
   - matplotlib
   - notebook
@@ -18,7 +14,6 @@ dependencies:
   - rasterio
   - requests
   - rioxarray
-  - scikit-learn
   - scipy
   - seaborn
   - shapely
