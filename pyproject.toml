@@ -8,7 +8,7 @@ version = "0.2.3"
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
-description = "A package to run an Temporal Inversion based on the temporal ClOsure of the measurement network, and Interpolation (TICOI)"
+description = "A package to run Temporal Inversion using linear Combinations of Observations, and Interpolation (TICOI)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "GPL-3.0-only" }
@@ -20,6 +20,7 @@ dependencies = [
   "dask",
   "geopandas",
   "jdcal",
+  "h5netcdf",
   "matplotlib",
   "notebook",
   "numba",
@@ -48,6 +49,7 @@ dependencies = [
   "pytest",
   "pre-commit"
 ]
+
 [tool.ruff]
 line-length = 120
 
