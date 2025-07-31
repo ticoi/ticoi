@@ -29,19 +29,19 @@ jobs:
         activate-environment: false
         python-version: "3.10"
 
-    # - name: Get month for resetting cache
-    #   id: get-date
-    #   run: echo "cache_date=$(/bin/date -u '+%Y%m')" >> $GITHUB_ENV
-    #   shell: bash
+    - name: Get month for resetting cache
+      id: get-date
+      run: echo "cache_date=$(/bin/date -u '+%Y%m')" >> $GITHUB_ENV
+      shell: bash
 
-    # - name: Cache conda env
-    #   uses: actions/cache@v4
-    #   with:
-    #     path: /home/runner/mamba/envs
-    #     key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('environment.yml') }}-${{ env.CACHE_NUMBER }}
-    #   env:
-    #     CACHE_NUMBER: 0
-    #   id: cache
+    - name: Cache conda env
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/mamba/envs
+        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('environment.yml') }}-${{ env.CACHE_NUMBER }}
+      env:
+        CACHE_NUMBER: 0
+      id: cache
 
     - name: Create or update environment if cache miss
       # if: steps.cache.outputs.cache-hit != 'true'
