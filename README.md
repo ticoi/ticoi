@@ -6,7 +6,7 @@
 [![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Post-processing method based on the temporal closure to fuse multi-temporal and multi-sensor velocity measurements,
+TICOI is a post-processing method based on the temporal closure to fuse multi-temporal and multi-sensor velocity measurements,
 which may have been computed from different processing chains.
 
 The package is based on the methodological developments published in:
@@ -24,7 +24,7 @@ displacement (see the Figure below).
 The aim is to take advantage of different types of information (displacement measured using different temporal
 baselines,
 on images from different types of satellite) to extract glacier velocity time series, with a given temporal sampling.
-This package enable the
+This enable the
 harmonization of various datasets, and the creation of standardized sub-annual velocity products.
 
 <p align="center">
