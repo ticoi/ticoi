@@ -17,15 +17,10 @@ classifiers = [
     "Operating System :: OS Independent"]
 
 dependencies = [
-  "aiohttp",
   "dask",
-  "fiona",
   "geopandas",
-  "h5netcdf",
-  "h5py",
   "jdcal",
   "matplotlib",
-  "netcdf4",
   "notebook",
   "numba",
   "numpy",
@@ -34,7 +29,6 @@ dependencies = [
   "rasterio",
   "requests",
   "rioxarray",
-  "scikit-learn",
   "scipy",
   "seaborn",
   "shapely",
