@@ -27,7 +27,7 @@ def download_examples(overwrite: bool = False) -> None:
     :param overwrite: Do not download the files again if they already exist.
     """
     if not overwrite and all(map(os.path.isfile, list(_FILEPATHS_DATA.values()))):
-        print("Datasets exist")
+        # print("Datasets exist")
         return
 
     # Static commit hash to be bumped every time it needs to be.
