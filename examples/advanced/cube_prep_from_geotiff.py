@@ -23,6 +23,9 @@ output_mode = "velocity"  # 'displacement' or 'velocity', to decide if the outpu
 
 unit = "m/y"  # need to specify the unit of the velocity 'm/y' or 'm/d'
 
+source = "L. Charrier, L. Guo"  # TO MODIFY
+sensor = "LS8"  # TO MODIFY
+
 files = glob.glob(f"{file_path}*.tif")
 files.sort()
 
@@ -111,8 +114,6 @@ ds_combined.vy.attrs = {
 }
 
 proj4 = CRS(ds.spatial_ref.projected_crs_name).to_proj4()
-source = "L. Charrier, L. Guo"  # TO MODIFY
-sensor = "LS8"  # TO MODIFY
 
 ds_combined.attrs.update(
     {
