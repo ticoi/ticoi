@@ -44,7 +44,7 @@ jobs:
       id: cache
 
     - name: Create or update environment if cache miss
-      if: steps.cache.outputs.cache-hit != 'true'
+      # if: steps.cache.outputs.cache-hit != 'true'
       run: |
         unset PROJ_DATA
         mamba env create -n environment -f environment.yml
