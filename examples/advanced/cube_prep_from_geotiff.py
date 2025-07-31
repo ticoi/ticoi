@@ -19,8 +19,12 @@ dst_nc = "save_path/netcdf_name.nc"
 file_path = "geotiff_path/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
+output_mode = "velocity"  # 'displacement' or 'velocity', to decide if the output is in displacement or velocity
 
-unit = "m/y"  # if obs_mode is 'velocity', need to specify the unit of the velocity 'm/y' or 'm/d'
+unit = "m/y"  # need to specify the unit of the velocity 'm/y' or 'm/d'
+
+source = "L. Charrier, L. Guo"  # TO MODIFY
+sensor = "LS8"  # TO MODIFY
 
 files = glob.glob(f"{file_path}*.tif")
 files.sort()
@@ -43,13 +47,31 @@ for file in files:
     ds = ds.expand_dims("mid_date")
 
     # convert to displacement
-    if obs_mode == "velocity":
-        velo_unit = 365 if unit == "m/y" else 1
-        period = (date2 - date1).days
-        ds["vx"] = ds["vx"] * period / velo_unit
-        ds["vy"] = ds["vy"] * period / velo_unit
-    elif obs_mode == "displacement":
-        pass
+    if output_mode == "displacement":
+        if obs_mode == "velocity":
+            velo_unit = 365 if unit == "m/y" else 1
+            period = (date2 - date1).days
+            ds["vx"] = ds["vx"] * period / velo_unit
+            ds["vy"] = ds["vy"] * period / velo_unit
+        elif obs_mode == "displacement":
+            pass
+    elif output_mode == "velocity":
+        if obs_mode == "velocity":
+            if unit == "m/y":
+                pass
+            elif unit == "m/d":
+                velo_unit = 365
+                ds["vx"] = ds["vx"] * velo_unit
+                ds["vy"] = ds["vy"] * velo_unit
+            else:
+                raise ValueError(f"'{unit}' should be either 'm/d' or 'm/y'")
+        elif obs_mode == "displacement":
+            velo_unit = 365 if unit == "m/y" else 1
+            period = (date2 - date1).days
+            ds["vx"] = ds["vx"] * 365 / period
+            ds["vy"] = ds["vy"] * 365 / period
+    else:
+        raise ValueError(f"'{output_mode}' should be either 'velocity' or 'displacement'")
 
     ds["date1"] = date1
     ds["date2"] = date2
@@ -92,8 +114,6 @@ ds_combined.vy.attrs = {
 }
 
 proj4 = CRS(ds.spatial_ref.projected_crs_name).to_proj4()
-source = "L. Charrier, L. Guo"  # TO MODIFY
-sensor = "LS8"  # TO MODIFY
 
 ds_combined.attrs.update(
     {
@@ -110,5 +130,8 @@ ds_combined.attrs.update(
 )
 
 print(ds_combined)
+output_mode = 'disp' if output_mode == 'displacement' else 'velo'
+print(f"obs_mode: {obs_mode}\noutput_mode: {output_mode}")
+print(f"Please use disp_or_velo='{output_mode}' to load the data in TICOI")
 ds_combined.to_netcdf(dst_nc)
 print("time ", (time.time() - start), "seconds")
