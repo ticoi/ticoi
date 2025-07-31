@@ -130,7 +130,7 @@ ds_combined.attrs.update(
 )
 
 print(ds_combined)
-output_mode = 'disp' if output_mode == 'displacement' else 'velo'
+output_mode = "disp" if output_mode == "displacement" else "velo"
 print(f"obs_mode: {obs_mode}\noutput_mode: {output_mode}")
 print(f"Please use disp_or_velo='{output_mode}' to load the data in TICOI")
 ds_combined.to_netcdf(dst_nc)
