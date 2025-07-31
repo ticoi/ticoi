@@ -68,7 +68,7 @@ result_fn = "Lowell_example"  # Name of the netCDF file to be created
 proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
-#   - 'invert' for the results of the inversion
+#   - 'invert' for the results of the inversion, corresponding to Cumulative displacement time series
 #   - 'interp' for the results of the interpolation
 returned = ["invert", "interp"]
 ## ---------------------------- Loading parameters ------------------------- ##

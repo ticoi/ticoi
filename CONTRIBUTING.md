@@ -48,9 +48,9 @@ mamba activate environment  # Or any other name specified above
 ```
 #### With `pip`
 ```bash
-git clone https://github.com/ticoi/ticoi.git
-cd ticoi
-make install
+python3.10 -m venv ticoi-env
+source ticoi-env/bin/activate
+pip install git+https://github.com/ticoi/ticoi.git
 ```
 
 ### Tests
@@ -68,11 +68,11 @@ Install and run `pre-commit` from the root of the repository (such as with `mamb
 which will use `.pre-commit-config.yaml` to verify spelling errors, import sorting, type checking, formatting and linting:
 
 ```bash
+pre-commit install #optional: to install pre-commit as a git-hook, to ensure checks have to pass before committing.
 pre-commit run --all
 ```
 
 You can then commit and push those changes.
-Optionally, `pre-commit` can be installed as a git hook to ensure checks have to pass before committing.
 
 ### Final steps
 
@@ -83,3 +83,22 @@ We'll receive word of your PR as soon as it is opened, and should follow up shor
 ### Rights
 
 The license (see LICENSE) applies to all contributions.
+
+
+### Understanding the structure of the code
+
+#### Main code
+
+* **core.py**: Main functions to process the temporal inversion of glacier's surface velocity using
+  the TICOI method. The inversion is solved using an Iterative Reweighted Least Square, and a robust downweighted
+  function (Tukey's biweight).
+* **cube_data_classxr.py**: Class object to store and manipulate velocity observation data in a cube (netcdf or zarr)
+* **pixel_class.py**: Class object to manipulate and visualize velocity observations and inverted results on a pixel (from a pandas dataframe, or inside a cube)
+* **inversion_functions.py**: Functions to process the temporal inversion.
+* **interpolation_functions.py**: Functions to process the temporal interpolation.
+* **filtering_functions.py**: Functions to process some filtering.
+* **utils.py**: Two other functions for accessing ITS_LIVE data.
+* **mjd2date.py**: Functions to convert the dates from Modified Julian Date to Gregorian Date
+
+
+
