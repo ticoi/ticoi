@@ -19,9 +19,9 @@ dst_nc = "save_path/netcdf_name.nc"
 file_path = "geotiff_path/"
 
 obs_mode = "displacement"  # 'displacement' or 'velocity', to decide if the conversion is needed
-output_mode = "displacement"  # 'displacement' or 'velocity', to decide if the output is in displacement or velocity
+output_mode = "velocity"  # 'displacement' or 'velocity', to decide if the output is in displacement or velocity
 
-unit = "m/y"  # if obs_mode is 'velocity', need to specify the unit of the velocity 'm/y' or 'm/d'
+unit = "m/y"  # need to specify the unit of the velocity 'm/y' or 'm/d'
 
 files = glob.glob(f"{file_path}*.tif")
 files.sort()
