@@ -474,7 +474,7 @@ def inversion_one_component(
     else:
         v = data
 
-    if type(Weight) is not int and Weight == 1:
+    if isinstance(Weight, int) and Weight == 1:
         Weight = np.ones(v.shape[0])  # Equivalent to an Ordinary Least Square
 
     if regu == "1accelnotnull":  # Apriori on the acceleration
@@ -515,7 +515,7 @@ def inversion_one_component(
             if verbose:
                 print("Is F convex?", is_convex(F.toarray()))
             D = np.hstack([np.multiply(W, v[condi]), D_regu])  # stack ax and regu, and remove rows with only
-        if type(ini) is not list:  # if rolling mean
+        if isinstance(ini, list):  # if rolling mean
             x0 = ini[v_pos - 2]
         elif ini.shape[0] == 2:  # if only the average of the entire time series
             x0 = np.full(len(dates_range) - 1, ini[v_pos - 2], dtype="float32")

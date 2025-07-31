@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-version = "0.2.2"
+dynamic = ["version"]
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]

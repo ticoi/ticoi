@@ -44,7 +44,7 @@ Clone the git repo and create a `mamba` environment (see how to install `mamba` 
 git clone git@github.com:ticoi/ticoi.git
 cd ticoi
 mamba env create -f environment.yml  # Add '-n custom_name' if you want.
-mamba activate ticoi_env  # Or any other name specified above
+mamba activate environment  # Or any other name specified above
 ```
 #### With `pip`
 ```bash

@@ -549,14 +549,6 @@ class CubeResultsWriter:
                 direction = base_config.get("directions", [""] * len(dimensions))[base_config["suffixes"].index(dim)]
                 long_names.append(base_config["long_name_tpl"].format(direction=direction, dim_upper=dim.upper()))
 
-                # FIX: Assign valid CF standard_name or None
-                # standard_name = None
-                # if var_type == 'velocity':
-                #     if dim == 'x': standard_name = 'eastward_velocity'
-                #     elif dim == 'y': standard_name = 'northward_velocity'
-                #     elif dim == 'z': standard_name = 'upward_velocity'
-                # short_names.append(standard_name)
-
             if vars_list:
                 configs[var_type] = {
                     "vars": vars_list,
