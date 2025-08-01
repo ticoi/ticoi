@@ -385,7 +385,7 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
 
 def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
     """
-    Remove the observations if it is 3 time the MAD from the median of observations over this pixel
+    Remove the observations if it is 3.5 time the MAD from the median of observations over this pixel
     :param obs: cube data to filter
     :param mz_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation

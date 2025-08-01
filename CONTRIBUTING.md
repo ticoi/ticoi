@@ -2,12 +2,12 @@
 
 :tada: **First off, thank you for considering contributing to TICOI! ** :tada:
 
-The project is still very much in expansion, and all contribitors are welcome!
+The project can still be improved, and all contribitors are welcome!
 These are some of the many ways to contribute:
 
 * :bug: Submitting bug reports and feature requests
 * :memo: Writing tutorials or examples
-* :mag: Fixing typos and improving to the documentation
+* :mag: Fixing typos and improving the documentation
 * :bulb: Writing code for everyone to use
 
 *
@@ -43,20 +43,20 @@ Clone the git repo and create a `mamba` environment (see how to install `mamba` 
 ```bash
 git clone git@github.com:ticoi/ticoi.git
 cd ticoi
-mamba env create -f environment.yml  # Add '-n custom_name' if you want.
-mamba activate environment  # Or any other name specified above
+mamba env create -f environment.yml -n ticoi_env  # change the name if you want
+mamba activate ticoi_env  # Or any other name specified above
 ```
 #### With `pip`
 ```bash
-python3.10 -m venv ticoi-env
-source ticoi-env/bin/activate
-pip install git+https://github.com/ticoi/ticoi.git
+git clone git@github.com:ticoi/ticoi.git
+cd ticoi
+make install
 ```
 
 ### Tests
 
 At least one test per feature (in the associated `tests/test_*.py` file) should be included in the PR, using `pytest` (see existing tests for examples).
-The structure of test modules and functions in `tests/` largely mirrors that of the package modules and functions in `xdem/`.
+The structure of test modules and functions in `tests/` largely mirrors that of the package modules and functions in `ticoi/`.
 
 To run the entire test suite, run `pytest` from the root of the repository:
 ```bash

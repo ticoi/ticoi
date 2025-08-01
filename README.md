@@ -6,17 +6,21 @@
 [![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-TICOI is a post-processing method based on the temporal closure to fuse multi-temporal and multi-sensor velocity measurements,
-which may have been computed from different processing chains.
+TICOI is a tool to postprocess surface velocity time series estimated from remote sensing (e.g., ice flow, landslides).
+The method is based on the temporal closure principle. It fuses velocity measurements which are multi-temporal (with
+different temporal baselines) and multi-sensor (from different satellite images),
+and may have been computed by different processing chains. It takes as input NetCDF files containing the image-pair
+velocities, that you may have generated yourself, or natively supports data from the [NASA ITS_LIVE project](https://its-live.jpl.nasa.gov/) or from
+[Millan et al. (2022)](https://www.theia-land.fr/en/blog/product/glacier-surface-flow-velocity/).
 
 The package is based on the methodological developments published in:
 
 - Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
-Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
 
 - Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
-optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
-60, 1-10.
+  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
+  60, 1-10.
 
 The main principle of TICOI relies on the temporal closure of the displacement measurement network.
 Measured displacements with different temporal baselines are expressed as linear combinations of estimated
@@ -73,30 +77,29 @@ pip install git+https://github.com/ticoi/ticoi.git
 * [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
 * [How to apply GLAFT on TICOI results](examples/advanced/glaft_for_ticoi_results.py)
 
-## TO USE YOUR ONE DATASET
+## TO USE YOUR OWN DATASET
 
 ### You have geotiff files
 
 You need to convert them into netcdf, by
-modified [this script](examples/advanced/cube_prep_from_geotiff.py).
+modifying [this script](examples/advanced/cube_prep_from_geotiff.py).
 
 ### You have netcdf files
 
-If it is ITS_LIVE data, or Millan et al., 2019, you can directly use them!
+If it is [ITS_LIVE data]((https://its-live.jpl.nasa.gov/)), or [Millan et al., 2022](https://www.theia-land.fr/en/blog/product/glacier-surface-flow-velocity/), you can directly use them!
 If not, you have to create your own dataloader, within which the dimension should be ("mid_date", "y", "x"), and the
-variables should be "vx", "vy", and should contain the projection information in the ds.proj4 attribute.
+variables should be "vx", "vy", and should contain the projection information in the ds.proj4 attribute. You can add in this [file](src/ticoi/cube_data_classxr.py).
 
 ## HYPERPARAMETERS AND OUTPUTS
 
-* to understand to output of pixel_demo please
+* to understand the output of pixel_demo please
   check [README_output](README_output.md)
 * to understand the parameters you can change, please
   check [README_possible_parameters](README_possible_parameters.md)
 
-
 ## TO CONTRIBUTE
 
-If you have an idea to improve this package, you are welcome to contribute! See guidelines [here](CONTRIBUTING.md). 
+We welcome any contribution to this package! See guidelines [here](CONTRIBUTING.md).
 
 [packaging guide]: https://packaging.python.org
 
