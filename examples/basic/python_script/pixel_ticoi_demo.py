@@ -16,6 +16,7 @@ import time
 
 import numpy as np
 
+from ticoi import example
 from ticoi.core import interpolation_core, inversion_core, visualization_core
 from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import visualisation_interpolation
@@ -25,19 +26,17 @@ from ticoi.interpolation_functions import visualisation_interpolation
 # =========================================================================%% #
 
 ###  Selection of data
-current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
-package_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
-cube_name = os.path.join(package_root, "test_data", "ITS_LIVE_Lowell_Lower_test.nc")  # path to our dataset
-path_save = os.path.join(package_root, "examples", "results", "pixel") + "/"  # path where to save our results
+cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
+path_save = None  # path where to save our results if save = True
 
-i, j = -138.18069, 60.29076  # coordinate in pixel
+i, j = -138.17069, 60.29076  # coordinate in pixel
 proj = "EPSG:4326"  # EPSG system of the given coordinates
 
 ## --------------------------- Main parameters ----------------------------- ##
 # For the following part we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flags is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 100  # Regularization coefficient.s to be used (for each flag if flags is not None)
-delete_outliers = {"median_angle": 45}
+delete_outliers = None
 
 apriori_weight = False  # Use the error as apriori
 interval_output = 30  # temporal sampling of the output results
@@ -49,7 +48,7 @@ result_quality = [
 
 ## ----------------------- Visualization parameters ------------------------ ##
 verbose = False  # Print information throughout TICOI processing
-save = True  # Save the results and figures
+save = False  # Save the results and figures
 show = True  # Plot some figures
 
 vminmax = [0, 4700]
@@ -130,7 +129,7 @@ for common_parameter in ["regu", "solver", "unit"]:
     inversion_kwargs[common_parameter] = preData_kwargs[common_parameter]
 
 # Create a subfolder if it does not exist
-if not os.path.exists(path_save):
+if path_save is not None and os.path.exists(path_save):
     os.mkdir(path_save)
 
 
@@ -185,7 +184,7 @@ if save:
 
 start.append(time.time())
 
-if interpolation_kwargs["interval_output"] == False:
+if not interpolation_kwargs["interval_output"]:
     interpolation_kwargs["interval_output"] = 1
 start_date_interpol = np.min(np.min(cube.date2_()))
 last_date_interpol = np.max(np.max(cube.date2_()))
@@ -193,7 +192,8 @@ last_date_interpol = np.max(np.max(cube.date2_()))
 # Proceed to interpolation
 dataf_lp = interpolation_core(result, **interpolation_kwargs)
 
-dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
+if save:
+    dataf_lp.to_csv(f"{path_save}/ILF_result.csv")
 
 
 stop.append(time.time())

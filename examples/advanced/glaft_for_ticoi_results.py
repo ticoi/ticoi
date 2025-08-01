@@ -7,18 +7,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.example import get_path
 
 # ======== User Settings (please review this section every time) ========
 current_dir = os.path.dirname(os.path.abspath(__file__))  # current file
 package_root = os.path.abspath(os.path.join(current_dir, ".."))
-cube_name = os.path.join(package_root, "results", "cube", "Argentiere_example_interp.nc")  # path to our dataset
+cube_name = get_path("Argentiere_example_interp")  # path to our dataset
 path_glaft_test = os.path.join(package_root, "test_data", "for_glaft", "Argentiere_example_interp")
-path_save = os.path.join(current_dir, "..", "results", "cube")
-
+path_save = os.path.join(current_dir, "..", "results", "cube", "r_")
+save = True  # to save results
 
 epsg_str = "epsg:32632"
-static_area = "Argentiere_static.gpkg"
-iceflow_area = "Argentiere_iceflow.gpkg"
+static_area = get_path("Argentiere_static")
+iceflow_area = get_path("Argentiere_iceflow")
 output_csvfile = "glaft_argentiere_interp.csv"
 output_png = "glaft_argentiere_interp.png"
 # =======================================================================
@@ -78,6 +79,10 @@ with open(output_csvfile, "w", newline="") as file:
     for row in zip(time_list, metric1_strlist, metric2_strlist):
         writer.writerow(row)
 
+
+if save and not os.path.exists(path_save):
+    os.mkdir(path_save)
+
 # Visualize the metrics
 fig, axs = plt.subplots(2, 1, figsize=(7, 7))
 axs[0].plot(time_list, metric1_list)
@@ -85,4 +90,5 @@ axs[1].plot(time_list, metric2_list)
 
 axs[0].set_ylabel(r"Metric 1 ($\sqrt{\delta_u  \delta_v}$, m/yr)")
 axs[1].set_ylabel(r"Metric 2 ($\delta_{x'y'}$, 1/yr)")
-fig.savefig(f"{path_save}{output_png}")
+if save:
+    fig.savefig(f"{path_save}{output_png}")

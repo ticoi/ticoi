@@ -26,6 +26,7 @@ from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.cube_writer import CubeResultsWriter
 
 warnings.filterwarnings("ignore")
 
@@ -47,16 +48,16 @@ warnings.filterwarnings("ignore")
 
 TICOI_process = "block_process"
 
-save = True  # If True, save TICOI results to a netCDF file
-save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
+save = False  # If True, save TICOI results to a netCDF file
+save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-cube_name = f"http://its-live-data.s3.amazonaws.com/datacubes/v2/N60W130/ITS_LIVE_vel_EPSG3413_G0120_X-3250000_Y150000.zarr"  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f'{os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..", "examples", "results","cube"))}/'  # Path where to stored the results
+cube_name = "http://its-live-data.s3.amazonaws.com/datacubes/v2/N60W130/ITS_LIVE_vel_EPSG3413_G0120_X-3250000_Y150000.zarr"  # Path where the Sentinel-2 IGE cubes are stored
+path_save = f"{os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', 'results', 'cube'))}/"  # Path where to stored the results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
-subset = [-138.28962881999922274, -138.24, 60.25934205396930565, 60.27]
+subset = [-138.28962881999922274, -138.279, 60.25934205396930565, 60.261]
 proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
@@ -84,7 +85,7 @@ delete_outlier = "vvc_angle"
 apriori_weight = True
 
 preData_kwargs = {
-    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
+    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'savgol', 'lowess')
     "s_win": 3,  # Size of the spatial window
     "t_win": 90,  # Time window size for 'ewma' smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
@@ -217,9 +218,11 @@ if save:
 start.append(time.time())
 
 if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
-    several = type(returned) == list and len(returned) >= 2
+    several = isinstance(returned, list) and len(returned) >= 2
+    writer = CubeResultsWriter(cube)
+
     if "invert" in returned:
-        cube_invert = cube.write_result_tico(
+        cube_invert = writer.write_result_tico(
             result["invert"] if several else result,
             source,
             sensor,
@@ -229,7 +232,7 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
             verbose=inversion_kwargs["verbose"],
         )
     if "interp" in returned:
-        cube_interp = cube.write_result_ticoi(
+        cube_interp = writer.write_result_ticoi(
             result["interp"] if several else result,
             source_interp,
             sensor,

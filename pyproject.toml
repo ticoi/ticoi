@@ -1,36 +1,68 @@
-
-# I copied the pyproj file from Laurane's fork for
-# this and then added two lines at the bottom for tests
-
-
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-version = "0.0.1"
+dynamic = ["version"]
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
-description = "A package to run an Temporal Inversion based on the temporal ClOsure of the measurement network, and Interpolation (TICOI)"
+description = "A package to run Temporal Inversion using linear Combinations of Observations, and Interpolation (TICOI)"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+license = {text = "GPL-3.0-only" }
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    "Operating System :: OS Independent"]
+
+dependencies = [
+  "dask",
+  "geopandas",
+  "jdcal",
+  "joblib",
+  "h5netcdf",
+  "matplotlib",
+  "notebook",
+  "numba",
+  "numpy",
+  "pandas",
+  "pyproj",
+  "rasterio",
+  "requests",
+  "rioxarray",
+  "scipy",
+  "scikit-learn",
+  "seaborn",
+  "shapely",
+  "statsmodels",
+  "tqdm",
+  "xarray",
+  "zarr"
 ]
+
+
 
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
 Issues = "https://github.com/pypa/sampleproject/issues"
 
-[tool.pytest.ini_options]
-testpaths = "."
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["ticoi"]
-exclude = []
-namespaces= false
+[tool.hatch.version]
+path = "src/ticoi/__about__.py"
+
+[tool.hatch.envs.dev]
+inherit = ["default"]
+dependencies = [
+  "ruff",
+  "pytest",
+  "pre-commit"
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning"]

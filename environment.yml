@@ -2,28 +2,21 @@ name: ticoi
 channels:
   - conda-forge
 dependencies:
-  - python=3.11
-  - aiohttp
   - dask
-  - fiona=1.9
-  - gdal
-  - geopandas>=0.10.0
-  - h5netcdf
-  - h5py>=3.11
+  - geopandas
   - jdcal
-  - matplotlib=3.*
-  - netcdf4
+  - joblib
+  - h5netcdf
+  - matplotlib
   - notebook
-  - numba=0.*
-  - numpy=1.*
+  - numba
+  - numpy
   - pandas
-  - pip
-  - pyproj>=3.4
-  - rasterio>=1.3
+  - pyproj
+  - rasterio
   - requests
   - rioxarray
-  - scikit-learn
-  - scipy=1.*
+  - scipy
   - seaborn
   - shapely
   - statsmodels

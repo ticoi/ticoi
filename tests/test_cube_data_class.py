@@ -7,6 +7,7 @@ import xarray as xr
 from ticoi.cube_data_classxr import (
     CubeDataClass,  # Assuming cube_data_class is defined in your_module
 )
+from ticoi.example import get_path
 
 
 class Testclass_cube_data_xr:
@@ -19,7 +20,7 @@ class Testclass_cube_data_xr:
     def filepath(self, base_filepath, request):
         """Dynamically get the filename from the test parameters."""
         filename = request.param  # Access the parameterized filename
-        return os.path.join(base_filepath, filename)
+        return get_path(filename)
 
     @pytest.fixture
     def cube_data_class_instance(self, filepath):
@@ -30,7 +31,7 @@ class Testclass_cube_data_xr:
 
     # to do the test for several parameters, the function test can be decorated with pytest.mark.parametrize
     @pytest.mark.parametrize(
-        "filepath", ["ITS_LIVE_Lowell_Lower_test.nc", "Alps_Mont-Blanc_Argentiere_S2.nc"], indirect=["filepath"]
+        "filepath", ["ITS_LIVE_Lowell_Lower"], indirect=["filepath"]
     )  # Note that indirect should specify which parameters are to be treated indirectly
     def test_load(self, cube_data_class_instance):
         """Tests that the cube_data_class_instance is properly loaded and contains expected data."""
@@ -57,7 +58,7 @@ class Testclass_cube_data_xr:
 
     # Test load_pixel for the cube from IGE, for different pixel coordinates, either in pixels or in EPSG:4326
     @pytest.mark.parametrize(
-        "filepath", ["ITS_LIVE_Lowell_Lower_test.nc"], indirect=["filepath"]
+        "filepath", ["ITS_LIVE_Lowell_Lower"], indirect=["filepath"]
     )  # indirect mean that this parameter should be handled by a fixture that can interpret these values
     @pytest.mark.parametrize(
         "x, y, expected",
@@ -70,9 +71,9 @@ class Testclass_cube_data_xr:
         data, mean, dates_range = cube_data_class_instance.load_pixel(x, y)
         assert len(data) == 2, "Data is not a list of two elements"
         assert data[0].shape[1] == 2, "data_dates is not an array with two columns"
-        assert (
-            str(data[0][0, 0].dtype) == "datetime64[D]" or str(data[0][0, 0].dtype) == "datetime64[s]"
-        ), "data_dates is not an array with two columns"
+        assert str(data[0][0, 0].dtype) == "datetime64[D]" or str(data[0][0, 0].dtype) == "datetime64[s]", (
+            "data_dates is not an array with two columns"
+        )
         assert data[1].shape[1] == 5
         actual = data[1][0, :]
         np.testing.assert_array_almost_equal(actual, expected, decimal=1)
