@@ -37,13 +37,18 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
+
+from typing import Literal
+
+MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
 
 
 class CubeDataClass:
-    def __init__(self, cube=None, ds=None):
+    def __init__(self, cube=None, ds: xr.Dataset = None):
         """
         Initialisation of the main attributes, or copy cube's attributes and ds dataset if given.
 
@@ -685,7 +690,7 @@ class CubeDataClass:
         filepath: list | str,
         chunks: dict | str | int = {},
         conf: bool = False,
-        subset: list[np.array()] | None = None,
+        subset: list[np.array] | None = None,
         buffer: str | None = None,
         pick_date: str | None = None,
         pick_sensor: str | None = None,
@@ -1415,7 +1420,7 @@ class CubeDataClass:
         velo_or_disp: str = "velo",
         select_baseline: int | None = 180,
         verbose: bool = False,
-    ) -> xr.Dataset:
+    ) -> xr.Dataset | None:
         """
            Filter the original data before the inversion:
         -delete outliers according to the provided criterion
@@ -1441,7 +1446,9 @@ class CubeDataClass:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = 180) -> (np.ndarray, np.ndarray):  # type: ignore
+        def loop_rolling(
+            da_arr: xr.Dataset | xr.DataArray, select_baseline: int | None = 180
+        ) -> (np.ndarray, np.ndarray):  # type: ignore
             """
             A function to calculate spatial mean, resample data, and calculate smoothed velocity.
 
@@ -1925,7 +1932,7 @@ class CubeDataClass:
         self,
         points_heatmap: pd.DataFrame,
         variable: str = "vv",
-        method_interp: str = "linear",
+        method_interp: MethodInterp = "linear",
         verbose: bool = False,
         freq: str = "MS",
         method: str = "mean",
