@@ -43,18 +43,14 @@ Clone the git repo and create a `mamba` environment (see how to install `mamba` 
 the [mamba documentation](https://mamba.readthedocs.io/en/latest/)):
 
 ```bash
-git clone git@github.com:ticoi/ticoi.git
-cd ticoi
 mamba env create -f environment.yml  # Add '-n custom_name' if you want.
-mamba activate environment  # Or any other name specified above
+mamba install -c conda-forge ticoi
 ```
 
 ### With `pip`
 
 ```bash
-python3.10 -m venv ticoi-env
-source ticoi-env/bin/activate
-pip install git+https://github.com/ticoi/ticoi.git
+pip install ticoi
 ```
 
 ## TUTORIALS
