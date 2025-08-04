@@ -40,7 +40,6 @@ jobs:
     - name: Install ourself
       run: |
         uv pip install --system -e .
-        uv pip install --system -e ./backend
 
     - name: Run static analysis
       run: hatch fmt --check
