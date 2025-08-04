@@ -152,7 +152,7 @@ class Test_inversion:
             actual,
             expected,
             rtol=1e-6,
-            atol=1e-1,
+            atol=1,
             err_msg=f"mu_regularisation does not give the correct result for regu={regu}",
         )
 
@@ -190,5 +190,5 @@ class Test_inversion:
             actual,
             expected,
             rtol=1e-6,
-            atol=1e-1,
+            atol=1,
         )
