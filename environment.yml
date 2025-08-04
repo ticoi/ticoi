@@ -2,6 +2,7 @@ name: ticoi
 channels:
   - conda-forge
 dependencies:
+  - aiohttp
   - dask
   - geopandas
   - jdcal
