@@ -41,9 +41,8 @@ jobs:
       run: |
         uv pip install --system -e .
 
-    - name: Install hath
-      run: |
-        uv pip install hatch
+    - name: Install hatch
+      run: uv pip install --system hatch
 
     - name: Run static analysis
       run: hatch fmt --check
