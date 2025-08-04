@@ -1251,6 +1251,10 @@ class CubeDataClass:
             if (
                 mask[-3:] == "shp" or mask[-4:] == "gpkg"
             ):  # Convert the shp file or geopackage to an xarray dataset (rasterize the shapefile)
+                # gdf = gpd.read_file(shapefile_path)
+                # gdf = gdf.to_crs(self.ds.rio.crs)
+                # masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
+
                 polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
                 raster = rasterize(
                     [polygon.geometry[0]],
@@ -1843,7 +1847,8 @@ class CubeDataClass:
 
     def merge_cube(self, cube: "CubeDataClass"):
         """
-        Merge another cube to the present one. It must have been aligned first (using align_cube)
+        Merge another cube to the present one. It must have been aligned first (using align_cube).
+        It will merge the second cube on the same extent as the new one.
 
         :param cube: [cube_data_class] --- The cube to be merged to self
         """
@@ -2025,6 +2030,7 @@ class CubeDataClass:
 
     # @jit(nopython=True)
     def nvvc(self, nb_cpu=8, verbose=True):
+        # TODO: vectorize that
         """
         Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
 
