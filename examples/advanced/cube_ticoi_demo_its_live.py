@@ -55,7 +55,7 @@ save_mean_velocity = False  # Save a .tiff file with the mean resulting velociti
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
 cube_name = "http://its-live-data.s3.amazonaws.com/datacubes/v2/N60W130/ITS_LIVE_vel_EPSG3413_G0120_X-3250000_Y150000.zarr"  # Path where the Sentinel-2 IGE cubes are stored
-path_save = f"{os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', 'results', 'cube'))}/"  # Path where to stored the results
+path_save = "to_file"  # Path where to stored the results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
 subset = [-138.28962881999922274, -138.279, 60.25934205396930565, 60.261]
 proj = "EPSG:3413"  # EPSG system of the given coordinates
