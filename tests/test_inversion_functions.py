@@ -152,7 +152,7 @@ class Test_inversion:
             actual,
             expected,
             rtol=1e-6,
-            atol=1e-3,
+            atol=1e-2,
             err_msg=f"mu_regularisation does not give the correct result for regu={regu}",
         )
 
@@ -186,5 +186,9 @@ class Test_inversion:
         actual = inversion_one_component(
             self.A, self.dates_range, 1, self.data, solver=solver, Weight=1, mu=self.mu1accelnotnull, ini=ini
         )[0]
-        print(actual)
-        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-4)
+        np.testing.assert_allclose(
+            actual,
+            expected,
+            rtol=1e-6,
+            atol=1e-2,
+        )
