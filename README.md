@@ -72,6 +72,7 @@ pip install ticoi
 * [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/cube_ticoi_demo_its_live.py)
 * [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
 * [How to apply GLAFT on TICOI results](examples/advanced/glaft_for_ticoi_results.py)
+* [How to compute statistics in static areas](examples/advanced/stats_in_static_areas.py)
 
 ## TO USE YOUR OWN DATASET
 
