@@ -46,7 +46,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
-Issues = "https://github.com/pypa/sampleproject/issues"
+Issues = "https://github.com/ticoi/ticoi/issues"
 
 
 [tool.hatch.version]
