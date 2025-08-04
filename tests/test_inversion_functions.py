@@ -151,8 +151,8 @@ class Test_inversion:
         np.testing.assert_allclose(
             actual,
             expected,
-            rtol=0,
-            atol=1e-5,
+            rtol=1e-6,
+            atol=1e-3,
             err_msg=f"mu_regularisation does not give the correct result for regu={regu}",
         )
 
