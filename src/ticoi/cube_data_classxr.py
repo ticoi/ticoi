@@ -267,12 +267,6 @@ class CubeDataClass:
 
         self.update_dimension()  # Update self.nx,self.ny,self.nz
 
-        if conf:
-            minconfx = np.nanmin(self.ds["vx_error"].values[:])
-            maxconfx = np.nanmax(self.ds["vx_error"].values[:])
-            minconfy = np.nanmin(self.ds["vy_error"].values[:])
-            maxconfy = np.nanmax(self.ds["vy_error"].values[:])
-
         date1 = np.array([np.datetime64(date_str, "D") for date_str in self.ds["acquisition_date_img1"].values])
         date2 = np.array([np.datetime64(date_str, "D") for date_str in self.ds["acquisition_date_img2"].values])
 
@@ -295,6 +289,10 @@ class CubeDataClass:
         sensor[np.isin(sensor, ["S2A", "S2B"])] = "Sentinel-2"
 
         if conf:  # Normalize the error between 0 and 1, and convert error in confidence
+            minconfx = np.nanmin(self.ds["vx_error"].values[:])
+            maxconfx = np.nanmax(self.ds["vx_error"].values[:])
+            minconfy = np.nanmin(self.ds["vy_error"].values[:])
+            maxconfy = np.nanmax(self.ds["vy_error"].values[:])
             errorx = 1 - (self.ds["vx_error"].values - minconfx) / (maxconfx - minconfx)
             errory = 1 - (self.ds["vy_error"].values - minconfy) / (maxconfy - minconfy)
         else:
@@ -687,7 +685,7 @@ class CubeDataClass:
         filepath: list | str,
         chunks: dict | str | int = {},
         conf: bool = False,
-        subset: str | None = None,
+        subset: list[np.array()] | None = None,
         buffer: str | None = None,
         pick_date: str | None = None,
         pick_sensor: str | None = None,
