@@ -43,7 +43,7 @@ jobs:
 
     - name: Install hath
       run: |
-        uv pipx install hatch
+        uv pip install hatch
 
     - name: Run static analysis
       run: hatch fmt --check
