@@ -51,7 +51,7 @@ def download_examples(overwrite: bool = False) -> None:
         with tarfile.open(tar_path) as tar:
             try:
                 tar.extractall(tmp_dir, filter="tar")
-            except TypeError:
+            except TypeError:  # For compatibility with different versions of python: The filter argument, which was added in Python 3.10.12, specifies how members are modified or rejected before extraction.
                 tar.extractall(tmp_dir)
 
         # Find the first directory in the temp_dir (should only be one) and construct the example data dir paths.
