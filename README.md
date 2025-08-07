@@ -43,18 +43,14 @@ Clone the git repo and create a `mamba` environment (see how to install `mamba` 
 the [mamba documentation](https://mamba.readthedocs.io/en/latest/)):
 
 ```bash
-git clone git@github.com:ticoi/ticoi.git
-cd ticoi
 mamba env create -f environment.yml  # Add '-n custom_name' if you want.
-mamba activate environment  # Or any other name specified above
+mamba install -c conda-forge ticoi
 ```
 
 ### With `pip`
 
 ```bash
-python3.10 -m venv ticoi-env
-source ticoi-env/bin/activate
-pip install git+https://github.com/ticoi/ticoi.git
+pip install ticoi
 ```
 
 ## TUTORIALS
@@ -76,6 +72,7 @@ pip install git+https://github.com/ticoi/ticoi.git
 * [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/cube_ticoi_demo_its_live.py)
 * [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
 * [How to apply GLAFT on TICOI results](examples/advanced/glaft_for_ticoi_results.py)
+* [How to compute statistics in static areas](examples/advanced/stats_in_static_areas.py)
 
 ## TO USE YOUR OWN DATASET
 
