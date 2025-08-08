@@ -30,7 +30,6 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
-from rasterio.features import rasterize
 from tqdm import tqdm
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
@@ -1240,47 +1239,23 @@ class CubeDataClass:
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
 
-    def mask_cube(self, mask: xr.DataArray | str):
+    def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
         Mask some of the data of the cube (putting it to np.nan).
 
-        :param mask: [str | xr dataarray] --- Either a DataArray with 1 the data to keep and 0 the ones to remove, or a path to a file containing a DataArray or a shapefile to be rasterized
+        :param mask: [str | gpd.GeoDataFrame] --- Either a geopandas GeoDataFrame, or a path to a file containing a shapefile or geopackage
+        :param invert: [bool] --- Invert the mask, If invert=False (default): The dataset is clipped inside the geometry — data outside the polygon becomes NaN.
         """
 
-        if type(mask) is str:
-            if (
-                mask[-3:] == "shp" or mask[-4:] == "gpkg"
-            ):  # Convert the shp file or geopackage to an xarray dataset (rasterize the shapefile)
-                # gdf = gpd.read_file(shapefile_path)
-                # gdf = gdf.to_crs(self.ds.rio.crs)
-                # masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
+        if isinstance(mask, str):
+            mask = gpd.read_file(mask)  # open the mask if it is an str objetc
 
-                polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
-                raster = rasterize(
-                    [polygon.geometry[0]],
-                    out_shape=self.ds.rio.shape,
-                    transform=self.ds.rio.transform(),
-                    fill=0,
-                    dtype="int16",
-                )
-                mask = xr.DataArray(data=raster.T, dims=["x", "y"], coords=self.ds[["x", "y"]].coords)
-            else:
-                mask = xr.open_dataarray(mask)
-            mask.load()
+        if self.ds.rio.crs != mask.crs:
+            mask = mask.to_crs(self.ds.rio.crs)  # reproject the mask if needed
 
-        # Mask the velocities and the errors
-        if not self.is_TICO:
-            self.ds[["vx", "vy", "errorx", "errory"]] = (
-                self.ds[["vx", "vy", "errorx", "errory"]]
-                .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
-                .astype("float32")
-            )
-        else:
-            self.ds[["dx", "dy", "xcount_x", "xcount_y"]] = (
-                self.ds[["dx", "dy", "xcount_x", "xcount_y"]]
-                .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
-                .astype("float32")
-            )
+        self.ds = self.ds.rio.clip(mask.geometry, mask.crs, drop=False, all_touched=True, invert=invert)
+
+        return self.ds
 
     def reproject_geotiff_to_cube(self, file_path):
         """
