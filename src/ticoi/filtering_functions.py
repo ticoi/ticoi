@@ -15,34 +15,29 @@ from scipy.signal import savgol_filter
 from sklearn.decomposition import FastICA
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
+from typing import Literal
+
+# %% ======================================================================== #
+#                             POSSIBLE PARAMTERS VALUES                       #
+# =========================================================================%% #
+
+SmoothMethod = Literal["gaussian", "median", "savgol", "ICA", "lowess"]
+FiltMethod = Literal[
+    "median_angle",
+    "vvc_angle",
+    "vvc_angle_mzscore",
+    "z_score",
+    "m_zscore",
+    "magnitude",
+    "median_magnitude",
+    "error",
+    "flow_angle",
+]
+
+
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
 # =========================================================================%% #
-
-
-def numpy_ewma_vectorized(series: np.ndarray, halflife: int = 30) -> np.ndarray:
-    """
-    Calculate the exponentially weighted moving average of a series using vectorized operations.
-
-    :param series: Input series for which the EWMA needs to be calculated
-    :param halflife: Halflife parameter for the EWMA calculation (default is 30)
-
-    :return: The exponentially weighted moving average of the input series
-    """
-
-    alpha = 1 - np.exp(-np.log(2) / halflife)
-    alpha_rev = 1 - alpha
-    n = series.shape[0]
-    pows = alpha_rev ** (np.arange(n + 1))
-    scale_arr = 1 / pows[:-1]
-    offset = series[0] * pows[1:]
-    pw0 = alpha * alpha_rev ** (n - 1)
-    mult = series * pw0 * scale_arr
-    cumsums = mult.cumsum()
-    out = offset + cumsums * scale_arr[::-1]
-    return out
-
-
 def gaussian_smooth(
     series: np.ndarray,
     t_obs: np.ndarray,
@@ -265,7 +260,7 @@ def dask_smooth_wrapper(
     dask_array: da.array,
     dates: xr.DataArray,
     t_out: np.ndarray,
-    smooth_method: str = "gaussian",
+    smooth_method: SmoothMethod = "savgol",
     t_win: int = 90,
     sigma: int = 3,
     order: int = 3,
@@ -549,7 +544,7 @@ def flow_angle_filt(
 def dask_filt_warpper(
     da_vx: xr.DataArray,
     da_vy: xr.DataArray,
-    filt_method: str = "median_angle",
+    filt_method: FiltMethod = "median_angle",
     vvc_thres: float = 0.3,
     angle_thres: int = 45,
     z_thres: int = 2,
@@ -622,7 +617,7 @@ def dask_filt_warpper(
             median_magnitude_filt, median_magnitude_thres=median_magnitude_thres, axis=axis, dtype=obs_arr.dtype
         )
 
-    elif filt_method == "error":  # delete observations according to a threshold  in error
+    elif filt_method == "error":  # delete observations according to a threshold in error
         inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(lambda x: x < error_thres, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
@@ -640,7 +635,7 @@ def dask_filt_warpper(
         )
     else:
         raise ValueError(
-            "Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score', 'magnitude', 'median_magnitude' or 'error'."
+            "Filtering method should be either 'median_angle', 'vvc_angle','vvc_angle_mzscore', 'z_score', 'm_zscore', 'magnitude', 'median_magnitude', 'error', 'flow_angle'."
         )
 
     return inlier_mask.compute()
