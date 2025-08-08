@@ -4,7 +4,7 @@ Reference:
     Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
     observation networks. IEEE Transactions on Geoscience and Remote Sensing.
     Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
-    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+    ISPRS annals of photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
 import dask.array as da
@@ -43,37 +43,6 @@ def numpy_ewma_vectorized(series: np.ndarray, halflife: int = 30) -> np.ndarray:
     return out
 
 
-def ewma_smooth(
-    series: np.ndarray,
-    t_obs: np.ndarray,
-    t_interp: np.ndarray,
-    t_out: np.ndarray,
-    t_win: int = 90,
-    sigma: int = 3,
-    order: int | None = 3,
-) -> np.ndarray:
-    """
-    Calculates an exponentially weighted moving average (EWMA) of a series at specific time points.
-
-    :param series: Input series to be smoothed
-    :param t_obs: Time points of the observed series
-    :param t_interp: Time points to interpolate the series at
-    :param t_out: Time points to return the smoothed series at
-    :param t_win: Smoothing window size (default is 90)
-
-    :return: The smoothed series at the specified time points
-    """
-    t_win = 10
-    t_obs = t_obs[~np.isnan(series)]
-    series = series[~np.isnan(series)]
-    try:
-        series_smooth = numpy_ewma_vectorized(series, halflife=t_win)
-        series_interp = np.interp(t_interp, t_obs, series_smooth)
-    except:  # If there is only nan
-        return np.zeros(len(t_out))
-    return series_interp[t_out]
-
-
 def gaussian_smooth(
     series: np.ndarray,
     t_obs: np.ndarray,
@@ -84,7 +53,7 @@ def gaussian_smooth(
     order: int | None = 3,
 ) -> np.ndarray:
     """
-    Perform Gaussian smoothing on a time series data.
+    Perform Gaussian smoothing on a data time series.
 
     :param series: Input time series data
     :param t_obs: Time observations corresponding to the input data
@@ -206,7 +175,7 @@ def ica_denoise(
     order: int | None = 3,
 ) -> np.ndarray:
     """
-    Perform ICA denoising on a time series data.
+    Perform ICA denoising on a data time series.
 
     :param series: Input time series data
     :param t_obs: Time observations corresponding to the input data
@@ -327,12 +296,11 @@ def dask_smooth_wrapper(
         t_obs = t_obs - t_out.min()  # Ensure the output time points are within the range of interpolated points
         t_out = t_out - t_out.min()
 
-    # Some mid_date could be exactly the same, this will raise error latter
-    # Therefore we add very small values to it
+    # Some mid_date could be exactly the same, this will raise error latter, so we add very small values to it
     while np.unique(t_obs).size < t_obs.size:
         t_obs += np.random.uniform(
             low=0.01, high=0.09, size=t_obs.shape
-        )  # Add a small value to make it unique, in case of non-monotonic time point
+        )  # Add a small value to make it unique, for non-monotonic time point
     t_obs.sort()
 
     t_interp = np.arange(
@@ -342,7 +310,6 @@ def dask_smooth_wrapper(
     # Apply a kernel on the observations to get a time series with a temporal sampling specified by t_interp
     filt_func = {
         "gaussian": gaussian_smooth,
-        "ewma": ewma_smooth,
         "median": median_smooth,
         "savgol": savgol_smooth,
         "ICA": ica_denoise,
@@ -369,7 +336,7 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
     """
     Remove the observations if it is 3 time the standard deviation from the average of observations over this pixel
     :param obs: cube data to filter
-    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param z_thres: a threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
@@ -387,7 +354,7 @@ def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
     """
     Remove the observations if it is 3.5 time the MAD from the median of observations over this pixel
     :param obs: cube data to filter
-    :param mz_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param mz_thres: a threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
@@ -408,7 +375,7 @@ def NVVC_angle_filt(
 ) -> np.array:
     """
     Combine angle filter and zscore
-    If the VVC is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
+    If the vvc is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
     i.e. pixels are filtered out if the angle with the observation is angle_thres away from the median vector
     :param obs_cpx: cube data to filter
     :param vvc_thres: threshold to combine zscore and median_angle filter
@@ -423,18 +390,18 @@ def NVVC_angle_filt(
     vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
     mean_magnitude = np.hypot(vx_mean, vy_mean)  # compute the averaged norm of the observations
 
-    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
+    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observation
     x_component = np.nansum(vx / velo_magnitude, axis=axis)
     y_component = np.nansum(vy / velo_magnitude, axis=axis)
 
     nz = velo_magnitude.shape[axis]
-    VVC = (
+    vvc = (
         np.hypot(x_component, y_component) / nz
-    )  # velocity coherence as defined in   Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    )  # velocity coherence as defined in Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     # ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
-    VVC = np.expand_dims(VVC, axis=axis)
+    vvc = np.expand_dims(vvc, axis=axis)
 
-    vvc_cond = VVC > vvc_thres
+    vvc_cond = vvc > vvc_thres
 
     dot_product = vx_mean * vx + vy_mean * vy
 
@@ -450,7 +417,7 @@ def NVVC_angle_mzscore_filt(
 ) -> np.array:
     """
     Combine angle filter and zscore
-    If the VVC is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
+    If the vvc is lower than a given threshold, outliers are filtered out according to the zscore, else to the median angle filter,
     i.e. pixels are filtered out if the angle with the observation is angle_thres away from the median vector
     :param obs_cpx: cube data to filter
     :param vvc_thres: threshold to combine zscore and median_angle filter
@@ -465,18 +432,18 @@ def NVVC_angle_mzscore_filt(
     vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
     mean_magnitude = np.hypot(vx_mean, vy_mean)  # compute the averaged norm of the observations
 
-    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
+    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observation
     x_component = np.nansum(vx / velo_magnitude, axis=axis)
     y_component = np.nansum(vy / velo_magnitude, axis=axis)
 
     nz = velo_magnitude.shape[axis]
-    VVC = (
+    vvc = (
         np.hypot(x_component, y_component) / nz
-    )  # velocity coherence as defined in   Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
+    )  # velocity coherence as defined in Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
     # ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
-    VVC = np.expand_dims(VVC, axis=axis)
+    vvc = np.expand_dims(vvc, axis=axis)
 
-    vvc_cond = VVC > vvc_thres
+    vvc_cond = vvc > vvc_thres
 
     dot_product = vx_mean * vx + vy_mean * vy
 
@@ -513,7 +480,7 @@ def median_angle_filt(obs_cpx: np.array, angle_thres: int = 45, axis: int = 2):
     """
     Remove the observation if it is angle_thres away from the median vector
     :param obs_cpx: cube data to filter
-    :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param angle_thres: a threshold to remove observations, remove the observation if it is angle_thres away from the median vector
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
@@ -548,11 +515,12 @@ def flow_angle_filt(
     :param obs_cpx: cube data to filter
     :param direction: given flow direction
     :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
+    :param z_thres: threshold to remove observations, remove the observation if it is z_score is higher than z_thres
     :param axis: axis on which to perform the zscore computation
     :return: boolean mask
     """
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
-    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observations
+    velo_magnitude = np.hypot(vx, vy)  # compute the norm of each observation
 
     angle_rad = np.arctan2(vx, vy)
 
@@ -567,7 +535,7 @@ def flow_angle_filt(
     # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2)
     # bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
 
-    # mag_filter = np.where(bis_cond , True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
+    # mag_filter = np.where(bis_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
     # angle_filter[np.expand_dims(np.isnan(direction), axis=2)] = True
     angle_filter = angle_filter.where(
         ~np.isnan(direction), True
@@ -589,8 +557,6 @@ def dask_filt_warpper(
     magnitude_thres: int = 1000,
     median_magnitude_thres=3,
     error_thres: int = 100,
-    slope: xr.Dataset = None,
-    aspect: xr.Dataset = None,
     direction: xr.Dataset = None,
     axis: int = 2,
 ):
@@ -604,12 +570,16 @@ def dask_filt_warpper(
     :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 2)
     :param mz_thres: threshold to remove observations, if the absolute mzscore is higher than this threshold (default is 3.5)
     :param magnitude_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 1000)
+    :param median_magnitude_thres: threshold to remove observations, if the median magnitude is higher than this threshold (default is 1000)
     :param error_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 100)
     :param axis: axis on which to perform the zscore computation (default is 2)
+    :param direction: given flow direction
     :return:
     """
 
-    if filt_method == "median_angle":  # delete according to a threshold in angle between observations and median vector
+    if (
+        filt_method == "median_angle"
+    ):  # delete observations according to a threshold in angle between observations and median vector
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
 
@@ -640,7 +610,7 @@ def dask_filt_warpper(
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
-    elif filt_method == "magnitude":  # delete according to a threshold in magnitude
+    elif filt_method == "magnitude":  # delete observations according to a threshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)
         inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
 
@@ -652,7 +622,7 @@ def dask_filt_warpper(
             median_magnitude_filt, median_magnitude_thres=median_magnitude_thres, axis=axis, dtype=obs_arr.dtype
         )
 
-    elif filt_method == "error":  # delete according to a threshold  in error
+    elif filt_method == "error":  # delete observations according to a threshold  in error
         inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(lambda x: x < error_thres, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
