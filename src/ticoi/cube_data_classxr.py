@@ -762,7 +762,7 @@ class CubeDataClass:
                     filepath[n],
                     chunks=chunks,
                     conf=conf,
-                    subset=sub,
+                    subset=None,
                     pick_date=pick_date,
                     pick_sensor=pick_sensor,
                     pick_temp_bas=pick_temp_bas,
@@ -770,6 +770,17 @@ class CubeDataClass:
                     mask=mask,
                     verbose=verbose,
                 )
+                cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method='nearest')
+                if cube2.nx == self.nx and cube2.ny == self.ny:
+                    cube2.ds = cube2.ds.assign_coords(x=self.ds.x, y=self.ds.y)
+                # if cube2.ds.y.to_pandas().duplicated().any() or cube2.ds.x.to_pandas().duplicated().any():
+                #     if cube2.ds.y.to_pandas().duplicated().any():
+                #         _, unique_y = np.unique(cube2.ds.y.values, return_index=True)
+                #         cube2.ds = cube2.ds.isel(y=np.sort(unique_y))
+                #     if cube2.ds.x.to_pandas().duplicated().any():
+                #         _, unique_x = np.unique(cube2.ds.x.values, return_index=True)
+                #         cube2.ds = cube2.ds.isel(x=np.sort(unique_x))
+                #     cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method='nearest')
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
                 if reproj_vel or reproj_coord:
                     cube2 = self.align_cube(
@@ -1761,11 +1772,16 @@ class CubeDataClass:
         # temp = self.temp_base_()
         temp = np.array([30] * self.nz)
 
-        def transform_slice(z, temp, grid, transformer):
+        def transform_slice(z):
             """Transform the velocity slice for a single time step."""
             # compute the coordinate for the ending point of the vector
-            endx = (self.ds["vx"].isel(mid_date=z) * temp[z] / unit) + grid[0]
-            endy = (self.ds["vy"].isel(mid_date=z) * temp[z] / unit) + grid[1]
+            vx_slice = self.ds["vx"].isel(mid_date=z).values
+            vy_slice = self.ds["vy"].isel(mid_date=z).values
+            if vx_slice.shape != grid[0].shape:
+                vx_slice = vx_slice.T
+                vy_slice = vy_slice.T
+            endx = (vx_slice * temp[z] / unit) + grid[0]
+            endy = (vy_slice * temp[z] / unit) + grid[1]
 
             # Transform final coordinates
             t = transformer.transform(endx, endy)
@@ -1777,9 +1793,15 @@ class CubeDataClass:
 
         results = np.array(
             Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(transform_slice, temp, grid, transformer)(z) for z in range(self.nz)
+                delayed(transform_slice)(z) for z in range(self.nz)
             )
         )
+
+        # results = np.array(
+        #     Parallel(n_jobs=nb_cpu, verbose=0)(
+        #         delayed(transform_slice, temp, grid, transformer)(z) for z in range(self.nz)
+        #     )
+        # )
         # Unpack the results
         vx, vy = results[:, 0, :, :], results[:, 1, :, :]
 
@@ -1840,9 +1862,27 @@ class CubeDataClass:
 
         :param cube: [cube_data_class] --- The cube to be merged to self
         """
+        if self.ds.y.to_pandas().duplicated().any() or self.ds.x.to_pandas().duplicated().any():
+            print("Warning: Main cube has duplicate coordinates, removing...")
+            if self.ds.y.to_pandas().duplicated().any():
+                _, unique_y = np.unique(self.ds.y.values, return_index=True)
+                self.ds = self.ds.isel(y=np.sort(unique_y))
+            if self.ds.x.to_pandas().duplicated().any():
+                _, unique_x = np.unique(self.ds.x.values, return_index=True)
+                self.ds = self.ds.isel(x=np.sort(unique_x))
+
+        # 检查待合并立方体是否有重复坐标
+        if cube.ds.y.to_pandas().duplicated().any() or cube.ds.x.to_pandas().duplicated().any():
+            print("Warning: Cube to merge has duplicate coordinates, removing...")
+            if cube.ds.y.to_pandas().duplicated().any():
+                _, unique_y = np.unique(cube.ds.y.values, return_index=True)
+                cube.ds = cube.ds.isel(y=np.sort(unique_y))
+            if cube.ds.x.to_pandas().duplicated().any():
+                _, unique_x = np.unique(cube.ds.x.values, return_index=True)
+                cube.ds = cube.ds.isel(x=np.sort(unique_x))
 
         # Merge the cubes (must be previously aligned before using align_cube)
-        self.ds = xr.concat([self.ds, cube.ds.sel(x=self.ds["x"], y=self.ds["y"])], dim="mid_date")
+        self.ds = xr.concat([self.ds, cube.ds], dim="mid_date")
 
         # Update the attributes
         self.ds = self.ds.chunk(chunks={"mid_date": self.ds["mid_date"].size})
@@ -1852,7 +1892,7 @@ class CubeDataClass:
             and isinstance(self.filename, list)
             and isinstance(self.author, list)
             and isinstance(self.source, list)
-        ):
+        ) is False:
             self.filedir = [self.filedir]
             self.filename = [self.filename]
             self.author = [self.author]
