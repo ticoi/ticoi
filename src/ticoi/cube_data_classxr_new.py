@@ -422,7 +422,7 @@ class CubeDataClass:
             "sensor": "Pleiades",
             "source": "IGE",
             "errorx": 1.0,
-            "errory": 1.0, 
+            "errory": 1.0,
         }
 
     def _loader_charrier(self, ds_raw: xr.Dataset, conf: bool) -> dict:
