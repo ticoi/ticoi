@@ -250,16 +250,15 @@ class CubeDataClass:
         return sensor_input
 
     def _normalize_error_to_confidence(self, error_da: xr.DataArray) -> xr.DataArray:
-        """将误差(error)数组归一化为置信度(confidence) [0, 1]。"""
+        """normalize error to confidence between [0, 1]"""
         min_val = error_da.min()
         max_val = error_da.max()
-        # 避免除以零
         if max_val == min_val:
             return xr.ones_like(error_da)
         return 1 - (error_da - min_val) / (max_val - min_val)
 
     def _apply_data_subset(self, proj, subset, buffer, pick_date, pick_sensor, pick_temp_bas):
-        """将所有通用的筛选逻辑集中于此。"""
+        """all subsetting in one function"""
         # spatial subset
         if subset is not None:
             self.subset(proj, subset)
@@ -417,13 +416,13 @@ class CubeDataClass:
 
         return {
             "vx": ds_raw["vx"],
-            "vy": -ds_raw["vy"],  # 特殊处理
+            "vy": -ds_raw["vy"],  # special case for ducasse
             "date1": date1,
             "date2": date2,
             "sensor": "Pleiades",
             "source": "IGE",
             "errorx": 1.0,
-            "errory": 1.0,  # 无误差信息，设为1
+            "errory": 1.0, 
         }
 
     def _loader_charrier(self, ds_raw: xr.Dataset, conf: bool) -> dict:
@@ -580,7 +579,7 @@ class CubeDataClass:
         # construct cubedataclass from standardized data
         time_dim = "mid_date"
         for var_name, data in standard_data.items():
-            if isinstance(data, (float, str)):  # 处理单个值的情况 (如 source, sensor)
+            if isinstance(data, (float, str)):  # if source or author is string
                 data = np.repeat(data, self.ds.sizes[time_dim])
 
             if data.ndim == 1:
