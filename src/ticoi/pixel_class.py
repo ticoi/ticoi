@@ -645,7 +645,12 @@ class PixelClass:
         return fig, ax
 
     def plot_vv(
-        self, color: str = "orange", type_data: str = "invert", block_plot: bool = True, vminmax: list | None = None, ax: Axes | None = None
+        self,
+        color: str = "orange",
+        type_data: str = "invert",
+        block_plot: bool = True,
+        vminmax: list | None = None,
+        ax: Axes | None = None,
     ):
         """
         Plot the velocity magnitude.
@@ -678,8 +683,8 @@ class PixelClass:
             lw=0.7,
             markersize=4,
             color=color,
-            markeredgecolor='.9',
-            markeredgewidth='.5',
+            markeredgecolor=".9",
+            markeredgewidth=".5",
             label=label,
         )
         ax.errorbar(
@@ -687,7 +692,7 @@ class PixelClass:
             data.dataf["vv"],
             xerr=data.dataf["offset_bar"],
             color=color,
-            linewidth=.8,
+            linewidth=0.8,
             alpha=0.4,
             fmt=",",
             zorder=1,
@@ -717,7 +722,7 @@ class PixelClass:
         zoom_on_results: bool = False,
         block_plot: bool = True,
         vminmax: list | None = None,
-        ax: Axes | None = None
+        ax: Axes | None = None,
     ):
         """
         Plot the velocity magnitude of inverted/interpolated results, overlaying the velocity magnitude of the observations (raw data).
@@ -781,7 +786,9 @@ class PixelClass:
 
         return fig, ax
 
-    def plot_vv_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True, ax: Axes | None = None):
+    def plot_vv_quality(
+        self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True, ax: Axes | None = None
+    ):
         """
         Plot error on top of velocity vx and vy.
 
@@ -873,7 +880,12 @@ class PixelClass:
         return fig, ax
 
     def plot_direction(
-        self, color: str = "orange", type_data: str = "obs", block_plot: bool = True, plot_mean: bool = True, ax: Axes | None = None
+        self,
+        color: str = "orange",
+        type_data: str = "obs",
+        block_plot: bool = True,
+        plot_mean: bool = True,
+        ax: Axes | None = None,
     ):
         """
         Plot the direction of the velocities for each of the data at this point.
@@ -920,7 +932,7 @@ class PixelClass:
         type_data: str = "interp",
         block_plot: bool = True,
         plot_mean: bool = True,
-        ax: Axes | None = None
+        ax: Axes | None = None,
     ):
         """
         Plot the velocity direction of inverted/interpolated results, overlaying the velocity direction of the observations (raw data).
@@ -998,12 +1010,11 @@ class PixelClass:
             max_xcount = int(np.nanmax(xcount_mean))
             base_bounds = [0, 100, 200, 500, 1000, 2000, 5000, 10000]
             bounds = sorted(set([b for b in base_bounds if b <= max_xcount] + [max_xcount]))
-            cmap_full = plt.get_cmap("Blues", len(bounds)+1)
-            # 跳过最浅的颜色（比如第0个），只用后面的深色
+            cmap_full = plt.get_cmap("Blues", len(bounds) + 1)
             colors = [cmap_full(i) for i in range(2, cmap_full.N)]
             cmap = mcolors.ListedColormap(colors)
             norm = mcolors.BoundaryNorm(bounds, cmap.N)
-        
+
         if ax is None:
             fig, ax = plt.subplots(figsize=self.figsize)
         else:
@@ -1046,7 +1057,9 @@ class PixelClass:
             )
 
         if "xcount_x" in data.columns:
-            scat = ax.scatter(data["date_cori"], data["vv"], c=xcount_mean, cmap=cmap, norm=norm, s=15, edgecolor='.3', linewidth=0.3)
+            scat = ax.scatter(
+                data["date_cori"], data["vv"], c=xcount_mean, cmap=cmap, norm=norm, s=15, edgecolor=".3", linewidth=0.3
+            )
             # Add the colorbar for xcount
             cax = ax.inset_axes([0.03, 0.8, 0.45, 0.03])  # [left, bottom, width, height]
             cbar = fig.colorbar(scat, cax=cax, boundaries=bounds, orientation="horizontal", pad=0.1)

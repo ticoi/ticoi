@@ -752,12 +752,6 @@ class CubeDataClass:
 
             for n in range(1, len(filepath)):
                 cube2 = CubeDataClass()
-                sub = [
-                    self.ds["x"].min().values,
-                    self.ds["x"].max().values,
-                    self.ds["y"].min().values,
-                    self.ds["y"].max().values,
-                ]
                 cube2.load(
                     filepath[n],
                     chunks=chunks,
@@ -770,7 +764,7 @@ class CubeDataClass:
                     mask=mask,
                     verbose=verbose,
                 )
-                cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method='nearest')
+                cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method="nearest")
                 if cube2.nx == self.nx and cube2.ny == self.ny:
                     cube2.ds = cube2.ds.assign_coords(x=self.ds.x, y=self.ds.y)
                 # if cube2.ds.y.to_pandas().duplicated().any() or cube2.ds.x.to_pandas().duplicated().any():
@@ -1791,11 +1785,7 @@ class CubeDataClass:
 
             return vx, vy
 
-        results = np.array(
-            Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(transform_slice)(z) for z in range(self.nz)
-            )
-        )
+        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(transform_slice)(z) for z in range(self.nz)))
 
         # results = np.array(
         #     Parallel(n_jobs=nb_cpu, verbose=0)(
