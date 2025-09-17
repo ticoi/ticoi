@@ -299,7 +299,7 @@ class CubeDataClass:
 
     def _add_standardized_variable(self, standard_data):
         for var_name, data in standard_data.items():
-            if isinstance(data, str):  # if source or sensor is a string
+            if isinstance(data, (str,float)):  # if sensor is a string or error is a float
                 data = np.repeat(data, self.ds.sizes[
                     "mid_date"])  # create a np array of lenght self.ds.sizes[time_dim], with the string
 
@@ -454,23 +454,19 @@ class CubeDataClass:
             "errory": 1.0,
         }
 
-    def _loader_charrier(self, ds_raw: xr.Dataset, conf: bool) -> dict:
+    def _loader_charrier(self, conf: bool) -> dict:
         """process Charrier dataset specific logic"""
-        self.author = "IGE" if "Mouginot" in ds_raw.author else ds_raw.author
-        self.source = ds_raw.source
+        self.author = "IGE" if "Mouginot" in self.ds.author else self.ds.author
+        self.source = self.ds.source
 
         # normalize error if needed
-        errorx, errory = ds_raw.get("errorx"), ds_raw.get("errory")
+        errorx, errory = self.ds.get("errorx"), self.ds.get("errory")
         if conf and errorx is not None:
             errorx = self._normalize_error_to_confidence(errorx)
             errory = self._normalize_error_to_confidence(errory)
-        sensor = ds_raw.attrs["sensor"] if "sensor" in ds_raw.attrs else ds_raw["sensor"]
-        source = ds_raw.attrs["source"] if "source" in ds_raw.attrs else ds_raw["source"]
+        sensor = self.ds.attrs["sensor"] if "sensor" in self.ds.attrs else self.ds["sensor"]
+        source = self.ds.attrs["source"] if "source" in self.ds.attrs else self.ds["source"]
         return {
-            "vx": ds_raw["vx"],
-            "vy": ds_raw["vy"],
-            "date1": ds_raw["date1"],
-            "date2": ds_raw["date2"],
             "sensor": self._standardize_sensor_names(sensor),
             "source": source,
             "errorx": errorx if errorx is not None else 1.0,
@@ -606,7 +602,7 @@ class CubeDataClass:
         standard_data = standardizer(conf)
 
         #keep only certain variable and attributes
-        variables_to_keep = ["vx", "vy", "mid_date", "x", "y"]
+        variables_to_keep = ["vx", "vy", "mid_date", "x", "y","date1","date2"]
         self.ds = self.ds.drop_vars([var for var in self.ds.variables if var not in variables_to_keep])
         attributes_to_keep = ["author", "source", "date_created", "proj4", "mapping"]
         self.ds.attrs = {k: v for k, v in self.ds.attrs.items() if k in attributes_to_keep}
