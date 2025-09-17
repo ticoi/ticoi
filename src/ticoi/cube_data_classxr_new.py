@@ -264,7 +264,13 @@ class CubeDataClass:
             return xr.ones_like(error_da)
         return 1 - (error_da - min_val) / (max_val - min_val)
 
-    def _apply_data_subset_in_space(self, proj, subset, buffer):
+    def _apply_data_subset_in_space(self, proj:str, subset:list, buffer:list):
+        """
+        Spatial subset, using a buffer and or subset
+        :param proj: [str] --- EPSG system of the coordinates given in subset
+        :param subset: [list] --- A list of 4 float, these values are used to give a subset of the dataset : [xmin, xmax, ymax, ymin]
+        :param buffer:  [list] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
+        """
         # spatial subset
         if subset is not None:
             self.subset(proj, subset)
@@ -276,8 +282,13 @@ class CubeDataClass:
             self.update_dimension()
 
 
-    def _apply_data_selection(self, pick_date, pick_sensor, pick_temp_bas):
-        """all subsetting in one function"""
+    def _apply_data_selection(self, pick_date:list|None, pick_sensor:list|None, pick_temp_bas:list|None):
+        """
+        selection of dates, sensors, temporal baselines
+        :param pick_date: [list] --- list of date to select
+        :param pick_sensor: [list] --- list of sensors to select
+        :param pick_temp_bas: [list] --- list of temporal baselines to select
+        """
 
         # 1. update time dimension name and format
         if pick_date is not None:
@@ -297,7 +308,11 @@ class CubeDataClass:
         # final dimension update
         if pick_sensor is not None or pick_sensor is not None or pick_temp_bas is not None:  self.update_dimension()
 
-    def _add_standardized_variable(self, standard_data):
+    def _add_standardized_variable(self, standard_data:dict):
+        """
+        Add standardized variable to the cube dataarry self.ds
+        :param standard_data: [dict] --- name and values of standardized variables
+        """
         for var_name, data in standard_data.items():
             if isinstance(data, (str,float)):  # if sensor is a string or error is a float
                 data = np.repeat(data, self.ds.sizes[
@@ -416,13 +431,11 @@ class CubeDataClass:
         errorx = np.tile(errorx_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         errory = np.tile(errory_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         # standardize date format
-        date1 = xr.DataArray([mjd2date(d) for d in ds_raw["date1"].values], dims="mid_date").astype("datetime64[ns]")
-        date2 = xr.DataArray([mjd2date(d) for d in ds_raw["date2"].values], dims="mid_date").astype("datetime64[ns]")
-        ds_raw = ds_raw.assign_coords(mid_date=date1 + (date2 - date1) / 2)
+        date1 = xr.DataArray([mjd2date(d) for d in self.ds["date1"].values], dims="mid_date").astype("datetime64[ns]")
+        date2 = xr.DataArray([mjd2date(d) for d in self.ds["date2"].values], dims="mid_date").astype("datetime64[ns]")
+        self.ds = self.ds.assign_coords(mid_date=date1 + (date2 - date1) / 2)
 
         return {
-            "vx": ds_raw["vx"],
-            "vy": ds_raw["vy"],
             "date1": date1,
             "date2": date2,
             "sensor": self._standardize_sensor_names(sensor_raw),
