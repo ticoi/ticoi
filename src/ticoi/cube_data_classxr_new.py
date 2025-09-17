@@ -337,6 +337,7 @@ class CubeDataClass:
         variables:
                     [vx, vy, date1, date2]: necessary,
                     [sensor, source, errorx, errory]: optional
+        if you want specify the name of the author and the source of the dataset, it should be inside an attribute called author and source respectively.
         """
         # required variables
         REQUIRED_VARS = ["vx", "vy", "date1", "date2"]
@@ -351,7 +352,7 @@ class CubeDataClass:
             )
 
         # provide default values for optional variables if they are missing
-        self.author = self.ds.attrs.get("author", "Unknown")
+        self.author = self.ds.attrs.get("author", "Unknown") #if the attribute auhtor does not exist, put the attribute to Unknown
         self.source = self.ds.attrs.get("source", "Unknown")
 
         # standardize sensor names if sensor variable exists
@@ -369,6 +370,10 @@ class CubeDataClass:
             errorx = self._normalize_error_to_confidence(errorx)
             errory = self._normalize_error_to_confidence(errory)
 
+
+        if (self.ds.vx==0).any().values: #mask values equal to 0
+            mask = (self.ds.vx != 0) & (self.ds.vy != 0)
+            self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(mask)
 
         standard_data = {
             "date1": self.ds["date1"].astype("datetime64[ns]"),
