@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.cube_data_classxr_new import CubeDataClass
 from ticoi.interpolation_functions import smooth_results
 
 # %% ======================================================================== #

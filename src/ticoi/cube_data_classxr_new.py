@@ -74,6 +74,13 @@ class CubeDataClass:
             self.resolution = cube.resolution
             self.is_TICO = cube.is_TICO
 
+    def find_time_dimensions(self):
+        """
+        Find the name of the time dimension
+        """
+        coords_not_spatial = [n for n in self.ds.coords if n not in {"x", "y"}]
+        return coords_not_spatial[0]
+
     def update_dimension(self, time_dim: str = "mid_date"):
         """
         Update the attributes corresponding to cube dimensions: nx, ny, and nz
@@ -257,8 +264,7 @@ class CubeDataClass:
             return xr.ones_like(error_da)
         return 1 - (error_da - min_val) / (max_val - min_val)
 
-    def _apply_data_subset(self, proj, subset, buffer, pick_date, pick_sensor, pick_temp_bas):
-        """all subsetting in one function"""
+    def _apply_data_subset_in_space(self, proj, subset, buffer):
         # spatial subset
         if subset is not None:
             self.subset(proj, subset)
@@ -266,9 +272,14 @@ class CubeDataClass:
             self.buffer(proj, buffer)
 
         # update dimensions after spatial filtering
-        self.update_dimension()
+        if subset is not None or buffer is not None:
+            self.update_dimension()
 
-        # 2. update time dimension name and format
+
+    def _apply_data_selection(self, pick_date, pick_sensor, pick_temp_bas):
+        """all subsetting in one function"""
+
+        # 1. update time dimension name and format
         if pick_date is not None:
             mask = (self.ds["date1"] >= np.datetime64(pick_date[0])) & (self.ds["date2"] <= np.datetime64(pick_date[1]))
             self.ds = self.ds.where(mask.compute(), drop=True)
@@ -286,7 +297,24 @@ class CubeDataClass:
         # final dimension update
         if pick_sensor is not None or pick_sensor is not None or pick_temp_bas is not None:  self.update_dimension()
 
-    def _loader_generic(self, ds_raw: xr.Dataset, conf: bool) -> dict:
+    def _add_standardized_variable(self, standard_data):
+        for var_name, data in standard_data.items():
+            if isinstance(data, str):  # if source or sensor is a string
+                data = np.repeat(data, self.ds.sizes[
+                    "mid_date"])  # create a np array of lenght self.ds.sizes[time_dim], with the string
+
+            if data.ndim == 1:  # for sensor, source, date1, and date2
+                dims = ("mid_date",)
+            elif data.ndim == 3:  # for vx, vy
+                dims = ("mid_date", "y", "x")
+            else:  # if error is already 2D
+                dims = data.dims
+
+            self.ds[var_name] = xr.DataArray(data, dims=dims)
+
+        self.ds = self.ds.unify_chunks()
+
+    def _loader_generic(self,  conf: bool) -> dict:
         """
         standardize dataset with unrecognized author based on variable names.
 
@@ -300,7 +328,7 @@ class CubeDataClass:
         REQUIRED_VARS = ["vx", "vy", "date1", "date2"]
 
         # check if all required variables are present
-        missing_vars = [var for var in REQUIRED_VARS if var not in ds_raw.variables]
+        missing_vars = [var for var in REQUIRED_VARS if var not in self.ds.variables]
 
         if missing_vars:
             raise ValueError(
@@ -309,77 +337,78 @@ class CubeDataClass:
             )
 
         # provide default values for optional variables if they are missing
-        self.author = ds_raw.attrs.get("author", "Unknown")
-        self.source = ds_raw.attrs.get("source", "Unknown")
+        self.author = self.ds.attrs.get("author", "Unknown")
+        self.source = self.ds.attrs.get("source", "Unknown")
 
         # standardize sensor names if sensor variable exists
-        if "sensor" in ds_raw:
-            sensor = ds_raw["sensor"].values
-        elif "sensor" in ds_raw.attrs:
-            sensor = ds_raw.attrs["sensor"]
+        if "sensor" in self.ds:
+            sensor = self.ds["sensor"].values
+        elif "sensor" in self.ds.attrs:
+            sensor = self.ds.attrs["sensor"]
         else:
             sensor = "Unknown"
 
+        errorx =  self.ds.get("errorx", 1.0)
+        errory = self.ds.get("errory", 1.0)
+        # if data has errorx/errory and need normalization
+        if conf and "errorx" in self.ds:
+            errorx = self._normalize_error_to_confidence(errorx)
+            errory = self._normalize_error_to_confidence(errory)
+
+
         standard_data = {
-            "vx": ds_raw["vx"],
-            "vy": ds_raw["vy"],
-            "date1": ds_raw["date1"].astype("datetime64[ns]"),
-            "date2": ds_raw["date2"].astype("datetime64[ns]"),
+            "date1": self.ds["date1"].astype("datetime64[ns]"),
+            "date2": self.ds["date2"].astype("datetime64[ns]"),
             "sensor": sensor,
             "source": self.source,
-            "errorx": ds_raw.get("errorx", 1.0),
-            "errory": ds_raw.get("errory", 1.0),
+            "errorx":errorx,
+            "errory": errory,
         }
 
-        # if data has errorx/errory and need normalization
-        if conf and "errorx" in ds_raw:
-            standard_data["errorx"] = self._normalize_error_to_confidence(ds_raw["errorx"])
-            standard_data["errory"] = self._normalize_error_to_confidence(ds_raw["errory"])
 
         return standard_data
 
-    def _loader_itslive(self, ds_raw: xr.Dataset, conf: bool) -> dict:
+
+    def _loader_itslive(self, conf: bool) -> dict:
         """process ITS_LIVE dataset specific logic"""
-        self.author = ds_raw.author.split(", a NASA")[0]
-        self.source = ds_raw.url
-        self.ds.attrs["proj4"] = ds_raw["mapping"].proj4text
+        self.author = self.ds.author.split(", a NASA")[0]
+        self.source = self.ds.url
+        self.ds.attrs["proj4"] = self.ds["mapping"].proj4text
 
         # standardize sensor names
         sensor_raw = np.core.defchararray.add(
-            np.char.strip(ds_raw["mission_img1"].values.astype(str), " "),
-            np.char.strip(ds_raw["satellite_img1"].values.astype(str), " "),
+            np.char.strip(self.ds["mission_img1"].values.astype(str), " "),
+            np.char.strip(self.ds["satellite_img1"].values.astype(str), " "),
         ).astype("U10")
 
         # normalize error if needed
-        errorx = ds_raw["vx_error"]
-        errory = ds_raw["vy_error"]
+        errorx = self.ds["vx_error"]
+        errory = self.ds["vy_error"]
         if conf:
             errorx = self._normalize_error_to_confidence(errorx)
             errory = self._normalize_error_to_confidence(errory)
 
         return {
-            "vx": ds_raw["vx"],
-            "vy": ds_raw["vy"],
-            "date1": ds_raw["acquisition_date_img1"].astype("datetime64[ns]"),
-            "date2": ds_raw["acquisition_date_img2"].astype("datetime64[ns]"),
+            "date1": self.ds["acquisition_date_img1"].astype("datetime64[ns]"),
+            "date2": self.ds["acquisition_date_img2"].astype("datetime64[ns]"),
             "sensor": self._standardize_sensor_names(sensor_raw),
             "source": "ITS_LIVE",
             "errorx": errorx,
             "errory": errory,
         }
 
-    def _loader_millan(self, ds_raw: xr.Dataset, conf: bool) -> dict:
+    def _loader_millan(self, conf: bool) -> dict:
         """process Millan dataset specific logic"""
         self.author = "IGE"
-        self.source = ds_raw.source
-        ds_raw = ds_raw.rename({"z": "mid_date"})
+        self.source = self.ds.source
+        ds_raw = self.ds.rename({"z": "mid_date"})
 
         # standardize sensor names
-        sensor_raw = np.char.strip(ds_raw["sensor"].values.astype(str), " ")
+        sensor_raw = np.char.strip(self.ds["sensor"].values.astype(str), " ")
 
         # normalize error if needed
-        errorx_1d = ds_raw["error_vx"]
-        errory_1d = ds_raw["error_vy"]
+        errorx_1d = self.ds["error_vx"]
+        errory_1d = self.ds["error_vy"]
         if conf:
             errorx_1d = self._normalize_error_to_confidence(errorx_1d)
             errory_1d = self._normalize_error_to_confidence(errory_1d)
@@ -402,21 +431,21 @@ class CubeDataClass:
             "errory": errory,
         }
 
-    def _loader_ducasse(self, ds_raw: xr.Dataset, conf: bool) -> dict:
+    def _loader_ducasse(self, conf: bool) -> dict:
         """process Ducasse dataset specific logic"""
         self.author = "IGE"
         self.source = "IGE"
-        ds_raw = ds_raw.rename({"time": "mid_date"})
+        ds_raw = self.ds.rename({"time": "mid_date"})
 
         # standardize date format
-        dates = ds_raw["mid_date"].values
+        dates = self.ds["mid_date"].values
         date1 = xr.DataArray([d.split(" ")[0] for d in dates], dims="mid_date").astype("datetime64[ns]")
         date2 = xr.DataArray([d.split(" ")[1] for d in dates], dims="mid_date").astype("datetime64[ns]")
-        ds_raw = ds_raw.assign_coords(mid_date=date1 + (date2 - date1) / 2)
+        self.ds = self.ds.assign_coords(mid_date=date1 + (date2 - date1) / 2)
 
         return {
-            "vx": ds_raw["vx"],
-            "vy": -ds_raw["vy"],  # special case for ducasse
+            "vx": self.ds["vx"],
+            "vy": -self.ds["vy"],  # special case for ducasse
             "date1": date1,
             "date2": date2,
             "sensor": "Pleiades",
@@ -527,31 +556,29 @@ class CubeDataClass:
         ext = filepath.split(".")[-1]
         if ext == "nc":
             try:
-                ds_raw = xr.open_dataset(filepath, engine="h5netcdf", chunks=chunks)
+                self.ds = xr.open_dataset(filepath, chunks=chunks)
             except NotImplementedError:
                 if verbose:
                     print(
                         "[Data loading] Warning: Auto-chunking failed (possibly due to object dtype). "
                         "Falling back to no chunks during initial load."
                     )
-                ds_raw = xr.open_dataset(filepath, engine="h5netcdf", chunks={})
+                self.ds = xr.open_dataset(filepath, chunks={})
         elif ext == "zarr":
-            ds_raw = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
-            # except RuntimeError:
-            #     import sys, asyncio
-            #     if sys.platform.startswith("win"):  # only on Windows
-            #         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            #     else:asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-            #     ds_raw = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True,
-            #                                   chunks=chunks)
+            self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
         else:
             raise ValueError(f"File extension {ext} not recognized, only .nc and .zarr are supported.")
 
-        if "Author" in ds_raw.attrs:
-            ds_raw.attrs["author"] = ds_raw.attrs.pop("Author")
+        if "Author" in self.ds.attrs:
+            self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)
+
+        #find the name of the time dimension and define the size of the time dimension as attribute
+        time_dim = self.find_time_dimensions()
+        self.update_dimension(time_dim=time_dim)
+
 
         # choose standardizer based on author
         standardizer_map = {
@@ -562,7 +589,7 @@ class CubeDataClass:
             "E. Ducasse": self._loader_ducasse,
             "IGE": self._loader_charrier,
         }
-        author = ds_raw.attrs.get("author", "Unknown")
+        author = self.ds.attrs.get("author", "Unknown")
         standardizer = standardizer_map.get(author)
         if not standardizer:
             if verbose:
@@ -574,44 +601,37 @@ class CubeDataClass:
          print(f"[Data loading] Standardizing data from author: {author}")
 
         # load and standardize data
-        standard_data = standardizer(ds_raw, conf)
-        # keep coordinates
-        self.ds = xr.Dataset(coords=ds_raw.coords)
-        attributes_to_keep = ["author", "source", "date_created", "proj4", "url", "mapping"]
-        self.ds.attrs = {k: v for k, v in ds_raw.attrs.items() if k in attributes_to_keep}
-        ds_raw.close()
+        if verbose:
+            print("[Data loading] Applying data standardization...")
+        standard_data = standardizer(conf)
+
+        #keep only certain variable and attributes
+        variables_to_keep = ["vx", "vy", "mid_date", "x", "y"]
+        self.ds = self.ds.drop_vars([var for var in self.ds.variables if var not in variables_to_keep])
+        attributes_to_keep = ["author", "source", "date_created", "proj4", "mapping"]
+        self.ds.attrs = {k: v for k, v in self.ds.attrs.items() if k in attributes_to_keep}
+
 
         # construct cubedataclass from standardized data
-        time_dim = "mid_date"
-        for var_name, data in standard_data.items():
-            if isinstance(data, str):  # if source or sensor is a string
-                data = np.repeat(data, self.ds.sizes[time_dim]) #create a np array of lenght self.ds.sizes[time_dim], with the string
-
-            if data.ndim == 1: #for sensor, source, date1, and date2
-                dims = (time_dim,)
-            elif data.ndim == 3: #for vx, vy
-                dims = (time_dim, "y", "x")
-            else:  # if error is already 2D
-                dims = data.dims
-
-            self.ds[var_name] = xr.DataArray(data, dims=dims)
-
-        self.ds = self.ds.unify_chunks()
+        self._add_standardized_variable(standard_data)
 
         # apply subsetting and filtering
         if verbose:
-            print("[Data loading] Applying subsetting...")
-        self._apply_data_subset(proj, subset, buffer, pick_date, pick_sensor, pick_temp_bas)
+            print("[Data loading] Applying data selection...")
+        self._apply_data_subset_in_space(proj,subset,buffer)
+        self._apply_data_selection(pick_date, pick_sensor, pick_temp_bas)
 
-        if verbose:
-            print("[Data loading] Finalizing cube...")
         if mask:
+            if verbose:
+                print("[Data loading] Masking cube...")
             self.mask_cube(mask)
 
+        if verbose:
+            print("[Data loading] Computing optimal chunk size...")
         tc, yc, xc = self.determine_optimal_chunk_size(verbose=verbose)
-        self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
+        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
 
-        self.ds = self.ds.sortby(time_dim)
+        self.ds = self.ds.sortby("mid_date")
         self.standardize_cube_for_processing()
 
         if self.ds.rio.crs is None and "proj4" in self.ds.attrs:

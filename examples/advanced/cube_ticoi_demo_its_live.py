@@ -25,7 +25,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr_new import CubeDataClass
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.cube_writer import CubeResultsWriter
 
 warnings.filterwarnings("ignore")
@@ -57,7 +57,7 @@ save_mean_velocity = False  # Save a .tiff file with the mean resulting velociti
 cube_name = "http://its-live-data.s3.amazonaws.com/datacubes/v2/N60W130/ITS_LIVE_vel_EPSG3413_G0120_X-3250000_Y150000.zarr"  # Path where the Sentinel-2 IGE cubes are stored
 path_save = "path_save"  # Path where to stored the results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
-subset = [-138.28962881999922274, -138.279, 60.25934205396930565, 60.261]
+subset = [-138.28962881999922274, -138.279, 60.25934205396930565, 60.261] #or None
 proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
