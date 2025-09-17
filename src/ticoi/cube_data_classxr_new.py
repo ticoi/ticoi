@@ -271,7 +271,7 @@ class CubeDataClass:
         # 2. update time dimension name and format
         if pick_date is not None:
             mask = (self.ds["date1"] >= np.datetime64(pick_date[0])) & (self.ds["date2"] <= np.datetime64(pick_date[1]))
-            self.ds = self.ds.where(mask, drop=True)
+            self.ds = self.ds.where(mask.compute(), drop=True)
 
         # sensor selection
         if pick_sensor is not None:
@@ -284,7 +284,7 @@ class CubeDataClass:
             self.ds = self.ds.where(mask, drop=True)
 
         # final dimension update
-        self.update_dimension()
+        if pick_sensor is not None or pick_sensor is not None or pick_temp_bas is not None:  self.update_dimension()
 
     def _loader_generic(self, ds_raw: xr.Dataset, conf: bool) -> dict:
         """
@@ -537,6 +537,13 @@ class CubeDataClass:
                 ds_raw = xr.open_dataset(filepath, engine="h5netcdf", chunks={})
         elif ext == "zarr":
             ds_raw = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
+            # except RuntimeError:
+            #     import sys, asyncio
+            #     if sys.platform.startswith("win"):  # only on Windows
+            #         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            #     else:asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+            #     ds_raw = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True,
+            #                                   chunks=chunks)
         else:
             raise ValueError(f"File extension {ext} not recognized, only .nc and .zarr are supported.")
 
@@ -550,23 +557,23 @@ class CubeDataClass:
         standardizer_map = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self._loader_itslive,
             "J. Mouginot, R.Millan, A.Derkacheva": self._loader_millan,
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": self._loader_charrier,
             "L. Charrier, L. Guo": self._loader_charrier,
             "L. Charrier": self._loader_charrier,
             "E. Ducasse": self._loader_ducasse,
-            "S. Leinss, L. Charrier": self._loader_charrier,
             "IGE": self._loader_charrier,
         }
         author = ds_raw.attrs.get("author", "Unknown")
+        print(author)
         standardizer = standardizer_map.get(author)
+        print(standardizer)
         if not standardizer:
-            if verbose:
-                print(
-                    f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
-                )
+        # if verbose:
+            print(
+                f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
+            )
             standardizer = self._loader_generic
-        if verbose:
-            print(f"[Data loading] Standardizing data from author: {author}")
+        # if verbose:
+        print(f"[Data loading] Standardizing data from author: {author}")
 
         # load and standardize data
         standard_data = standardizer(ds_raw, conf)
@@ -579,12 +586,13 @@ class CubeDataClass:
         # construct cubedataclass from standardized data
         time_dim = "mid_date"
         for var_name, data in standard_data.items():
+            print(var_name)
             if isinstance(data, (float, str)):  # if source or author is string
-                data = np.repeat(data, self.ds.sizes[time_dim])
+                data = np.repeat(data, self.ds.sizes[time_dim]) #create a np array of lenght self.ds.sizes[time_dim], with the string
 
-            if data.ndim == 1:
+            if data.ndim == 1: #for sensor, or author
                 dims = (time_dim,)
-            elif data.ndim == 3:
+            elif data.ndim == 3: #for vx, vy
                 dims = (time_dim, "y", "x")
             else:  # if error is already 2D
                 dims = data.dims
@@ -1346,7 +1354,7 @@ class CubeDataClass:
             # We obtain one smoothed value for each unique date in date_range
             obs_filt = xr.Dataset(
                 data_vars=dict(
-                    vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
+                    vx_filt=(["mid_date", "y","x"], vx_filtered), vy_filt=(["mid_date", "y","x"], vy_filtered)
                 ),
                 coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
                 attrs=dict(description="Smoothed velocity observations", units="m/y", proj4=self.ds.proj4),

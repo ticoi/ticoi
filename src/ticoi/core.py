@@ -31,7 +31,7 @@ from joblib import Parallel, delayed
 from scipy import stats
 from tqdm import tqdm
 
-from ticoi.cube_data_classxr import CubeDataClass
+from ticoi.cube_data_classxr_new import CubeDataClass
 from ticoi.interpolation_functions import (
     reconstruct_common_ref,
     set_function_for_interpolation,

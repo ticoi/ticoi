@@ -727,11 +727,9 @@ class CubeDataClass:
         time_dim_name = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
             "J. Mouginot, R.Millan, A.Derkacheva": "z",
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
             "L. Charrier, L. Guo": "mid_date",
             "L. Charrier": "mid_date",
             "E. Ducasse": "time",
-            "S. Leinss, L. Charrier": "mid_date",
             "IGE": "mid_date",
         }  # dictionary to set the name of time_dimension for a given author
 
@@ -767,14 +765,7 @@ class CubeDataClass:
                 cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method="nearest")
                 if cube2.nx == self.nx and cube2.ny == self.ny:
                     cube2.ds = cube2.ds.assign_coords(x=self.ds.x, y=self.ds.y)
-                # if cube2.ds.y.to_pandas().duplicated().any() or cube2.ds.x.to_pandas().duplicated().any():
-                #     if cube2.ds.y.to_pandas().duplicated().any():
-                #         _, unique_y = np.unique(cube2.ds.y.values, return_index=True)
-                #         cube2.ds = cube2.ds.isel(y=np.sort(unique_y))
-                #     if cube2.ds.x.to_pandas().duplicated().any():
-                #         _, unique_x = np.unique(cube2.ds.x.values, return_index=True)
-                #         cube2.ds = cube2.ds.isel(x=np.sort(unique_x))
-                #     cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method='nearest')
+
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
                 if reproj_vel or reproj_coord:
                     cube2 = self.align_cube(
