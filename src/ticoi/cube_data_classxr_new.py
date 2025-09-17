@@ -563,17 +563,15 @@ class CubeDataClass:
             "IGE": self._loader_charrier,
         }
         author = ds_raw.attrs.get("author", "Unknown")
-        print(author)
         standardizer = standardizer_map.get(author)
-        print(standardizer)
         if not standardizer:
-        # if verbose:
-            print(
-                f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
-            )
+            if verbose:
+                print(
+                    f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
+                )
             standardizer = self._loader_generic
-        # if verbose:
-        print(f"[Data loading] Standardizing data from author: {author}")
+        if verbose:
+         print(f"[Data loading] Standardizing data from author: {author}")
 
         # load and standardize data
         standard_data = standardizer(ds_raw, conf)
@@ -586,11 +584,10 @@ class CubeDataClass:
         # construct cubedataclass from standardized data
         time_dim = "mid_date"
         for var_name, data in standard_data.items():
-            print(var_name)
-            if isinstance(data, (float, str)):  # if source or author is string
+            if isinstance(data, str):  # if source or sensor is a string
                 data = np.repeat(data, self.ds.sizes[time_dim]) #create a np array of lenght self.ds.sizes[time_dim], with the string
 
-            if data.ndim == 1: #for sensor, or author
+            if data.ndim == 1: #for sensor, source, date1, and date2
                 dims = (time_dim,)
             elif data.ndim == 3: #for vx, vy
                 dims = (time_dim, "y", "x")
@@ -644,9 +641,6 @@ class CubeDataClass:
             if "errorx" not in self.ds.variables:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
-
-        if self.ds.rio.write_crs:
-            self.ds = self.ds.rio.write_crs(self.ds.proj4)  # add the crs to the xarray dataset if missing
 
     def prepare_interpolation_date(
         self,
