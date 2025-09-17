@@ -278,8 +278,7 @@ class CubeDataClass:
             self.buffer(proj, buffer)
 
         # update dimensions after spatial filtering
-        if subset is not None or buffer is not None:
-            self.update_dimension()
+        self.update_dimension()
 
 
     def _apply_data_selection(self, pick_date:list|None, pick_sensor:list|None, pick_temp_bas:list|None):
@@ -306,7 +305,7 @@ class CubeDataClass:
             self.ds = self.ds.where(mask, drop=True)
 
         # final dimension update
-        if pick_sensor is not None or pick_sensor is not None or pick_temp_bas is not None:  self.update_dimension()
+        self.update_dimension()
 
     def _add_standardized_variable(self, standard_data:dict):
         """
@@ -416,7 +415,7 @@ class CubeDataClass:
         """process Millan dataset specific logic"""
         self.author = "IGE"
         self.source = self.ds.source
-        ds_raw = self.ds.rename({"z": "mid_date"})
+        self.ds = self.ds.rename({"z": "mid_date"})
 
         # standardize sensor names
         sensor_raw = np.char.strip(self.ds["sensor"].values.astype(str), " ")
@@ -427,7 +426,7 @@ class CubeDataClass:
         if conf:
             errorx_1d = self._normalize_error_to_confidence(errorx_1d)
             errory_1d = self._normalize_error_to_confidence(errory_1d)
-        ny, nx = ds_raw.dims["y"], ds_raw.dims["x"]
+        ny, nx = self.ds.dims["y"], self.ds.dims["x"]
         errorx = np.tile(errorx_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         errory = np.tile(errory_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         # standardize date format
@@ -448,7 +447,8 @@ class CubeDataClass:
         """process Ducasse dataset specific logic"""
         self.author = "IGE"
         self.source = "IGE"
-        ds_raw = self.ds.rename({"time": "mid_date"})
+        self.ds = self.ds.rename({"time": "mid_date"})
+        self.ds = self.ds.transpose("mid_date", "y", "x")#transpose coordinates
 
         # standardize date format
         dates = self.ds["mid_date"].values
@@ -584,11 +584,6 @@ class CubeDataClass:
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)
 
-        #find the name of the time dimension and define the size of the time dimension as attribute
-        time_dim = self.find_time_dimensions()
-        self.update_dimension(time_dim=time_dim)
-
-
         # choose standardizer based on author
         standardizer_map = {
             "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self._loader_itslive,
@@ -627,8 +622,9 @@ class CubeDataClass:
         # apply subsetting and filtering
         if verbose:
             print("[Data loading] Applying data selection...")
-        self._apply_data_subset_in_space(proj,subset,buffer)
-        self._apply_data_selection(pick_date, pick_sensor, pick_temp_bas)
+        if subset is not None or buffer is not None: self._apply_data_subset_in_space(proj,subset,buffer)
+        if pick_date is not None or pick_sensor is not None or pick_temp_bas is not None: self._apply_data_selection(pick_date, pick_sensor, pick_temp_bas)
+        elif subset is None and buffer is None: self.update_dimension()
 
         if mask:
             if verbose:
