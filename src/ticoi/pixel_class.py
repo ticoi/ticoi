@@ -5,6 +5,7 @@ import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.lines as malines
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 import numpy as np
 import pandas as pd
 import scipy.fft as fft
@@ -644,7 +645,12 @@ class PixelClass:
         return fig, ax
 
     def plot_vv(
-        self, color: str = "orange", type_data: str = "invert", block_plot: bool = True, vminmax: list | None = None
+        self,
+        color: str = "orange",
+        type_data: str = "invert",
+        block_plot: bool = True,
+        vminmax: list | None = None,
+        ax: Axes | None = None,
     ):
         """
         Plot the velocity magnitude.
@@ -659,7 +665,10 @@ class PixelClass:
 
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
-        fig, ax = plt.subplots(figsize=self.figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize)
+        else:
+            fig = plt.gcf()
         if vminmax is None:
             ax.set_ylim(data.vvymin, data.vvymax)
         else:
@@ -672,8 +681,10 @@ class PixelClass:
             zorder=1,
             marker="o",
             lw=0.7,
-            markersize=2,
+            markersize=4,
             color=color,
+            markeredgecolor=".9",
+            markeredgewidth=".5",
             label=label,
         )
         ax.errorbar(
@@ -681,7 +692,8 @@ class PixelClass:
             data.dataf["vv"],
             xerr=data.dataf["offset_bar"],
             color=color,
-            alpha=0.2,
+            linewidth=0.8,
+            alpha=0.4,
             fmt=",",
             zorder=1,
         )
@@ -710,6 +722,7 @@ class PixelClass:
         zoom_on_results: bool = False,
         block_plot: bool = True,
         vminmax: list | None = None,
+        ax: Axes | None = None,
     ):
         """
         Plot the velocity magnitude of inverted/interpolated results, overlaying the velocity magnitude of the observations (raw data).
@@ -728,7 +741,10 @@ class PixelClass:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        fig, ax = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)
+        if ax is None:
+            fig, ax = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)
+        else:
+            fig, ax = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax, ax=ax)
         self.show, self.save = show, save
 
         if zoom_on_results:
@@ -770,7 +786,9 @@ class PixelClass:
 
         return fig, ax
 
-    def plot_vv_quality(self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True):
+    def plot_vv_quality(
+        self, cmap: str = "viridis", type_data: str = "obs", block_plot: bool = True, ax: Axes | None = None
+    ):
         """
         Plot error on top of velocity vx and vy.
 
@@ -793,8 +811,10 @@ class PixelClass:
         qualityv = np.sqrt(
             (qualityx / data.dataf["vx"] * qualityx) ** 2 + (qualityy / data.dataf["vy"] * qualityy) ** 2
         )
-
-        fig, ax = plt.subplots(figsize=self.figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize)
+        else:
+            fig = plt.gcf()
         # First subplot
         ax.set_ylabel(f"Vx [{self.unit}]", fontsize=14)
         scat = ax.scatter(data.dataf["date_cori"], data.dataf["vv"], c=qualityv, s=5, cmap=cmap)
@@ -860,7 +880,12 @@ class PixelClass:
         return fig, ax
 
     def plot_direction(
-        self, color: str = "orange", type_data: str = "obs", block_plot: bool = True, plot_mean: bool = True
+        self,
+        color: str = "orange",
+        type_data: str = "obs",
+        block_plot: bool = True,
+        plot_mean: bool = True,
+        ax: Axes | None = None,
     ):
         """
         Plot the direction of the velocities for each of the data at this point.
@@ -875,7 +900,10 @@ class PixelClass:
         data, label = self.get_dataf_invert_or_obs_or_interp(type_data)
 
         directionm, directionm_mean = self.get_direction(data)
-        fig, ax = plt.subplots(figsize=self.figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize)
+        else:
+            fig = plt.gcf()
         ax.plot(data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=2, color=color, label=label)
         if plot_mean:
             ax.hlines(
@@ -904,6 +932,7 @@ class PixelClass:
         type_data: str = "interp",
         block_plot: bool = True,
         plot_mean: bool = True,
+        ax: Axes | None = None,
     ):
         """
         Plot the velocity direction of inverted/interpolated results, overlaying the velocity direction of the observations (raw data).
@@ -921,7 +950,10 @@ class PixelClass:
         show = copy.copy(self.show)
         save = copy.copy(self.save)
         self.show, self.save = False, False
-        fig, ax = self.plot_direction(color=colors[0], type_data="obs", plot_mean=plot_mean)
+        if ax is None:
+            fig, ax = self.plot_direction(color=colors[0], type_data="obs", plot_mean=plot_mean)
+        else:
+            fig, ax = self.plot_direction(color=colors[0], type_data="obs", plot_mean=plot_mean, ax=ax)
         self.show, self.save = show, save
 
         directionm, directionm_mean = self.get_direction(data)
@@ -948,7 +980,7 @@ class PixelClass:
 
         return fig, ax
 
-    def plot_quality_metrics(self, color: str = "orange"):
+    def plot_quality_metrics(self, color: str = "orange", ax: Axes | None = None):
         """
         Plot quality metrics on top of velocity magnitude. It can be the number of observations used for each estimation, and/or the confidence intervals.
         :param color: [str] [default is 'orange'] --- Color used for the plot
@@ -974,19 +1006,19 @@ class PixelClass:
             data["confidence_v"] = np.nanmean(data["sigma0"].iloc[2:4]) * data["error_v"]
 
         if "xcount_x" in data.columns:
-            xcount_mean = np.nanmean([data["xcount_x"], data["xcount_y"]], axis=0)  # Mean of xcount_x and xcount_y
-            max_xcount = int(np.max(xcount_mean))
-            if max_xcount > 100:
-                bounds = [0, 100, 1000, max_xcount]
-                cmap = mcolors.ListedColormap(["lightcoral", "red", "darkred"])  # Light red, red, dark red
-                # Boundaries for color ranges
-            else:
-                bounds = [0, 100, max_xcount]
-                cmap = mcolors.ListedColormap(["lightcoral", "red"])  # Light red, red, dark red
+            xcount_mean = np.nanmean([data["xcount_x"], data["xcount_y"]], axis=0)
+            max_xcount = int(np.nanmax(xcount_mean))
+            base_bounds = [0, 100, 200, 500, 1000, 2000, 5000, 10000]
+            bounds = sorted(set([b for b in base_bounds if b <= max_xcount] + [max_xcount]))
+            cmap_full = plt.get_cmap("Blues", len(bounds) + 1)
+            colors = [cmap_full(i) for i in range(2, cmap_full.N)]
+            cmap = mcolors.ListedColormap(colors)
+            norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
-            norm = mcolors.BoundaryNorm(bounds, cmap.N)  # Apply the custom colormap to the scatter plot based on xcount
-
-        fig, ax = plt.subplots(figsize=(10, 6))
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize)
+        else:
+            fig = plt.gcf()
         if "error_x" in data.columns:
             if "xcount_x" not in data.columns:
                 ax.plot(
@@ -1005,31 +1037,36 @@ class PixelClass:
                 data["date_cori"],
                 data["vv"] - data["confidence_v"],
                 data["vv"] + data["confidence_v"],
-                color="purple",
-                alpha=0.4,
+                color="#7292fd",
+                alpha=0.7,
             )
             # Create custom legend entries for confidence interval
-            conf_legend = malines.Line2D([], [], color="purple", alpha=0.4, lw=6, label="95% confidence interval")
+            conf_legend = malines.Line2D([], [], color="#7292fd", alpha=0.7, lw=8, label="95% confidence interval")
             if "xcount_x" in data.columns:
                 plt.subplots_adjust(bottom=-0.01)
             # Add the legends for confidence interval and GPS
             ax.legend(
                 [conf_legend],
-                ["95% confidence interval"],
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.05),
-                fontsize=15,
+                ["95% Confidence Interval"],
+                loc="upper left",
+                bbox_to_anchor=(0.02, 0.98),
+                fontsize=10,
                 ncol=3,
                 markerscale=1.5,
+                frameon=False,
             )
 
         if "xcount_x" in data.columns:
-            scat = ax.scatter(data["date_cori"], data["vv"], c=xcount_mean, cmap=cmap, norm=norm, s=7)
+            scat = ax.scatter(
+                data["date_cori"], data["vv"], c=xcount_mean, cmap=cmap, norm=norm, s=15, edgecolor=".3", linewidth=0.3
+            )
             # Add the colorbar for xcount
-            cbar = fig.colorbar(scat, ax=ax, boundaries=bounds, orientation="horizontal", pad=0.15, shrink=0.7)
-            cbar.set_label("Number of image-pair velocities used", fontsize=14)
+            cax = ax.inset_axes([0.03, 0.8, 0.45, 0.03])  # [left, bottom, width, height]
+            cbar = fig.colorbar(scat, cax=cax, boundaries=bounds, orientation="horizontal", pad=0.1)
+            cbar.set_label("Number of image-pair velocities used", fontsize=10)
+            cbar.ax.xaxis.set_ticklabels([f"{b}" for b in bounds], fontsize=8)
 
-        ax.set_ylabel("Velocity magnitude [m/y]", fontsize=18)
+        ax.set_ylabel("Velocity magnitude [m/y]", fontsize=10)
         # Show plot if specified
         if self.show:
             plt.show(block=False)
@@ -1096,7 +1133,7 @@ class PixelClass:
 
         return fig, ax
 
-    def plot_xcount_vv(self, cmap: str = "viridis", block_plot: bool = True):
+    def plot_xcount_vv(self, cmap: str = "viridis", block_plot: bool = True, ax: Axes | None = None):
         """
         Plot the observation contribution to the inversion on top of the velocity magnitude.
 
@@ -1113,7 +1150,10 @@ class PixelClass:
             "'xcount_x' and/or 'xount_y' values are missing in the data, impossible to plot the xcount values"
         )
 
-        fig, ax = plt.subplots(figsize=self.figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize)
+        else:
+            fig = plt.gcf()
         ax.set_ylabel(f"Velocity magnitude [{self.unit}]", fontsize=14)
         ax.set_xlabel("Central dates", fontsize=14)
         scat = ax.scatter(
