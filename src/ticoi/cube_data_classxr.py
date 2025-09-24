@@ -897,9 +897,7 @@ class CubeDataClass:
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
                 data = data.dropna(dim="mid_date")
             else:
-                data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
-                    dim="mid_date"
-                )  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+                data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(dim="mid_date")
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
