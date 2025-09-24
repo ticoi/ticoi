@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ticoi"
-dynamic = ["version"]
+dynamic = ["version"] #dynamic versioning
 authors = [
   { name="Laurane Charrier", email="laurane.charrier@outlook.com" },{ name="Lei Guo"}
 ]
@@ -46,7 +46,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
-Issues = "https://github.com/pypa/sampleproject/issues"
+Issues = "https://github.com/ticoi/ticoi/issues"
 
 
 [tool.hatch.version]
@@ -60,10 +60,19 @@ dependencies = [
   "pre-commit"
 ]
 
+[tool.hatch.envs.test]
+dependencies = [
+  "pytest",
+  "nbconvert jupyter"#to run jupernotebook
+]
+
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.10","3.11", "3.12"]
+
 [tool.ruff]
 line-length = 120
 
-[tool.pytest.ini_options]
-filterwarnings = [
-    "error",
-    "ignore::UserWarning"]
+#[tool.pytest.ini_options]
+#filterwarnings = [
+#    "error",
+#    "ignore::UserWarning"]
