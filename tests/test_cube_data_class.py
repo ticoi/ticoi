@@ -51,7 +51,7 @@ class Testclass_cube_data_xr:
             "temporal_baseline",
         }
         assert required_variables.issubset(set(cube_data_class_instance.ds.variables)), "Dataset is missing variables"
-        expected_dims = ("x", "y", "mid_date")
+        expected_dims = ("mid_date", "y", "x")
         assert tuple(cube_data_class_instance.ds["vx"].dims) == expected_dims, "Dimension order incorrect"
 
     # Test load_pixel for the cube from IGE, for different pixel coordinates, either in pixels or in EPSG:4326

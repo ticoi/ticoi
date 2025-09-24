@@ -452,14 +452,11 @@ class CubeDataClass:
         }
 
     def _loader_millan(self, conf: bool) -> dict:
-        (
-            """
+        """
         load Millan dataset
         :param conf: [bool] --- if the errors need to be converted as confidence
-        :return: 
+        :return:
         """
-            ""
-        )
         self.author = "IGE"
         self.source = self.ds.source
         self.ds = self.ds.rename({"z": "mid_date"})
