@@ -2,61 +2,47 @@ name: Python test
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+    - main
   pull_request:
-    branches: [ "main" ]
+    branches:
+    - main
 
-permissions:
-  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  FORCE_COLOR: "1"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      MAMBA_ROOT_PREFIX: /home/runner/mamba
+  run:
+    name: Python ${{ matrix.python-version }} on ${{ startsWith(matrix.os, 'macos-') && 'macOS' || startsWith(matrix.os, 'windows-') && 'Windows' || 'Linux' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12']
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - name: Set up Python 3.10 and Miniconda (no env creation yet)
-      uses: conda-incubator/setup-miniconda@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
       with:
-        miniforge-version: latest
-        auto-update-conda: true
-        use-mamba: true
-        mamba-version: "2.0.5"
-        channel-priority: strict
-        activate-environment: false
-        python-version: "3.10"
+        python-version: ${{ matrix.python-version }}
 
-    - name: Get month for resetting cache
-      id: get-date
-      run: echo "cache_date=$(/bin/date -u '+%Y%m')" >> $GITHUB_ENV
-      shell: bash
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
 
-    - name: Cache conda env
-      uses: actions/cache@v4
-      with:
-        path: /home/runner/mamba/envs
-        key: conda-ubuntu-latest-3.10-${{ env.cache_date }}-${{ hashFiles('environment.yml') }}-${{ env.CACHE_NUMBER }}
-      env:
-        CACHE_NUMBER: 0
-      id: cache
-
-    - name: Create or update environment if cache miss
-      # if: steps.cache.outputs.cache-hit != 'true'
+    - name: Install ourself
       run: |
-        unset PROJ_DATA
-        mamba env create -n environment -f environment.yml
+        uv pip install --system -e .
 
-    - name: Install project (inside env)
-      run: mamba run -n environment pip install -e . --no-dependencies
+    - name: Install hatch
+      run: uv pip install --system hatch
 
-    - name: Install test dependencies (inside env)
-      run: mamba run -n environment pip install pytest
-
-    - name: Check import works
-      run: mamba run -n environment python -c "import ticoi"
-
-    - name: Test with pytest
-      run: mamba run -n environment pytest
+    - name: Run tests
+      run: hatch test --python ${{ matrix.python-version }} --cover-quiet --randomize --parallel --retries 5 --retry-delay 3
