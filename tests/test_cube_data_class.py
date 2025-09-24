@@ -46,8 +46,6 @@ class Testclass_cube_data_xr:
             "y",
             "date1",
             "date2",
-            "errorx",
-            "errory",
             "sensor",
             "source",
             "temporal_baseline",
