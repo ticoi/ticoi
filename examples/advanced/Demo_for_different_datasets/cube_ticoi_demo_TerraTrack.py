@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 from ticoi import example
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
-from ticoi.cube_data_classxr_new import CubeDataClass
+from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.cube_writer import CubeResultsWriter
 
 warnings.filterwarnings("ignore")
@@ -53,7 +53,7 @@ save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
-cube_name = "/home/charriel/Documents/Scripts_dossier/ticoi/test_data/Alps_Mont-Blanc_Argentiere_Pleiades.nc"
+cube_name = "/home/charriel/Documents/Scripts_dossier/ticoi/test_data/TerraTrack_luggye_tshoNEW.nc"
 path_save = (
     os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")),
@@ -63,9 +63,9 @@ path_save = (
     )
     + "/"
 )  # path where to save our results
-result_fn = "IGEPleiades_example"  # Name of the netCDF file to be created
+result_fn = "TerraTrack_example"  # Name of the netCDF file to be created
 
-proj = "EPSG:32632"  # EPSG system of the given coordinates
+proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
 #   - 'invert' for the results of the inversion, corresponding to Cumulative displacement time series
