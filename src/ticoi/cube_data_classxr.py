@@ -42,7 +42,6 @@ from ticoi.mjd2date import mjd2date
 
 
 class CubeDataClass:
-
     _loader_registry = {
         "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "_loader_itslive",
         "J. Mouginot, R.Millan, A.Derkacheva": "_loader_millan",
@@ -51,7 +50,6 @@ class CubeDataClass:
         "E. Ducasse": "_loader_ducasse",
         "IGE": "_loader_charrier",
     }
-
 
     def __init__(self, cube=None, ds=None):
         """
@@ -86,7 +84,6 @@ class CubeDataClass:
             self.is_TICO = cube.is_TICO
 
         # choose standardizer based on author
-
 
     def find_time_dimensions(self):
         """
@@ -287,7 +284,7 @@ class CubeDataClass:
             return xr.ones_like(error_da)
         return 1 - (error_da - min_val) / (max_val - min_val)
 
-    def _apply_data_subset_in_space(self, proj:str, subset:list, buffer:list):
+    def _apply_data_subset_in_space(self, proj: str, subset: list, buffer: list):
         """
         Spatial subset, using a buffer and or subset
         :param proj: [str] --- EPSG system of the coordinates given in subset
@@ -303,8 +300,7 @@ class CubeDataClass:
         # update dimensions after spatial filtering
         self.update_dimension()
 
-
-    def _apply_data_selection(self, pick_date:list|None, pick_sensor:list|None, pick_temp_bas:list|None):
+    def _apply_data_selection(self, pick_date: list | None, pick_sensor: list | None, pick_temp_bas: list | None):
         """
         selection of dates, sensors, temporal baselines
         :param pick_date: [list] --- list of date to select
@@ -330,15 +326,16 @@ class CubeDataClass:
         # final dimension update
         self.update_dimension()
 
-    def _add_standardized_variable(self, standard_data:dict):
+    def _add_standardized_variable(self, standard_data: dict):
         """
         Add standardized variable to the cube dataarry self.ds
         :param standard_data: [dict] --- name and values of standardized variables
         """
         for var_name, data in standard_data.items():
-            if isinstance(data, (str,float)):  # if sensor is a string or error is a float
-                data = np.repeat(data, self.ds.sizes[
-                    "mid_date"])  # create a np array of lenght self.ds.sizes[time_dim], with the string
+            if isinstance(data, (str, float)):  # if sensor is a string or error is a float
+                data = np.repeat(
+                    data, self.ds.sizes["mid_date"]
+                )  # create a np array of lenght self.ds.sizes[time_dim], with the string
 
             if data.ndim == 1:  # for sensor, source, date1, and date2
                 dims = ("mid_date",)
@@ -361,7 +358,7 @@ class CubeDataClass:
         """
         cls._loader_registry[author] = func
 
-    def _loader_generic(self,  conf: bool) -> dict:
+    def _loader_generic(self, conf: bool) -> dict:
         """
                 standardize dataset with unrecognized author based on variable names.
 
@@ -387,7 +384,9 @@ class CubeDataClass:
             )
 
         # provide default values for optional variables if they are missing
-        self.author = self.ds.attrs.get("author", "Unknown") #if the attribute auhtor does not exist, put the attribute to Unknown
+        self.author = self.ds.attrs.get(
+            "author", "Unknown"
+        )  # if the attribute auhtor does not exist, put the attribute to Unknown
         self.source = self.ds.attrs.get("source", "Unknown")
 
         # standardize sensor names if sensor variable exists
@@ -398,15 +397,14 @@ class CubeDataClass:
         else:
             sensor = "Unknown"
 
-        errorx =  self.ds.get("errorx", 1.0)
+        errorx = self.ds.get("errorx", 1.0)
         errory = self.ds.get("errory", 1.0)
         # if data has errorx/errory and need normalization
         if conf and "errorx" in self.ds:
             errorx = self._normalize_error_to_confidence(errorx)
             errory = self._normalize_error_to_confidence(errory)
 
-
-        if (self.ds.vx==0).any().values: #mask values equal to 0
+        if (self.ds.vx == 0).any().values:  # mask values equal to 0
             mask = (self.ds.vx != 0) & (self.ds.vy != 0)
             self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(mask)
 
@@ -415,13 +413,11 @@ class CubeDataClass:
             "date2": self.ds["date2"].astype("datetime64[ns]"),
             "sensor": sensor,
             "source": self.source,
-            "errorx":errorx,
+            "errorx": errorx,
             "errory": errory,
         }
 
-
         return standard_data
-
 
     def _loader_itslive(self, conf: bool) -> dict:
         """
@@ -456,11 +452,14 @@ class CubeDataClass:
         }
 
     def _loader_millan(self, conf: bool) -> dict:
-        """
+        (
+            """
         load Millan dataset
         :param conf: [bool] --- if the errors need to be converted as confidence
         :return: 
-        """""
+        """
+            ""
+        )
         self.author = "IGE"
         self.source = self.ds.source
         self.ds = self.ds.rename({"z": "mid_date"})
@@ -500,7 +499,7 @@ class CubeDataClass:
         self.author = "IGE"
         self.source = "IGE"
         self.ds = self.ds.rename({"time": "mid_date"})
-        self.ds = self.ds.transpose("mid_date", "y", "x")#transpose coordinates
+        self.ds = self.ds.transpose("mid_date", "y", "x")  # transpose coordinates
 
         # standardize date format
         dates = self.ds["mid_date"].values
@@ -640,18 +639,19 @@ class CubeDataClass:
         self.filedir = os.path.dirname(filepath)
         self.filename = os.path.basename(filepath)
 
-        #get standardized data
+        # get standardized data
         author = self.ds.attrs.get("author", "Unknown")
         loader = self._loader_registry.get(author, self._loader_generic)
-        if isinstance(loader, str): loader = getattr(self, loader)
+        if isinstance(loader, str):
+            loader = getattr(self, loader)
         if verbose:
             print(
                 f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
             )
         standard_data = loader(conf)
 
-        #keep only certain variable and attributes
-        variables_to_keep = ["vx", "vy", "mid_date", "x", "y","date1","date2"]
+        # keep only certain variable and attributes
+        variables_to_keep = ["vx", "vy", "mid_date", "x", "y", "date1", "date2"]
         self.ds = self.ds.drop_vars([var for var in self.ds.variables if var not in variables_to_keep])
         attributes_to_keep = ["author", "source", "date_created", "proj4", "mapping"]
         self.ds.attrs = {k: v for k, v in self.ds.attrs.items() if k in attributes_to_keep}
@@ -662,9 +662,12 @@ class CubeDataClass:
         # apply subsetting and filtering
         if verbose:
             print("[Data loading] Applying data selection...")
-        if subset is not None or buffer is not None: self._apply_data_subset_in_space(proj,subset,buffer)
-        if pick_date is not None or pick_sensor is not None or pick_temp_bas is not None: self._apply_data_selection(pick_date, pick_sensor, pick_temp_bas)
-        elif subset is None and buffer is None: self.update_dimension()
+        if subset is not None or buffer is not None:
+            self._apply_data_subset_in_space(proj, subset, buffer)
+        if pick_date is not None or pick_sensor is not None or pick_temp_bas is not None:
+            self._apply_data_selection(pick_date, pick_sensor, pick_temp_bas)
+        elif subset is None and buffer is None:
+            self.update_dimension()
 
         if mask:
             if verbose:
@@ -1413,7 +1416,7 @@ class CubeDataClass:
             # We obtain one smoothed value for each unique date in date_range
             obs_filt = xr.Dataset(
                 data_vars=dict(
-                    vx_filt=(["mid_date", "y","x"], vx_filtered), vy_filt=(["mid_date", "y","x"], vy_filtered)
+                    vx_filt=(["mid_date", "y", "x"], vx_filtered), vy_filt=(["mid_date", "y", "x"], vy_filtered)
                 ),
                 coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
                 attrs=dict(description="Smoothed velocity observations", units="m/y", proj4=self.ds.proj4),
