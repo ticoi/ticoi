@@ -36,6 +36,11 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
+from typing import Literal
+
+MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
+ReturnAs = Literal["dataframe", "cube"]
+
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -680,7 +685,7 @@ class CubeDataClass:
         self.standardize_cube_for_processing()
 
         if self.ds.rio.crs is None and "proj4" in self.ds.attrs:
-            self.ds.rio.write_crs(self.ds.attrs["proj4"])
+            self.ds = self.ds.rio.write_crs(self.ds.attrs["proj4"])
 
         if verbose:
             print("[Data loading] Cube loaded successfully.")
@@ -853,7 +858,7 @@ class CubeDataClass:
         coef: int = 100,
         flag: xr.Dataset | None = None,
         solver: str = "LSMR_ini",
-        interp: str = "nearest",
+        interp: MethodInterp = "nearest",
         proj: str = "EPSG:4326",
         rolling_mean: xr.Dataset | None = None,
         visual: bool = False,
@@ -1772,7 +1777,7 @@ class CubeDataClass:
         self,
         points_heatmap: pd.DataFrame,
         variable: str = "vv",
-        method_interp: str = "linear",
+        method_interp: MethodInterp = "linear",
         verbose: bool = False,
         freq: str = "MS",
         method: str = "mean",
@@ -1894,142 +1899,36 @@ class CubeDataClass:
             )
         ).reshape(self.nx, self.ny)
 
-    def compute_med_stable_areas(
-        self, shapefile_path, return_as="dataframe", stat_name="med", var_list=["vx", "vy"], invert=True
+    def compute_med_static_areas(
+        self,
+        shapefile_path: str,
+        return_as: ReturnAs = "dataframe",
+        var_list: list[str] = ["vx", "vy"],
+        invert: bool = True,
     ):
         """
-        Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
+        Compute median values in static areas
 
-        Parameters:
+        :param shapefile_path: Path to shapefile.
+        :param var_list: List of variable names.
+        :param invert: Whether to invert the shapefile mask.
 
-            shapefile_path (str): Path to shapefile.
-            return_as (str): 'dataframe' or 'cube'.
-            stat_name (str): Base variable name for new data.
-            invert (bool): Whether to invert the shapefile mask.
-
-        Returns:
-            pd.DataFrame or xr.Dataset
+        :return: pd.DataFrame or xr.Dataset
         """
-        # Ensure data has Dask chunks
-        # self.ds = self.ds.chunk({'y': -1, 'x': -1, 'mid_date': 10})
-        print(var_list)
+
         # Clip with shapefile
         gdf = gpd.read_file(shapefile_path)
         gdf = gdf.to_crs(self.ds.rio.crs)
         masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
 
-        print("Clipped")
+        mad_results = masked[var_list].median(dim=["x", "y"]).compute()
 
-        # Return as DataFrame
         if return_as == "dataframe":
-            df_vx = (
-                masked["vx"]
-                .median(dim=["x", "y"])
-                .compute()
-                .to_dataframe(name=f"{stat_name}_vx")
-                .reset_index()[["mid_date", f"{stat_name}_vx"]]
-            )
-            df_vy = (
-                masked["vy"]
-                .median(dim=["x", "y"])
-                .compute()
-                .to_dataframe(name=f"{stat_name}_vy")
-                .reset_index()[["mid_date", f"{stat_name}_vy"]]
-            )
-            if len(var_list) == 3:
-                df_v = (
-                    masked[var_list[2]]
-                    .median(dim=["x", "y"])
-                    .compute()
-                    .to_dataframe(name=f"{stat_name}_v")
-                    .reset_index()[["mid_date", f"{stat_name}_v"]]
-                )
-
-            # Merge on time coordinate (e.g., 'mid_date')
-            if len(var_list) == 3:
-                merged_df = reduce(
-                    lambda left, right: pd.merge(left, right, on="mid_date", how="outer"), [df_vx, df_vy, df_v]
-                )
-            else:
-                merged_df = pd.merge(df_vx, df_vy, on="mid_date")
-
-            return merged_df
-
-        # # Return as cube
-        # elif return_as == 'cube':
-        #     return self.assign({f'{stat_name}_vx': mad_results['vx'], f'{stat_name}_vy': mad_results['vy']})
-
-        else:
-            raise ValueError("return_as must be 'dataframe' or 'cube'")
-
-    def compute_mad(self, shapefile_path, return_as="dataframe", stat_name="mad", var_list=["vx", "vy"], invert=True):
-        """
-        Compute MAD per time step using Dask and apply_ufunc over a shapefile-defined area.
-
-        Parameters:
-
-            shapefile_path (str): Path to shapefile.
-            return_as (str): 'dataframe' or 'cube'.
-            stat_name (str): Base variable name for new data.
-            invert (bool): Whether to invert the shapefile mask.
-
-        Returns:
-            pd.DataFrame or xr.Dataset
-        """
-        # Ensure data has Dask chunks
-        self.ds = self.ds.chunk({"y": -1, "x": -1, "mid_date": 10})
-        print(var_list)
-        # Clip with shapefile
-        gdf = gpd.read_file(shapefile_path)
-        gdf = gdf.to_crs(self.ds.rio.crs)
-        masked = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
-
-        print("Clipped")
-
-        # Define MAD function
-        def mad_2d(arr):
-            median = np.nanmedian(arr)
-            return 1.483 * np.nanmedian(np.abs(arr - median))
-
-        mad_results = {}  # Store MAD DataArrays
-
-        for var in var_list:
-            data = masked[var]
-
-            mad = xr.apply_ufunc(
-                mad_2d,
-                data,
-                input_core_dims=[["y", "x"]],
-                output_core_dims=[[]],
-                vectorize=True,
-                dask="parallelized",
-                output_dtypes=[data.dtype],
-            )
-
-            mad.name = f"{stat_name}_{var}"
-            mad_results[var] = mad
-
-        # Return as DataFrame
-        if return_as == "dataframe":
-            df_vx = (
-                mad_results["vx"]
-                .compute()
-                .to_dataframe(name=f"{stat_name}_vx")
-                .reset_index()[["mid_date", f"{stat_name}_vx"]]
-            )
-            df_vy = (
-                mad_results["vy"]
-                .compute()
-                .to_dataframe(name=f"{stat_name}_vy")
-                .reset_index()[["mid_date", f"{stat_name}_vy"]]
-            )
-            if len(var_list) == 3:
-                df_v = (
-                    mad_results[var_list[2]]
-                    .compute()
-                    .to_dataframe(name=f"{stat_name}_v")
-                    .reset_index()[["mid_date", f"{stat_name}_v"]]
-                )
+            # Return as DataFrame
+            df_vx = mad_results["vx"].to_dataframe(name="med_vx").reset_index()[["mid_date", "med_vx"]]
+            df_vy = mad_results["vy"].to_dataframe(name="med_vy").reset_index()[["mid_date", "med_vy"]]
+            if len(var_list) == 3:  # for vv
+                df_v = mad_results[var_list[2]].to_dataframe(name="med_v").reset_index()[["mid_date", "med_v"]]
 
             # Merge on time coordinate (e.g., 'mid_date')
             if len(var_list) == 3:
@@ -2043,7 +1942,69 @@ class CubeDataClass:
 
         # Return as cube
         elif return_as == "cube":
-            return self.assign({f"{stat_name}_vx": mad_results["vx"], f"{stat_name}_vy": mad_results["vy"]})
+            return self.assign({"nmad_vx": mad_results["vx"], "nmad_vy": mad_results["vy"]})
+
+        else:
+            raise ValueError("return_as must be 'dataframe' or 'cube'")
+
+    def compute_nmad(
+        self,
+        shapefile_path: str,
+        return_as: ReturnAs = "dataframe",
+        var_list: list[str] = ["vx", "vy"],
+        invert: bool = True,
+    ):
+        """
+
+        :param shapefile_path: Path to shapefile.
+        :param return_as: 'dataframe' or 'cube'.
+        :param var_list:
+        :param invert: Whether to invert the shapefile mask.
+
+        :return: pd.DataFrame or xr.Dataset
+        """
+
+        # Clip with shapefile
+        gdf = gpd.read_file(shapefile_path)
+        gdf = gdf.to_crs(self.ds.rio.crs)
+        masked_gpd = self.ds.rio.clip(gdf.geometry, gdf.crs, drop=False, all_touched=True, invert=invert)
+
+        masked = masked_gpd.dropna(dim="x", how="all").dropna(dim="y", how="all").dropna(dim="mid_date", how="all")
+
+        # Define MAD function
+        def mad_2d(arr):
+            median = np.nanmedian(arr)
+            return 1.483 * np.nanmedian(np.abs(arr - median))
+
+        mad_results = xr.apply_ufunc(
+            mad_2d,
+            masked[var_list],
+            input_core_dims=[["y", "x"]],
+            output_core_dims=[[]],
+            vectorize=True,
+            dask="parallelized",
+        ).compute()
+
+        # Return as DataFrame
+        if return_as == "dataframe":
+            df_vx = mad_results["vx"].to_dataframe(name="nmad_vx").reset_index()[["mid_date", "nmad_vx"]]
+            df_vy = mad_results["vy"].to_dataframe(name="nmad_vy").reset_index()[["mid_date", "nmad_vy"]]
+            if len(var_list) == 3:
+                df_v = mad_results[var_list[2]].to_dataframe(name="nmad_v").reset_index()[["mid_date", "nmad_v"]]
+
+            # Merge on time coordinate (e.g., 'mid_date')
+            if len(var_list) == 3:
+                merged_df = reduce(
+                    lambda left, right: pd.merge(left, right, on="mid_date", how="outer"), [df_vx, df_vy, df_v]
+                )
+            else:
+                merged_df = pd.merge(df_vx, df_vy, on="mid_date")
+
+            return merged_df
+
+        # Return as cube
+        elif return_as == "cube":
+            return self.assign({"nmad_vx": mad_results["vx"], "nmad_vy": mad_results["vy"]})
 
         else:
             raise ValueError("return_as must be 'dataframe' or 'cube'")
