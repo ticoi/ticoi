@@ -687,7 +687,7 @@ class CubeDataClass:
 
     def standardize_cube_for_processing(self, time_dim="mid_date"):
         """
-        Prepare the xarray dataset for the processing: transpose the dimension, add a variable temporal_baseline, errors if they do not exist
+        Prepare the xarray dataset for the processing: add a variable temporal_baseline, errors if they do not exist
 
         :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
         """
@@ -1518,7 +1518,8 @@ class CubeDataClass:
         if cube_to_match is not None:
             cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
         self.ds = self.ds.rio.write_crs(self.ds.proj4)
-        self.ds = self.ds.transpose("mid_date", "y", "x")
+        if tuple(self.ds.dims) != ("mid_date", "y", "x"):
+            self.ds = self.ds.transpose("mid_date", "y", "x")
 
         # Reproject coordinates
         if cube_to_match is not None:
