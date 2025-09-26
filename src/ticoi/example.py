@@ -12,6 +12,10 @@ _EXAMPLES_DIRECTORY = os.path.abspath(os.path.join(os.path.dirname(__file__), ".
 # Absolute filepaths to the example files.
 _FILEPATHS_DATA = {
     "ITS_LIVE_Lowell_Lower": os.path.join(_EXAMPLES_DIRECTORY, "Lowell", "ITS_LIVE_Lowell_Lower_test.nc"),
+    "IGE_S2_Argentiere": os.path.join(_EXAMPLES_DIRECTORY, "Argentiere", "Alps_Mont-Blanc_Argentiere_S2.nc"),
+    "IGE_Pleiades_Argentiere": os.path.join(
+        _EXAMPLES_DIRECTORY, "Argentiere", "Alps_Mont-Blanc_Argentiere_Pleiades.nc"
+    ),
     "Argentiere_example_interp": os.path.join(_EXAMPLES_DIRECTORY, "Argentiere", "Argentiere_example_interp.nc"),
     "Argentiere_static": os.path.join(_EXAMPLES_DIRECTORY, "Argentiere", "Argentiere_static.gpkg"),
     "Argentiere_iceflow": os.path.join(_EXAMPLES_DIRECTORY, "Argentiere", "Argentiere_iceflow.gpkg"),

@@ -24,6 +24,7 @@ import warnings
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
+from ticoi import example
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.cube_writer import CubeResultsWriter
@@ -48,44 +49,50 @@ warnings.filterwarnings("ignore")
 
 TICOI_process = "block_process"
 
-save = False  # If True, save TICOI results to a netCDF file
+save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
-# List of the paths where the data cubes are stored
-# List of the paths where the data cubes are stored
-cube_name = "http://its-live-data.s3.amazonaws.com/datacubes/v2/N60W130/ITS_LIVE_vel_EPSG3413_G0120_X-3250000_Y150000.zarr"  # Path where the Sentinel-2 IGE cubes are stored
-path_save = "path_save"  # Path where to stored the results
-result_fn = "Lowell_example"  # Name of the netCDF file to be created
-subset = [-138.28962881999922274, -138.279, 60.25934205396930565, 60.261]  # or None
-proj = "EPSG:3413"  # EPSG system of the given coordinates
+cube_name = example.get_path("IGE_S2_Argentiere")
+path_save = (
+    os.path.join(
+        os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")),
+        "examples",
+        "results",
+        "cube",
+    )
+    + "/"
+)  # path where to save our results
+result_fn = "IGES2_example"  # Name of the netCDF file to be created
+
+proj = "EPSG:32632"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
-#   - 'invert' for the results of the inversion
+#   - 'invert' for the results of the inversion, corresponding to Cumulative displacement time series
 #   - 'interp' for the results of the interpolation
-returned = ["interp"]
+returned = ["invert", "interp"]
 ## ---------------------------- Loading parameters ------------------------- ##
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": subset,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+    "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
     "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
-    "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
+    "pick_date": None,  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
-    "proj": "EPSG:4326",  # EPSG system of the given coordinates
+    "proj": proj,  # EPSG system of the given coordinates
     "verbose": False,  # Print information throughout the loading process
 }
 
 ## ----------------------- Data preparation parameters --------------------- ##
 # For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
-regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+regu = 1  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
-delete_outlier = "vvc_angle"
+delete_outlier = None
 apriori_weight = True
 
 preData_kwargs = {
-    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'savgol', 'lowess')
+    "smooth_method": "savgol",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'emwa', 'savgol')
     "s_win": 3,  # Size of the spatial window
     "t_win": 90,  # Time window size for 'ewma' smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
@@ -126,7 +133,7 @@ inversion_kwargs = {
 nb_cpu = 12  # Number of CPU to be used for parallelization
 block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
-if not os.path.exists(path_save):
+if save and not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # Update of dictionary with common parameters
@@ -218,17 +225,17 @@ if save:
 start.append(time.time())
 
 if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
+    print("[cube_ticoi_demo] Writing results to netCDF file with result_writer")
     several = isinstance(returned, list) and len(returned) >= 2
     writer = CubeResultsWriter(cube)
-
     if "invert" in returned:
         cube_invert = writer.write_result_tico(
             result["invert"] if several else result,
             source,
             sensor,
-            filename=f"{result_fn}_invert" if several else result_fn,
-            savepath=path_save if save else None,
             result_quality=inversion_kwargs["result_quality"],
+            filename=f"{result_fn}_invert1" if several else result_fn,
+            savepath=path_save if save else None,
             verbose=inversion_kwargs["verbose"],
         )
     if "interp" in returned:
@@ -236,9 +243,9 @@ if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
             result["interp"] if several else result,
             source_interp,
             sensor,
-            filename=f"{result_fn}_interp" if several else result_fn,
-            savepath=path_save if save else None,
             result_quality=inversion_kwargs["result_quality"],
+            filename=f"{result_fn}_interp1" if several else result_fn,
+            savepath=path_save if save else None,
             verbose=inversion_kwargs["verbose"],
         )
 

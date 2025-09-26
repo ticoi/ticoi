@@ -31,7 +31,7 @@ class Testclass_cube_data_xr:
 
     # to do the test for several parameters, the function test can be decorated with pytest.mark.parametrize
     @pytest.mark.parametrize(
-        "filepath", ["ITS_LIVE_Lowell_Lower"], indirect=["filepath"]
+        "filepath", ["ITS_LIVE_Lowell_Lower", "IGE_S2_Argentiere", "IGE_Pleiades_Argentiere"], indirect=["filepath"]
     )  # Note that indirect should specify which parameters are to be treated indirectly
     def test_load(self, cube_data_class_instance):
         """Tests that the cube_data_class_instance is properly loaded and contains expected data."""
@@ -46,14 +46,12 @@ class Testclass_cube_data_xr:
             "y",
             "date1",
             "date2",
-            "errorx",
-            "errory",
             "sensor",
             "source",
             "temporal_baseline",
         }
         assert required_variables.issubset(set(cube_data_class_instance.ds.variables)), "Dataset is missing variables"
-        expected_dims = ("x", "y", "mid_date")
+        expected_dims = ("mid_date", "y", "x")
         assert tuple(cube_data_class_instance.ds["vx"].dims) == expected_dims, "Dimension order incorrect"
 
     # Test load_pixel for the cube from IGE, for different pixel coordinates, either in pixels or in EPSG:4326
@@ -63,8 +61,8 @@ class Testclass_cube_data_xr:
     @pytest.mark.parametrize(
         "x, y, expected",
         [
-            (1, 2, np.array([36.0, -52.0, 112.59999847, 149.1000061, 16.0]).astype("float32")),
-            (-138.18069, 60.29076, np.array([59.0, -6.0, 112.59999847, 149.1000061, 16.0]).astype("float32")),
+            (1, 2, np.array([36.0, -52.0, 112.59999847, 149.1000061, 15.0]).astype("float32")),
+            (-138.18069, 60.29076, np.array([59.0, -6.0, 112.59999847, 149.1000061, 15.0]).astype("float32")),
         ],
     )
     def test_load_pixel(self, cube_data_class_instance, x, y, expected):

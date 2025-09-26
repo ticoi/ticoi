@@ -16,7 +16,6 @@ import warnings
 from functools import reduce
 from typing import Optional
 
-import dask
 import dask.array as da
 import geopandas
 import geopandas as gpd
@@ -30,19 +29,16 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
-from rasterio.features import rasterize
 from tqdm import tqdm
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
-
 from typing import Literal
 
 MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
 ReturnAs = Literal["dataframe", "cube"]
-
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -50,7 +46,16 @@ ReturnAs = Literal["dataframe", "cube"]
 
 
 class CubeDataClass:
-    def __init__(self, cube=None, ds: xr.Dataset = None):
+    _loader_registry = {
+        "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "_loader_itslive",
+        "J. Mouginot, R.Millan, A.Derkacheva": "_loader_millan",
+        "L. Charrier, L. Guo": "_loader_charrier",
+        "L. Charrier": "_loader_charrier",
+        "E. Ducasse": "_loader_ducasse",
+        "IGE": "_loader_charrier",
+    }
+
+    def __init__(self, cube=None, ds=None):
         """
         Initialisation of the main attributes, or copy cube's attributes and ds dataset if given.
 
@@ -81,6 +86,15 @@ class CubeDataClass:
             self.ds = cube.ds if ds is None else ds
             self.resolution = cube.resolution
             self.is_TICO = cube.is_TICO
+
+        # choose standardizer based on author
+
+    def find_time_dimensions(self):
+        """
+        Find the name of the time dimension
+        """
+        coords_not_spatial = [n for n in self.ds.coords if n not in {"x", "y"}]
+        return coords_not_spatial[0]
 
     def update_dimension(self, time_dim: str = "mid_date"):
         """
@@ -224,523 +238,331 @@ class CubeDataClass:
     #                         CUBE LOADING METHODS                            #
     # =====================================================================%% #
 
-    def load_itslive(
-        self,
-        filepath: str,
-        conf: bool = False,
-        subset: list | None = None,
-        buffer: list | None = None,
-        pick_date: list | None = None,
-        pick_sensor: list | None = None,
-        pick_temp_bas: list | None = None,
-        proj: str = "EPSG:4326",
-        verbose: bool = False,
-    ):
+    def _standardize_sensor_names(self, sensor_input: np.ndarray | str) -> np.ndarray:
         """
-        Load a cube dataset written by ITS_LIVE.
-
-        :param filepath: [str] --- Filepath of the dataset
-        :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
-        :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
-        :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
-        :param pick_date: [list | None] [default is None] --- A list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param verbose: [bool] [default is False] --- Print information throughout the process
+        Standardize sensor names
+        :param sensor_input:  [str or np.ndarray] --- Sensor input, which can of the form L8, S2 for example
+        :return: Sensor output array
         """
+        SENSOR_MAP = {
+            "L7": "Landsat-7",
+            "L8": "Landsat-8",
+            "L9": "Landsat-9",
+            "landsat-8": "Landsat-8",
+            "L8. ": "Landsat-8",
+            "LS8": "Landsat-8",
+            "LS7": "Landsat-7",
+            "LS9": "Landsat-9",
+            "S1": "Sentinel-1",
+            "S1A": "Sentinel-1",
+            "S1B": "Sentinel-1",
+            "S2": "Sentinel-2",
+            "S2A": "Sentinel-2",
+            "S2B": "Sentinel-2",
+            # other
+            "Pleiades": "Pleiades",
+            # add more mappings as needed
+        }
 
-        if verbose:
-            print(f"[Data loading] Path to cube file : {filepath}")
+        if isinstance(sensor_input, str):
+            cleaned_name = sensor_input.strip()
+            return SENSOR_MAP.get(cleaned_name, cleaned_name)
 
-        self.filedir = os.path.dirname(filepath)  # Path were is stored the netcdf file
-        self.filename = os.path.basename(filepath)  # Name of the netcdf file
-        self.ds = self.ds.assign_attrs({"proj4": self.ds["mapping"].proj4text})
-        self.author = self.ds.author.split(", a NASA")[0]
-        self.source = self.ds.url
+        elif isinstance(sensor_input, (np.ndarray, list, tuple)):
+            cleaned_array = np.char.strip(np.asarray(sensor_input).astype(str))
 
-        if subset is not None:  # Crop according to 4 coordinates
+            vectorized_map = np.vectorize(lambda s: SENSOR_MAP.get(s, s))
+            return vectorized_map(cleaned_array)
+
+        return sensor_input
+
+    def _normalize_error_to_confidence(self, error_da: xr.DataArray) -> xr.DataArray:
+        """
+        normalize error to confidence between [0, 1]
+        :param error_da:  [np.ndarray] --- array of errors
+        :return:
+        """
+        min_val = error_da.min()
+        max_val = error_da.max()
+        if max_val == min_val:
+            return xr.ones_like(error_da)
+        return 1 - (error_da - min_val) / (max_val - min_val)
+
+    def _apply_data_subset_in_space(self, proj: str, subset: list, buffer: list):
+        """
+        Spatial subset, using a buffer and or subset
+        :param proj: [str] --- EPSG system of the coordinates given in subset
+        :param subset: [list] --- A list of 4 float, these values are used to give a subset of the dataset : [xmin, xmax, ymax, ymin]
+        :param buffer:  [list] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
+        """
+        # spatial subset
+        if subset is not None:
             self.subset(proj, subset)
-        elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
-            self.buffer(proj, buffer)
-        if pick_date is not None:
-            self.ds = self.ds.where(
-                (
-                    (self.ds["acquisition_date_img1"] >= np.datetime64(pick_date[0]))
-                    & (self.ds["acquisition_date_img2"] <= np.datetime64(pick_date[1]))
-                ).compute(),
-                drop=True,
-            )
-
-        self.update_dimension()  # Update self.nx,self.ny,self.nz
-
-        date1 = np.array([np.datetime64(date_str, "D") for date_str in self.ds["acquisition_date_img1"].values])
-        date2 = np.array([np.datetime64(date_str, "D") for date_str in self.ds["acquisition_date_img2"].values])
-
-        # np.char.strip is used to remove the null character ('�') from each element and np.core.defchararray.add to
-        # concatenate array of different types
-        try:
-            sensor = np._core.defchararray.add(
-                np.char.strip(self.ds["mission_img1"].values.astype(str), "�"),
-                np.char.strip(self.ds["satellite_img1"].values.astype(str), "�"),
-            ).astype("U10")
-        except AttributeError:  # in old numpy version module 'numpy._core' has no attribute 'defchararray'
-            sensor = np.core.defchararray.add(
-                np.char.strip(self.ds["mission_img1"].values.astype(str), "�"),
-                np.char.strip(self.ds["satellite_img1"].values.astype(str), "�"),
-            ).astype("U10")
-        sensor[sensor == "L7"] = "Landsat-7"
-        sensor[sensor == "L8"] = "Landsat-8"
-        sensor[sensor == "L9"] = "Landsat-9"
-        sensor[np.isin(sensor, ["S1A", "S1B"])] = "Sentinel-1"
-        sensor[np.isin(sensor, ["S2A", "S2B"])] = "Sentinel-2"
-
-        if conf:  # Normalize the error between 0 and 1, and convert error in confidence
-            minconfx = np.nanmin(self.ds["vx_error"].values[:])
-            maxconfx = np.nanmax(self.ds["vx_error"].values[:])
-            minconfy = np.nanmin(self.ds["vy_error"].values[:])
-            maxconfy = np.nanmax(self.ds["vy_error"].values[:])
-            errorx = 1 - (self.ds["vx_error"].values - minconfx) / (maxconfx - minconfx)
-            errory = 1 - (self.ds["vy_error"].values - minconfy) / (maxconfy - minconfy)
-        else:
-            errorx = self.ds["vx_error"].values
-            errory = self.ds["vy_error"].values
-
-        # Drop variables not in the specified list
-        variables_to_keep = ["vx", "vy", "mid_date", "x", "y"]
-        self.ds = self.ds.drop_vars([var for var in self.ds.variables if var not in variables_to_keep])
-        # Drop attributes not in the specified list
-        attributes_to_keep = ["date_created", "mapping", "author", "proj4"]
-        self.ds.attrs = {attr: self.ds.attrs[attr] for attr in attributes_to_keep if attr in self.ds.attrs}
-
-        # self.ds = self.ds.unify_chunks()  # to avoid error ValueError: Object has inconsistent chunks along
-        # dimension mid_date. This can be fixed by calling unify_chunks(). Create new variable and chunk them
-        self.ds["sensor"] = xr.DataArray(sensor, dims="mid_date").chunk({"mid_date": self.ds.chunks["mid_date"]})
-        self.ds = self.ds.unify_chunks()
-        self.ds["date1"] = xr.DataArray(date1, dims="mid_date").chunk({"mid_date": self.ds.chunks["mid_date"]})
-        self.ds = self.ds.unify_chunks()
-        self.ds["date2"] = xr.DataArray(date2, dims="mid_date").chunk({"mid_date": self.ds.chunks["mid_date"]})
-        self.ds = self.ds.unify_chunks()
-        self.ds["source"] = xr.DataArray(["ITS_LIVE"] * self.nz, dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds = self.ds.unify_chunks()
-        self.ds["errorx"] = xr.DataArray(errorx, dims=["mid_date"], coords={"mid_date": self.ds.mid_date}).chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds = self.ds.unify_chunks()
-        self.ds["errory"] = xr.DataArray(errory, dims=["mid_date"], coords={"mid_date": self.ds.mid_date}).chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-
-        if pick_sensor is not None:
-            self.ds = self.ds.sel(mid_date=self.ds["sensor"].isin(pick_sensor))
-        if pick_temp_bas is not None:
-            temp = (self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")
-            self.ds = self.ds.where(((pick_temp_bas[0] < temp) & (temp < pick_temp_bas[1])).compute(), drop=True)
-            del temp
-        self.ds = self.ds.unify_chunks()
-
-    def load_millan(
-        self,
-        filepath: str,
-        conf: bool = False,
-        subset: list | None = None,
-        buffer: list | None = None,
-        pick_date: list | None = None,
-        pick_sensor: list | None = None,
-        pick_temp_bas: list | None = None,
-        proj: str = "EPSG:4326",
-        verbose: bool = False,
-    ):
-        """
-        Load a cube dataset written by R. Millan et al.
-
-        :param filepath: [str] --- Filepath of the dataset
-        :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
-        :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
-        :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
-        :param pick_date: [list | None] [default is None] --- A list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param verbose: [bool] [default is False] --- Print information throughout the process
-        """
-
-        if verbose:
-            print(f"[Data loading] Path to cube file : {filepath}")
-
-        self.filedir = os.path.dirname(filepath)
-        self.filename = os.path.basename(filepath)  # name of the netcdf file
-        self.author = "IGE"  # name of the author
-        self.source = self.ds.source
-        del filepath
-
-        # self.split_cube(n_split=2, dim=['x', 'y'], savepath=f"{self.filedir}/{self.filename[:-3]}_")
-
-        if subset is not None:  # Crop according to 4 coordinates
-            self.subset(proj, subset)
-        elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
+        elif buffer is not None:
             self.buffer(proj, buffer)
 
-        # Uniformization of the name and format of the time coordinate
-        self.ds = self.ds.rename({"z": "mid_date"})
-
-        date1 = [mjd2date(date_str) for date_str in self.ds["date1"].values]  # conversion in date
-        date2 = [mjd2date(date_str) for date_str in self.ds["date2"].values]
-        self.ds = self.ds.unify_chunks()
-        self.ds["date1"] = xr.DataArray(np.array(date1).astype("datetime64[ns]"), dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds = self.ds.unify_chunks()
-        self.ds["date2"] = xr.DataArray(np.array(date2).astype("datetime64[ns]"), dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds = self.ds.unify_chunks()
-        del date1, date2
-
-        # Temporal subset between two dates
-        if pick_date is not None:
-            self.ds = self.ds.where(
-                (
-                    (self.ds["date1"] >= np.datetime64(pick_date[0]))
-                    & (self.ds["date2"] <= np.datetime64(pick_date[1]))
-                ).compute(),
-                drop=True,
-            )
-        del pick_date
-
-        self.ds = self.ds.assign_coords(
-            mid_date=np.array(self.ds["date1"] + (self.ds["date2"] - self.ds["date1"]) // 2)
-        )
+        # update dimensions after spatial filtering
         self.update_dimension()
 
-        if conf and "confx" not in self.ds.data_vars:  # convert the errors into confidence indicators between 0 and 1
-            minconfx = np.nanmin(self.ds["error_vx"].values[:])
-            maxconfx = np.nanmax(self.ds["error_vx"].values[:])
-            minconfy = np.nanmin(self.ds["error_vy"].values[:])
-            maxconfy = np.nanmax(self.ds["error_vy"].values[:])
-            errorx = 1 - (self.ds["error_vx"].values - minconfx) / (maxconfx - minconfx)
-            errory = 1 - (self.ds["error_vy"].values - minconfy) / (maxconfy - minconfy)
-        else:
-            errorx = self.ds["error_vx"].values[:]
-            errory = self.ds["error_vy"].values[:]
-
-        # Homogenize sensors names
-        sensor = np.char.strip(
-            self.ds["sensor"].values.astype(str), "�"
-        )  # np.char.strip is used to remove the null character ('�') from each element
-        sensor[np.isin(sensor, ["S1"])] = "Sentinel-1"
-        sensor[np.isin(sensor, ["S2"])] = "Sentinel-2"
-        sensor[np.isin(sensor, ["landsat-8", "L8", "L8. "])] = "Landsat-8"
-
-        # Drop variables not in the specified list
-        self.ds = self.ds.drop_vars(
-            [var for var in self.ds.variables if var not in ["vx", "vy", "mid_date", "x", "y", "date1", "date2"]]
-        )
-        self.ds = self.ds.transpose("mid_date", "y", "x")
-
-        # Store the variable in xarray dataset
-        self.ds["sensor"] = xr.DataArray(sensor, dims="mid_date").chunk({"mid_date": self.ds.chunks["mid_date"]})
-        del sensor
-        self.ds = self.ds.unify_chunks()
-        self.ds["source"] = xr.DataArray(["IGE"] * self.nz, dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds = self.ds.unify_chunks()
-        self.ds["errorx"] = xr.DataArray(
-            np.tile(errorx[:, np.newaxis, np.newaxis], (1, self.ny, self.nx)),
-            dims=["mid_date", "y", "x"],
-            coords={"mid_date": self.ds.mid_date, "y": self.ds.y, "x": self.ds.x},
-        ).chunk(chunks=self.ds.chunks)
-        self.ds = self.ds.unify_chunks()
-        self.ds["errory"] = xr.DataArray(
-            np.tile(errory[:, np.newaxis, np.newaxis], (1, self.ny, self.nx)),
-            dims=["mid_date", "y", "x"],
-            coords={"mid_date": self.ds.mid_date, "y": self.ds.y, "x": self.ds.x},
-        ).chunk(chunks=self.ds.chunks)
-        del errorx, errory
-
-        # Pick sensors or temporal baselines
-        if pick_sensor is not None:
-            self.ds = self.ds.sel(mid_date=self.ds["sensor"].isin(pick_sensor))
-        if pick_temp_bas is not None:
-            self.ds = self.ds.sel(
-                mid_date=(pick_temp_bas[0] < ((self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")))
-                & (((self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")) < pick_temp_bas[1])
-            )
-        self.ds = self.ds.unify_chunks()
-
-    def load_ducasse(
-        self,
-        filepath: str,
-        conf: bool = False,
-        subset: list | None = None,
-        buffer: list | None = None,
-        pick_date: list | None = None,
-        pick_sensor: list | None = None,
-        pick_temp_bas: list | None = None,
-        proj: str = "EPSG:4326",
-        verbose: bool = False,
-    ):
+    def _apply_data_selection(self, pick_date: list | None, pick_sensor: list | None, pick_temp_bas: list | None):
         """
-        Load a cube dataset written by E. Ducasse et al. (Pleiades data)
-
-        :param filepath: [str] --- Filepath of the dataset
-        :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
-        :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
-        :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
-        :param pick_date: [list | None] [default is None] --- A list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param verbose: [bool] [default is False] --- Print information throughout the process
+        selection of dates, sensors, temporal baselines
+        :param pick_date: [list] --- list of date to select
+        :param pick_sensor: [list] --- list of sensors to select
+        :param pick_temp_bas: [list] --- list of temporal baselines to select
         """
 
-        if verbose:
-            print(f"[Data loading] Path to cube file : {filepath}")
-
-        self.ds = self.ds.chunk({"x": 125, "y": 125, "time": 2000})  # set chunk
-        self.filedir = os.path.dirname(filepath)
-        self.filename = os.path.basename(filepath)  # name of the netcdf file
-        self.author = "IGE"  # name of the author
-        del filepath
-
-        # Spatial subset
-        if subset is not None:  # crop according to 4 coordinates
-            self.subset(proj, subset)
-        elif buffer is not None:  # crop the dataset around a given pixel, according to a given buffer
-            self.buffer(proj, buffer)
-
-        # Uniformization of the name and format of the time coordinate
-        self.ds = self.ds.rename({"time": "mid_date"})
-
-        date1 = [date_str.split(" ")[0] for date_str in self.ds["mid_date"].values]
-        date2 = [date_str.split(" ")[1] for date_str in self.ds["mid_date"].values]
-        self.ds["date1"] = xr.DataArray(np.array(date1).astype("datetime64[ns]"), dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds["date2"] = xr.DataArray(np.array(date2).astype("datetime64[ns]"), dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        del date1, date2
-
-        # Temporal subset between two dates
+        # 1. update time dimension name and format
         if pick_date is not None:
-            self.ds = self.ds.where(
-                (
-                    (self.ds["date1"] >= np.datetime64(pick_date[0]))
-                    & (self.ds["date2"] <= np.datetime64(pick_date[1]))
-                ).compute(),
-                drop=True,
-            )
-        del pick_date
+            mask = (self.ds["date1"] >= np.datetime64(pick_date[0])) & (self.ds["date2"] <= np.datetime64(pick_date[1]))
+            self.ds = self.ds.where(mask.compute(), drop=True)
 
-        self.ds = self.ds.assign_coords(
-            mid_date=np.array(self.ds["date1"] + (self.ds["date2"] - self.ds["date1"]) // 2)
-        )
-        self.update_dimension()  # update self.nx, self.ny and self.nz
-
-        # Drop variables not in the specified list
-        variables_to_keep = ["vx", "vy", "mid_date", "x", "y", "date1", "date2"]
-        self.ds = self.ds.drop_vars([var for var in self.ds.variables if var not in variables_to_keep])
-        self.ds = self.ds.transpose("mid_date", "y", "x")
-
-        # Store the variable in xarray dataset
-        self.ds["sensor"] = xr.DataArray(["Pleiades"] * self.nz, dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds["source"] = xr.DataArray(["IGE"] * self.nz, dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds["vy"] = -self.ds["vy"]
-
-        # Pick sensors or temporal baselines
+        # sensor selection
         if pick_sensor is not None:
             self.ds = self.ds.sel(mid_date=self.ds["sensor"].isin(pick_sensor))
+
+        # 4. temporal baseline selection (based on standardized date1, date2)
         if pick_temp_bas is not None:
-            self.ds = self.ds.sel(
-                mid_date=(pick_temp_bas[0] < ((self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")))
-                & (((self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")) < pick_temp_bas[1])
+            temp_baseline = (self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")
+            mask = (temp_baseline >= pick_temp_bas[0]) & (temp_baseline <= pick_temp_bas[1])
+            self.ds = self.ds.where(mask, drop=True)
+
+        # final dimension update
+        self.update_dimension()
+
+    def _add_standardized_variable(self, standard_data: dict):
+        """
+        Add standardized variable to the cube dataarry self.ds
+        :param standard_data: [dict] --- name and values of standardized variables
+        """
+        for var_name, data in standard_data.items():
+            if isinstance(data, (str, float)):  # if sensor is a string or error is a float
+                data = np.repeat(
+                    data, self.ds.sizes["mid_date"]
+                )  # create a np array of lenght self.ds.sizes[time_dim], with the string
+
+            if data.ndim == 1:  # for sensor, source, date1, and date2
+                dims = ("mid_date",)
+            elif data.ndim == 3:  # for vx, vy
+                dims = ("mid_date", "y", "x")
+            else:  # if error is already 2D
+                dims = data.dims
+
+            self.ds[var_name] = xr.DataArray(data, dims=dims)
+
+        self.ds = self.ds.unify_chunks()
+
+    @classmethod
+    def register_loader(cls, author: str, func: callable):
+        """
+        Allow users to register their own loader function.
+        :param author: [str] --- name of the author
+        :param func: [callable] --- function to be registered
+        :return:
+        """
+        cls._loader_registry[author] = func
+
+    def _loader_generic(self, conf: bool) -> dict:
+        """
+                standardize dataset with unrecognized author based on variable names.
+
+        it assumes the dataset is already in a standard format, which means
+        it contains the required variable names with correct meanings.
+        variables:
+                    [vx, vy, date1, date2]: necessary,
+                    [sensor, source, errorx, errory]: optional
+        if you want to specify the name of the author and the source of the dataset, it should be inside an attribute called author and source respectively.
+        :param conf: [bool] --- if the errors need to be converted as confidence
+        :return:
+        """
+        # required variables
+        REQUIRED_VARS = ["vx", "vy", "date1", "date2"]
+
+        # check if all required variables are present
+        missing_vars = [var for var in REQUIRED_VARS if var not in self.ds.variables]
+
+        if missing_vars:
+            raise ValueError(
+                f"Data loading failed due to missing required variables: {missing_vars}. "
+                f"The dataset must at least contain the following variables: {REQUIRED_VARS}."
             )
 
-        # Set errors equal to one (no information on the error here)
-        self.ds["errorx"] = xr.DataArray(np.ones(self.ds["mid_date"].size), dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
-        self.ds["errory"] = xr.DataArray(np.ones(self.ds["mid_date"].size), dims="mid_date").chunk(
-            {"mid_date": self.ds.chunks["mid_date"]}
-        )
+        # provide default values for optional variables if they are missing
+        self.author = self.ds.attrs.get(
+            "author", "Unknown"
+        )  # if the attribute auhtor does not exist, put the attribute to Unknown
+        self.source = self.ds.attrs.get("source", "Unknown")
 
-    def load_charrier(
-        self,
-        filepath: str,
-        conf: bool = False,
-        subset: list | None = None,
-        buffer: list | None = None,
-        pick_date: list | None = None,
-        pick_sensor: list | None = None,
-        pick_temp_bas: list | None = None,
-        proj: str = "EPSG:4326",
-        verbose: bool = False,
-    ):
-        """
-        Load a cube dataset written by L.Charrier et al.
-
-        :param filepath: [str] --- Filepath of the dataset
-        :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
-        :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
-        :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
-        :param pick_date: [list | None] [default is None] --- A list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param verbose: [bool] [default is False] --- Print information throughout the process
-        """
-
-        if verbose:
-            print(f"[Data loading] Path to cube file {'(TICO cube)' if self.is_TICO else ''} : {filepath}")
-
-        # information about the cube
-        self.filedir = os.path.dirname(filepath)
-        self.filename = os.path.basename(filepath)  # Name of the netcdf file
-        if self.ds.author == "J. Mouginot, R.Millan, A.Derkacheva_aligned":
-            self.author = "IGE"  # Name of the author
+        # standardize sensor names if sensor variable exists
+        if "sensor" in self.ds:
+            sensor = self.ds["sensor"].values
+        elif "sensor" in self.ds.attrs:
+            sensor = self.ds.attrs["sensor"]
         else:
-            self.author = self.ds.author
+            sensor = "Unknown"
+
+        errorx = self.ds.get("errorx", 1.0)
+        errory = self.ds.get("errory", 1.0)
+        # if data has errorx/errory and need normalization
+        if conf and "errorx" in self.ds:
+            errorx = self._normalize_error_to_confidence(errorx)
+            errory = self._normalize_error_to_confidence(errory)
+
+        if (self.ds.vx == 0).any().values:  # mask values equal to 0
+            mask = (self.ds.vx != 0) & (self.ds.vy != 0)
+            self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(mask)
+
+        standard_data = {
+            "date1": self.ds["date1"].astype("datetime64[ns]"),
+            "date2": self.ds["date2"].astype("datetime64[ns]"),
+            "sensor": sensor,
+            "source": self.source,
+            "errorx": errorx,
+            "errory": errory,
+        }
+
+        return standard_data
+
+    def _loader_itslive(self, conf: bool) -> dict:
+        """
+        load ITS_LIVE dataset
+        :param conf: [bool] --- if the errors need to be converted as confidence
+        :return:
+        """
+        self.author = self.ds.author.split(", a NASA")[0]
+        self.source = self.ds.url
+        self.ds.attrs["proj4"] = self.ds["mapping"].proj4text
+
+        # standardize sensor names
+        sensor_raw = np.core.defchararray.add(
+            np.char.strip(self.ds["mission_img1"].values.astype(str), " "),
+            np.char.strip(self.ds["satellite_img1"].values.astype(str), " "),
+        ).astype("U10")
+
+        # normalize error if needed
+        errorx = self.ds["vx_error"]
+        errory = self.ds["vy_error"]
+        if conf:
+            errorx = self._normalize_error_to_confidence(errorx)
+            errory = self._normalize_error_to_confidence(errory)
+
+        return {
+            "date1": self.ds["acquisition_date_img1"].astype("datetime64[ns]"),
+            "date2": self.ds["acquisition_date_img2"].astype("datetime64[ns]"),
+            "sensor": self._standardize_sensor_names(sensor_raw),
+            "source": "ITS_LIVE",
+            "errorx": errorx,
+            "errory": errory,
+        }
+
+    def _loader_millan(self, conf: bool) -> dict:
+        """
+        load Millan dataset
+        :param conf: [bool] --- if the errors need to be converted as confidence
+        :return:
+        """
+        self.author = "IGE"
         self.source = self.ds.source
-        del filepath
+        self.ds = self.ds.rename({"z": "mid_date"})
 
-        # Select specific data within the cube
-        if subset is not None:  # Crop according to 4 coordinates
-            self.subset(proj, subset)
-        elif buffer is not None:  # Crop the dataset around a given pixel, according to a given buffer
-            self.buffer(proj, buffer)
+        # standardize sensor names
+        sensor_raw = np.char.strip(self.ds["sensor"].values.astype(str), " ")
 
-        time_dim = "mid_date" if not self.is_TICO else "second_date"  # 'date2' if we load TICO data
-        self.update_dimension(time_dim)
+        # normalize error if needed
+        errorx_1d = self.ds["error_vx"]
+        errory_1d = self.ds["error_vy"]
+        if conf:
+            errorx_1d = self._normalize_error_to_confidence(errorx_1d)
+            errory_1d = self._normalize_error_to_confidence(errory_1d)
+        ny, nx = self.ds.dims["y"], self.ds.dims["x"]
+        errorx = np.tile(errorx_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
+        errory = np.tile(errory_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
+        # standardize date format
+        date1 = xr.DataArray([mjd2date(d) for d in self.ds["date1"].values], dims="mid_date").astype("datetime64[ns]")
+        date2 = xr.DataArray([mjd2date(d) for d in self.ds["date2"].values], dims="mid_date").astype("datetime64[ns]")
+        self.ds = self.ds.assign_coords(mid_date=date1 + (date2 - date1) / 2)
 
-        # Temporal subset between two dates
-        if pick_date is not None:
-            if not self.is_TICO:
-                self.ds = self.ds.where(
-                    (
-                        (self.ds["date1"] >= np.datetime64(pick_date[0]))
-                        & (self.ds["date2"] <= np.datetime64(pick_date[1]))
-                    ).compute(),
-                    drop=True,
-                )
-            else:
-                self.ds = self.ds.where(
-                    (
-                        (self.ds["second_date"] >= np.datetime64(pick_date[0]))
-                        & (self.ds["second_date"] <= np.datetime64(pick_date[1]))
-                    ).compute(),
-                    drop=True,
-                )
-        del pick_date
+        return {
+            "date1": date1,
+            "date2": date2,
+            "sensor": self._standardize_sensor_names(sensor_raw),
+            "source": "IGE",
+            "errorx": errorx,
+            "errory": errory,
+        }
 
-        self.update_dimension(time_dim)
+    def _loader_ducasse(self, conf: bool) -> dict:
+        """
+        load Ducasse dataset
+        :param conf: [bool] --- if the errors need to be converted as confidence
+        :return:
+        """
+        self.author = "IGE"
+        self.source = "IGE"
+        self.ds = self.ds.rename({"time": "mid_date"})
+        self.ds = self.ds.transpose("mid_date", "y", "x")  # transpose coordinates
 
-        # Pick sensors or temporal baselines
-        if pick_sensor is not None:
-            if not self.is_TICO:
-                self.ds = self.ds.sel(mid_date=self.ds["sensor"].isin(pick_sensor))
-            else:
-                self.ds = self.ds.sel(second_date=self.ds["sensor"].isin(pick_sensor))
+        # standardize date format
+        dates = self.ds["mid_date"].values
+        date1 = xr.DataArray([d.split(" ")[0] for d in dates], dims="mid_date").astype("datetime64[ns]")
+        date2 = xr.DataArray([d.split(" ")[1] for d in dates], dims="mid_date").astype("datetime64[ns]")
+        self.ds = self.ds.assign_coords(mid_date=date1 + (date2 - date1) / 2)
 
-        # Following properties are not available for TICO cubes
-        if not self.is_TICO:
-            # Pick specific temporal baselines
-            if pick_temp_bas is not None:
-                self.ds = self.ds.sel(
-                    mid_date=(pick_temp_bas[0] < ((self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")))
-                    & (((self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")) < pick_temp_bas[1])
-                )
+        return {
+            "vx": self.ds["vx"],
+            "vy": -self.ds["vy"],  # special case for ducasse
+            "date1": date1,
+            "date2": date2,
+            "sensor": "Pleiades",
+            "source": "IGE",
+            "errorx": 1.0,
+            "errory": 1.0,
+        }
 
-            # Convert the errors into confidence indicators between 0 and 1
-            if conf and "confx" not in self.ds.data_vars:
-                minconfx = np.nanmin(self.ds["errorx"].values[:])
-                maxconfx = np.nanmax(self.ds["errorx"].values[:])
-                minconfy = np.nanmin(self.ds["errory"].values[:])
-                maxconfy = np.nanmax(self.ds["errory"].values[:])
-                errorx = 1 - (self.ds["errorx"].values - minconfx) / (maxconfx - minconfx)
-                errory = 1 - (self.ds["errory"].values - minconfy) / (maxconfy - minconfy)
-                self.ds["errorx"] = xr.DataArray(
-                    errorx,
-                    dims=["mid_date", "y", "x"],
-                    coords={"mid_date": self.ds.mid_date, "y": self.ds.y, "x": self.ds.x},
-                ).chunk(chunks=self.ds.chunks)
-                self.ds["errory"] = xr.DataArray(
-                    errory,
-                    dims=["mid_date", "y", "x"],
-                    coords={"mid_date": self.ds.mid_date, "y": self.ds.y, "x": self.ds.x},
-                ).chunk(chunks=self.ds.chunks)
+    def _loader_charrier(self, conf: bool) -> dict:
+        """
+        load Charrier dataset
+        :param conf:
+        :return:
+        """
+        self.author = "IGE" if "Mouginot" in self.ds.author else self.ds.author
+        self.source = self.ds.source
 
-            # For cube written with write_result_TICOI
-            if "source" not in self.ds.variables:
-                self.ds["source"] = xr.DataArray([self.ds.author] * self.nz, dims="mid_date").chunk(
-                    {"mid_date": self.ds.chunks["mid_date"]}
-                )
-            if "sensor" not in self.ds.variables:
-                self.ds["sensor"] = xr.DataArray([self.ds.sensor] * self.nz, dims="mid_date").chunk(
-                    {"mid_date": self.ds.chunks["mid_date"]}
-                )
+        # normalize error if needed
+        errorx, errory = self.ds.get("errorx"), self.ds.get("errory")
+        if conf and errorx is not None:
+            errorx = self._normalize_error_to_confidence(errorx)
+            errory = self._normalize_error_to_confidence(errory)
+        sensor = self.ds.attrs["sensor"] if "sensor" in self.ds.attrs else self.ds["sensor"]
+        source = self.ds.attrs["source"] if "source" in self.ds.attrs else self.ds["source"]
+        return {
+            "sensor": self._standardize_sensor_names(sensor),
+            "source": source,
+            "errorx": errorx if errorx is not None else 1.0,
+            "errory": errory if errory is not None else 1.0,
+        }
 
     def load(
         self,
         filepath: list | str,
-        chunks: dict | str | int = {},
+        chunks: dict | str | int = "auto",
         conf: bool = False,
-        subset: list[np.array] | None = None,
-        buffer: str | None = None,
-        pick_date: str | None = None,
-        pick_sensor: str | None = None,
-        pick_temp_bas: str | None = None,
+        subset: list | None = None,
+        buffer: list | None = None,
+        pick_date: list | None = None,
+        pick_sensor: list | None = None,
+        pick_temp_bas: list | None = None,
         proj: str = "EPSG:4326",
         mask: str | xr.DataArray = None,
         reproj_coord: bool = False,
         reproj_vel: bool = False,
         verbose: bool = False,
     ):
-        """
-        Load a cube dataset from a file in format netcdf (.nc) or zarr. The data are directly stored within the present object.
-
-        :param filepath: [list | str] --- Filepath of the dataset, if list of filepaths, load all the cubes and merge them
-        :param chunks: [dict] --- Dictionary with the size of chunks for each dimension, if chunks=-1 loads the dataset with dask using a single chunk for all arrays.
-                                  chunks={} loads the dataset with dask using engine preferred chunks if exposed by the backend, otherwise with a single chunk for all arrays,
-                                  chunks='auto' will use dask auto chunking taking into account the engine preferred chunks.
-        :param conf: [bool] [default is False] --- If True convert the error in confidence between 0 and 1
-        :param subset: [list | None] [default is None] --- A list of 4 float, these values are used to give a subset of the dataset in the form [xmin, xmax, ymin, ymax]
-        :param buffer: [list | None] [default is None] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last one is the buffer size
-        :param pick_date: [list | None] [default is None] --- A list of 2 string yyyy-mm-dd, pick the data between these two date
-        :param pick_sensor: [list | None] [default is None] --- A list of strings, pick only the corresponding sensors
-        :param pick_temp_bas: [list | None] [default is None] --- A list of 2 integer, pick only the data which have a temporal baseline between these two integers
-        :param proj: [str] [default is 'EPSG:4326'] --- Projection of the buffer or subset which is given
-        :param mask: [str | xr dataarray | None] [default is None] --- Mask some of the data of the cube, either a dataarray with 0 and 1, or a path to a dataarray or an .shp file
-        :param reproj_coord: [bool] [default is False] --- If True reproject the second cube of the list filepath to the grid coordinates of the first cube
-        :param reproj_vel: [bool] [default is False] --- If True reproject the velocity components, to match the coordinate system of the first cube
-
-        :param verbose: [bool] [default is False] --- Print information throughout the process
-        """
         self.__init__()
 
-        assert isinstance(filepath, list) or isinstance(filepath, str), (
-            f"The filepath must be a string (path to the cube file) or a list of strings, not {type(filepath)}."
-        )
-
-        time_dim_name = {
-            "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "mid_date",
-            "J. Mouginot, R.Millan, A.Derkacheva": "z",
-            "J. Mouginot, R.Millan, A.Derkacheva_aligned": "mid_date",
-            "L. Charrier, L. Guo": "mid_date",
-            "L. Charrier": "mid_date",
-            "E. Ducasse": "time",
-            "S. Leinss, L. Charrier": "mid_date",
-            "IGE": "mid_date",
-        }  # dictionary to set the name of time_dimension for a given author
-
-        if isinstance(filepath, list):  # Merge several cubes
+        if isinstance(filepath, list):
+            if verbose:
+                print(f"[Data loading] Loading cube 1 from file: {filepath}")
             self.load(
                 filepath[0],
                 chunks=chunks,
@@ -756,6 +578,8 @@ class CubeDataClass:
             )
 
             for n in range(1, len(filepath)):
+                if verbose:
+                    print(f"[Data loading] Loading and merging cube {n + 1} from file: {filepath[n]}")
                 cube2 = CubeDataClass()
                 cube2.load(
                     filepath[n],
@@ -769,111 +593,105 @@ class CubeDataClass:
                     mask=mask,
                     verbose=verbose,
                 )
-                cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method="nearest")
-                if cube2.nx == self.nx and cube2.ny == self.ny:
-                    cube2.ds = cube2.ds.assign_coords(x=self.ds.x, y=self.ds.y)
-                # if cube2.ds.y.to_pandas().duplicated().any() or cube2.ds.x.to_pandas().duplicated().any():
-                #     if cube2.ds.y.to_pandas().duplicated().any():
-                #         _, unique_y = np.unique(cube2.ds.y.values, return_index=True)
-                #         cube2.ds = cube2.ds.isel(y=np.sort(unique_y))
-                #     if cube2.ds.x.to_pandas().duplicated().any():
-                #         _, unique_x = np.unique(cube2.ds.x.values, return_index=True)
-                #         cube2.ds = cube2.ds.isel(x=np.sort(unique_x))
-                #     cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method='nearest')
+
                 # Align the new cube to the main one (interpolate the coordinate and/or reproject it)
                 if reproj_vel or reproj_coord:
                     cube2 = self.align_cube(
                         cube2, reproj_vel=reproj_vel, reproj_coord=reproj_coord, interp_method="nearest"
                     )
+                else:
+                    cube2.ds = cube2.ds.sel(x=self.ds.x, y=self.ds.y, method="nearest")
+                    if cube2.nx == self.nx and cube2.ny == self.ny:
+                        cube2.ds = cube2.ds.assign_coords(x=self.ds.x, y=self.ds.y)
                 self.merge_cube(cube2)  # Merge the new cube to the main one
                 del cube2
+
             if chunks == {}:  # Rechunk with optimal chunk size
                 var_name = "vx" if not self.is_TICO else "dx"
-                time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
+                time_dim = "mid_date" if not self.is_TICO else "second_date"
                 tc, yc, xc = self.determine_optimal_chunk_size(
                     variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=verbose
                 )
                 self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
+                self.update_dimension()
+            return
 
-        else:  # Load one cube
-            with dask.config.set(**{"array.slicing.split_large_chunks": False}):  # To avoid creating the large chunks
-                if filepath.split(".")[-1] == "nc":
-                    try:
-                        self.ds = xr.open_dataset(filepath, engine="h5netcdf", chunks=chunks)
-                    except NotImplementedError:  # Can not use auto rechunking with object dtype. We are unable to estimate the size in bytes of object data
-                        chunks = {}
-                        self.ds = xr.open_dataset(filepath, engine="h5netcdf", chunks=chunks)  # Set no chunks
-
-                    if "Author" in self.ds.attrs:  # Uniformization of the attribute Author to author
-                        self.ds.attrs["author"] = self.ds.attrs.pop("Author")
-
-                    self.is_TICO = False if time_dim_name[self.ds.author] in self.ds.dims else True
-                    time_dim = time_dim_name[self.ds.author] if not self.is_TICO else "second_date"
-                    var_name = "vx" if not self.is_TICO else "dx"
-
-                    if chunks == {}:  # Rechunk with optimal chunk size
-                        tc, yc, xc = self.determine_optimal_chunk_size(
-                            variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=verbose
-                        )
-                        self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
-
-                elif filepath.split(".")[-1] == "zarr":  # the is not rechunked
-                    if chunks == {}:
-                        chunks = "auto"  # Change the default value to auto
-                    self.ds = xr.open_dataset(
-                        filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks
-                    )
-                    self.is_TICO = False
-                    var_name = "vx"
-
+        if verbose:
+            print(f"[Data loading] Opening file: {filepath}")
+        ext = filepath.split(".")[-1]
+        if ext == "nc":
+            try:
+                self.ds = xr.open_dataset(filepath, chunks=chunks)
+            except NotImplementedError:
                 if verbose:
-                    print("[Data loading] File open")
-
-                dico_load = {
-                    "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": self.load_itslive,
-                    "J. Mouginot, R.Millan, A.Derkacheva": self.load_millan,
-                    "J. Mouginot, R.Millan, A.Derkacheva_aligned": self.load_charrier,
-                    "L. Charrier, L. Guo": self.load_charrier,
-                    "L. Charrier": self.load_charrier,
-                    "E. Ducasse": self.load_ducasse,
-                    "S. Leinss, L. Charrier": self.load_charrier,
-                }
-                dico_load[self.ds.author](
-                    filepath,
-                    pick_date=pick_date,
-                    subset=subset,
-                    conf=conf,
-                    pick_sensor=pick_sensor,
-                    pick_temp_bas=pick_temp_bas,
-                    buffer=buffer,
-                    proj=proj,
-                )
-
-                time_dim = "mid_date" if not self.is_TICO else "second_date"
-
-                # Rechunk again if the size of the cube is changed:
-                if any(x is not None for x in [pick_date, subset, buffer, pick_sensor, pick_temp_bas]):
-                    tc, yc, xc = self.determine_optimal_chunk_size(
-                        variable_name=var_name, x_dim="x", y_dim="y", time_dim=time_dim, verbose=verbose
+                    print(
+                        "[Data loading] Warning: Auto-chunking failed (possibly due to object dtype). "
+                        "Falling back to no chunks during initial load."
                     )
-                    self.ds = self.ds.chunk({time_dim: tc, "x": xc, "y": yc})
+                self.ds = xr.open_dataset(filepath, chunks={})
+        elif ext == "zarr":
+            self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
+        else:
+            raise ValueError(f"File extension {ext} not recognized, only .nc and .zarr are supported.")
 
-                # Reorder the coordinates to keep the consistency
-                self.ds = self.ds.copy().sortby(time_dim).transpose("x", "y", time_dim)
-                self.standardize_cube_for_processing(time_dim)
+        if "Author" in self.ds.attrs:
+            self.ds.attrs["author"] = self.ds.attrs.pop("Author")
 
-                if mask is not None:
-                    self.mask_cube(mask)
+        self.filedir = os.path.dirname(filepath)
+        self.filename = os.path.basename(filepath)
 
-                if self.ds.rio.crs is None:
-                    self.ds.rio.write_crs(self.ds.proj4)
+        # get standardized data
+        author = self.ds.attrs.get("author", "Unknown")
+        loader = self._loader_registry.get(author, self._loader_generic)
+        if isinstance(loader, str):
+            loader = getattr(self, loader)
+        if verbose:
+            print(
+                f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
+            )
+        standard_data = loader(conf)
 
-                if verbose:
-                    print(f"[Data loading] Author : {self.ds.author}")
+        # keep only certain variable and attributes
+        variables_to_keep = ["vx", "vy", "mid_date", "x", "y", "date1", "date2"]
+        self.ds = self.ds.drop_vars([var for var in self.ds.variables if var not in variables_to_keep])
+        attributes_to_keep = ["author", "source", "date_created", "proj4", "mapping"]
+        self.ds.attrs = {k: v for k, v in self.ds.attrs.items() if k in attributes_to_keep}
+
+        # construct cubedataclass from standardized data
+        self._add_standardized_variable(standard_data)
+
+        # apply subsetting and filtering
+        if verbose:
+            print("[Data loading] Applying data selection...")
+        if subset is not None or buffer is not None:
+            self._apply_data_subset_in_space(proj, subset, buffer)
+        if pick_date is not None or pick_sensor is not None or pick_temp_bas is not None:
+            self._apply_data_selection(pick_date, pick_sensor, pick_temp_bas)
+        elif subset is None and buffer is None:
+            self.update_dimension()
+
+        if mask:
+            if verbose:
+                print("[Data loading] Masking cube...")
+            self.mask_cube(mask)
+
+        if verbose:
+            print("[Data loading] Computing optimal chunk size...")
+        tc, yc, xc = self.determine_optimal_chunk_size(verbose=verbose)
+        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
+
+        self.ds = self.ds.sortby("mid_date")
+        self.standardize_cube_for_processing()
+
+        if self.ds.rio.crs is None and "proj4" in self.ds.attrs:
+            self.ds = self.ds.rio.write_crs(self.ds.attrs["proj4"])
+
+        if verbose:
+            print("[Data loading] Cube loaded successfully.")
 
     def standardize_cube_for_processing(self, time_dim="mid_date"):
         """
-        Prepare the xarray dataset for the processing: transpose the dimension, add a variable temporal_baseline, errors if they do not exist
+        Prepare the xarray dataset for the processing: add a variable temporal_baseline, errors if they do not exist
 
         :param time_dim_name: [str] [default is 'mid_date'] --- Name of the z dimension within the original dataset self.ds
         """
@@ -892,9 +710,6 @@ class CubeDataClass:
             if "errorx" not in self.ds.variables:
                 self.ds["errorx"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
                 self.ds["errory"] = ("mid_date", np.ones(len(self.ds["mid_date"])))
-
-        if self.ds.rio.write_crs:
-            self.ds = self.ds.rio.write_crs(self.ds.proj4)  # add the crs to the xarray dataset if missing
 
     def prepare_interpolation_date(
         self,
@@ -1042,7 +857,7 @@ class CubeDataClass:
         coef: int = 100,
         flag: xr.Dataset | None = None,
         solver: str = "LSMR_ini",
-        interp: str = "nearest",
+        interp: MethodInterp = "nearest",
         proj: str = "EPSG:4326",
         rolling_mean: xr.Dataset | None = None,
         visual: bool = False,
@@ -1054,7 +869,7 @@ class CubeDataClass:
         :params i, j: [int | float] --- Coordinates to be converted
         :param unit: [int] [default is 365] --- 1 for m/d, 365 for m/y
         :param regu: [int | str] [default is '1accelnotnull'] --- Type of regularization
-        :param coef: [int] [default is 100] --- Coef of Tikhonov regularization
+        :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         :param solver: [str] [default is 'LSMR_ini'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
@@ -1066,8 +881,8 @@ class CubeDataClass:
         :return data: [list | None] --- A list 2 elements : the first one is np.ndarray with the observed
         :return mean: [list | None] --- A list with average vx and vy if solver=LSMR_ini, but the regularization do not require an apriori on the acceleration
         :return dates_range: [list | None] --- Dates between which the displacements will be inverted
-        :return regu: [np array | Nothing] --- If flag is not None, regularization method to be used for each pixel
-        :return coef: [np array | Nothing] --- If flag is not None, regularization coefficient to be used for each pixel
+        :return regu: [np array | Nothing] --- If flag is not None, regularisation method to be used for each pixel
+        :return coef: [np array | Nothing] --- If flag is not None, regularisation coefficient to be used for each pixel
         """
 
         # Variables to keep
@@ -1086,9 +901,7 @@ class CubeDataClass:
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
                 data = data.dropna(dim="mid_date")
             else:
-                data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(
-                    dim="mid_date"
-                )  # 282 ms ± 12.1 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+                data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(dim="mid_date")
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
@@ -1158,7 +971,7 @@ class CubeDataClass:
         Delete outliers according to a certain criterium.
 
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
-        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for static areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         """
 
         if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
@@ -1173,8 +986,6 @@ class CubeDataClass:
                     self.ds["vx"],
                     self.ds["vy"],
                     filt_method=delete_outliers,
-                    slope=slope,
-                    aspect=aspect,
                     direction=direction,
                     axis=axis,
                     **kwargs,
@@ -1245,43 +1056,23 @@ class CubeDataClass:
         else:
             raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
 
-    def mask_cube(self, mask: xr.DataArray | str):
+    def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
         Mask some of the data of the cube (putting it to np.nan).
 
-        :param mask: [str | xr dataarray] --- Either a DataArray with 1 the data to keep and 0 the ones to remove, or a path to a file containing a DataArray or a shapefile to be rasterized
+        :param mask: [str | gpd.GeoDataFrame] --- Either a geopandas GeoDataFrame, or a path to a file containing a shapefile or geopackage
+        :param invert: [bool] --- Invert the mask, If invert=False (default): The dataset is clipped inside the geometry — data outside the polygon becomes NaN.
         """
 
-        if type(mask) is str:
-            if (
-                mask[-3:] == "shp" or mask[-4:] == "gpkg"
-            ):  # Convert the shp file or geopackage to an xarray dataset (rasterize the shapefile)
-                polygon = geopandas.read_file(mask).to_crs(CRS(self.ds.proj4))
-                raster = rasterize(
-                    [polygon.geometry[0]],
-                    out_shape=self.ds.rio.shape,
-                    transform=self.ds.rio.transform(),
-                    fill=0,
-                    dtype="int16",
-                )
-                mask = xr.DataArray(data=raster.T, dims=["x", "y"], coords=self.ds[["x", "y"]].coords)
-            else:
-                mask = xr.open_dataarray(mask)
-            mask.load()
+        if isinstance(mask, str):
+            mask = gpd.read_file(mask)  # open the mask if it is an str objetc
 
-        # Mask the velocities and the errors
-        if not self.is_TICO:
-            self.ds[["vx", "vy", "errorx", "errory"]] = (
-                self.ds[["vx", "vy", "errorx", "errory"]]
-                .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
-                .astype("float32")
-            )
-        else:
-            self.ds[["dx", "dy", "xcount_x", "xcount_y"]] = (
-                self.ds[["dx", "dy", "xcount_x", "xcount_y"]]
-                .where(mask.sel(x=self.ds.x, y=self.ds.y, method="nearest") == 1)
-                .astype("float32")
-            )
+        if self.ds.rio.crs != mask.crs:
+            mask = mask.to_crs(self.ds.rio.crs)  # reproject the mask if needed
+
+        self.ds = self.ds.rio.clip(mask.geometry, mask.crs, drop=False, all_touched=True, invert=invert)
+
+        return self.ds
 
     def reproject_geotiff_to_cube(self, file_path):
         """
@@ -1360,7 +1151,7 @@ class CubeDataClass:
             elif flag.split(".")[-1] in ["shp", "gpkg"]:  # If flag is a shape file
                 flag = geopandas.read_file(flag).to_crs(self.ds.proj4).clip(self.ds.rio.bounds())
 
-                # surge-type glacier: 2, other glacier: 1, static area: 0
+                # surge-type glacier: 2, other glacier: 1, stable area: 0
                 if field_name is None:
                     if "surge_type" in flag.columns:  # RGI inventory, surge-type glacier: 2, other glacier: 0
                         default_value = 0
@@ -1427,7 +1218,7 @@ class CubeDataClass:
         velo_or_disp: str = "velo",
         select_baseline: int | None = 180,
         verbose: bool = False,
-    ) -> xr.Dataset | None:
+    ) -> xr.Dataset:
         """
            Filter the original data before the inversion:
         -delete outliers according to the provided criterion
@@ -1442,7 +1233,7 @@ class CubeDataClass:
         :param order: [int] [default is 3] --- Order of the smoothing function
         :param unit: [int] [default is 365] --- 365 if the unit is m/y, 1 if the unit is m/d
         :param delete_outliers: [str | float | None] [default is None] --- If float delete all velocities which a quality indicator higher than delete_outliers
-        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for static areas, surge glacier and non surge glacier
+        :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         :param regu: [int | str] [default is "1accelnotnull"] --- Regularisation of the solver
         :param solver: [str] [default is 'LSMR_ini'] --- Solver used to invert the system
         :param proj: [str] [default is 'EPSG:4326'] --- EPSG of i,j projection
@@ -1453,9 +1244,7 @@ class CubeDataClass:
         :return obs_filt: [xr dataset | None] --- Filtered dataset
         """
 
-        def loop_rolling(
-            da_arr: xr.Dataset | xr.DataArray, select_baseline: int | None = 180
-        ) -> (np.ndarray, np.ndarray):  # type: ignore
+        def loop_rolling(da_arr: xr.Dataset, select_baseline: int | None = 180) -> (np.ndarray, np.ndarray):  # type: ignore
             """
             A function to calculate spatial mean, resample data, and calculate smoothed velocity.
 
@@ -1544,7 +1333,7 @@ class CubeDataClass:
             self.ds["vx"] = self.ds["vx"] / self.ds["temporal_baseline"] * unit
             self.ds["vy"] = self.ds["vy"] / self.ds["temporal_baseline"] * unit
 
-        if flag is not None:  # create a flag, to identify static,areas, and eventually surges
+        if flag is not None:  # create a flag, to identify stable,areas, and eventually surges
             flag = self.create_flag(flag)
             flag.load()
 
@@ -1604,7 +1393,7 @@ class CubeDataClass:
             # We obtain one smoothed value for each unique date in date_range
             obs_filt = xr.Dataset(
                 data_vars=dict(
-                    vx_filt=(["x", "y", "mid_date"], vx_filtered), vy_filt=(["x", "y", "mid_date"], vy_filtered)
+                    vx_filt=(["mid_date", "y", "x"], vx_filtered), vy_filt=(["mid_date", "y", "x"], vy_filtered)
                 ),
                 coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data), mid_date=dates_uniq),
                 attrs=dict(description="Smoothed velocity observations", units="m/y", proj4=self.ds.proj4),
@@ -1711,7 +1500,8 @@ class CubeDataClass:
         if cube_to_match is not None:
             cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
         self.ds = self.ds.rio.write_crs(self.ds.proj4)
-        self.ds = self.ds.transpose("mid_date", "y", "x")
+        if tuple(self.ds.dims) != ("mid_date", "y", "x"):
+            self.ds = self.ds.transpose("mid_date", "y", "x")
 
         # Reproject coordinates
         if cube_to_match is not None:
@@ -1868,7 +1658,7 @@ class CubeDataClass:
                 _, unique_x = np.unique(self.ds.x.values, return_index=True)
                 self.ds = self.ds.isel(x=np.sort(unique_x))
 
-        # 检查待合并立方体是否有重复坐标
+        # Check if the cube to be merged has duplicate coordinates
         if cube.ds.y.to_pandas().duplicated().any() or cube.ds.x.to_pandas().duplicated().any():
             print("Warning: Cube to merge has duplicate coordinates, removing...")
             if cube.ds.y.to_pandas().duplicated().any():
