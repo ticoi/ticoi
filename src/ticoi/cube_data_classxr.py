@@ -986,8 +986,6 @@ class CubeDataClass:
                     self.ds["vx"],
                     self.ds["vy"],
                     filt_method=delete_outliers,
-                    slope=slope,
-                    aspect=aspect,
                     direction=direction,
                     axis=axis,
                     **kwargs,
