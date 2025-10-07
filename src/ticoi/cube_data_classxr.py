@@ -141,15 +141,18 @@ class CubeDataClass:
         if len(self.ds["x"].values) == 0 and len(self.ds["y"].values) == 0:
             print(f"[Data loading] The given subset is not part of cube {self.filename}")
 
-    def buffer(self, proj: str, buffer: list):
+    def buffer(self, proj: str, buffer: list[float | int, float | int, float | int, float | int]):
         """
-        Crop the dataset around a given pixel, the amount of surroundings pixels kept is given by the buffer.
+        Crop the dataset around a given pixel, the amount of surrounding pixels kept is provided by the buffer.
+        The pixel and buffer values could be given in pixel position (integer numbers), or as coordinates with a projection proj.
 
         :param proj: [str] --- EPSG system of the coordinates given in subset
-        :param buffer:  [list] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
+        :param buffer:  [list] --- A list of 3 float, the first two are the longitude and the latitude of the central point, or the pixel position, the last is the buffer size
         """
 
-        if CRS(self.ds.proj4) != CRS(proj):  # Convert the coordinates from proj to self.ds.proj4
+        if isinstance(buffer[0], float) and CRS(self.ds.proj4) != CRS(
+            proj
+        ):  # Convert the coordinates from proj to self.ds.proj4
             transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
             i1, j1 = transformer.transform(buffer[1] + buffer[2], buffer[0] - buffer[2])
             i2, j2 = transformer.transform(buffer[1] - buffer[2], buffer[0] + buffer[2])
@@ -163,9 +166,14 @@ class CubeDataClass:
         else:
             i1, j1 = buffer[0] - buffer[2], buffer[1] + buffer[2]
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
-            self.ds = self.ds.sel(
-                x=slice(np.min([i1, i2]), np.max([i1, i2])), y=slice(np.max([j1, j2]), np.min([j1, j2]))
-            )
+            if isinstance(buffer[0], float):  # i, j correspond to coordinates
+                self.ds = self.ds.sel(
+                    x=slice(np.min([i1, i2]), np.max([i1, i2])), y=slice(np.max([j1, j2]), np.min([j1, j2]))
+                )
+            else:  # i,j correspond to pixel position, not coordinates
+                self.ds = self.ds.isel(
+                    x=slice(np.min([i1, i2]), np.max([i1, i2])), y=slice(np.min([j1, j2]), np.max([j1, j2]))
+                )
             del i1, i2, j1, j2, buffer
 
         if len(self.ds["x"].values) == 0 and len(self.ds["y"].values) == 0:
@@ -892,7 +900,7 @@ class CubeDataClass:
             else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
         )
 
-        if proj == "int":
+        if isinstance(i, int):
             data = self.ds.isel(x=i, y=j)[var_to_keep]
         else:
             i, j = self.convert_coordinates(i, j, proj=proj)  # convert the coordinates to the projection of the cube
@@ -1265,9 +1273,10 @@ class CubeDataClass:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(baseline < select_baseline)
                 while (
-                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 200)
+                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 500)
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
+                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
