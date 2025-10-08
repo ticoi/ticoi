@@ -73,11 +73,11 @@ mamba activate ticoi_env  # Or any other name specified above
 
 ### Advanced examples
 
-* [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/Demo_for_different_datasets/cube_ticoi_demo_its_live.py)
+* [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/demo_for_different_datasets/cube_ticoi_demo_its_live.py)
 * [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
-* [How to apply GLAFT on TICOI results](examples/advanced/Quality_metrics/glaft_for_ticoi_results.py)
-* [How to compute statistics in static areas](examples/advanced/Quality_metrics/stats_in_static_areas.py)
-* [How to process one IGE cube](examples/advanced/Demo_for_different_datasets/cube_ticoi_demo_IGE_S2.py)
+* [How to apply GLAFT on TICOI results](examples/advanced/quality_metrics/glaft_for_ticoi_results.py)
+* [How to compute statistics in static areas](examples/advanced/quality_metrics/stats_in_static_areas.py)
+* [How to process one IGE cube](examples/advanced/demo_for_different_datasets/cube_ticoi_demo_IGE_S2.py)
 
 ## TO USE YOUR OWN DATASET
 

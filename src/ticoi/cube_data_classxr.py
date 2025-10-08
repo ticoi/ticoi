@@ -486,7 +486,7 @@ class CubeDataClass:
         if conf:
             errorx_1d = self._normalize_error_to_confidence(errorx_1d)
             errory_1d = self._normalize_error_to_confidence(errory_1d)
-        ny, nx = self.ds.dims["y"], self.ds.dims["x"]
+        ny, nx = self.ds.sizes["y"], self.ds.sizes["x"]
         errorx = np.tile(errorx_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         errory = np.tile(errory_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         # standardize date format
