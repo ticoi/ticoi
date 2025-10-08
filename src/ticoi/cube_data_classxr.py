@@ -9,7 +9,6 @@ Reference:
     ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
 """
 
-import itertools
 import os
 import time
 import warnings
@@ -29,7 +28,6 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
-from tqdm import tqdm
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
@@ -39,6 +37,8 @@ from typing import Literal
 
 MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
 ReturnAs = Literal["dataframe", "cube"]
+Regu = Literal["1accelnotnull", "1", "2", "directionxy"]
+Solver = Literal["LSMR", "LSMR_ini", "LSQR", "LS", "L1"]
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -861,10 +861,10 @@ class CubeDataClass:
         i: int | float,
         j: int | float,
         unit: int = 365,
-        regu: int | str = "1accelnotnull",
+        regu: Regu = "1accelnotnull",
         coef: int = 100,
         flag: xr.Dataset | None = None,
-        solver: str = "LSMR_ini",
+        solver: Solver = "LSMR",
         interp: MethodInterp = "nearest",
         proj: str = "EPSG:4326",
         rolling_mean: xr.Dataset | None = None,
@@ -879,7 +879,7 @@ class CubeDataClass:
         :param regu: [int | str] [default is '1accelnotnull'] --- Type of regularization
         :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        :param solver: [str] [default is 'LSMR_ini'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
+        :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
@@ -907,9 +907,10 @@ class CubeDataClass:
             # Interpolate only necessary variables and drop NaN values
             if interp == "nearest":
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
-                data = data.dropna(dim="mid_date")
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(dim="mid_date")
+
+        data = data.dropna(dim="mid_date")  # drop nan values
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
@@ -1852,38 +1853,33 @@ class CubeDataClass:
 
         return line_df_vv
 
-    # @jit(nopython=True)
-    def nvvc(self, nb_cpu=8, verbose=True):
+    def vvc(self, verbose=True):
         """
-        Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
-
+        Compute the Velocity Vector Coherence (VVC) for every pixel of the cube.
         """
 
-        def ncvv_pixel(cube, i, j):
-            return (
-                np.sqrt(
-                    np.nansum(
-                        cube.ds["vx"].isel(x=i, y=j)
-                        / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
-                    )
-                    ** 2
-                    + np.nansum(
-                        cube.ds["vy"].isel(x=i, y=j)
-                        / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
-                    )
-                    ** 2
-                )
-                / cube.nz
-            )
+        vx = self.ds["vx"].values  # shape (nz, nx, ny)
+        vy = self.ds["vy"].values
 
-        xy_values = itertools.product(range(self.nx), range(self.ny))
-        xy_values_tqdm = tqdm(xy_values, total=self.nx * self.ny, mininterval=0.5)
+        # Compute magnitude (avoid division by zero)
+        mag = np.sqrt(vx**2 + vy**2)
+        mag[mag == 0] = np.nan
 
-        return np.array(
-            Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(ncvv_pixel)(self, i, j) for i, j in (xy_values_tqdm if verbose else xy_values)
-            )
-        ).reshape(self.nx, self.ny)
+        # Normalize velocity components
+        vx_n = vx / mag
+        vy_n = vy / mag
+
+        # Compute sums along z-axis (time or depth)
+        sum_vx = np.nansum(vx_n, axis=0)
+        sum_vy = np.nansum(vy_n, axis=0)
+
+        # Compute VVC
+        vvc = np.sqrt(sum_vx**2 + sum_vy**2) / self.nz
+
+        if verbose:
+            print(f"Computed NCVV for {self.nx}×{self.ny} pixels")
+
+        return vvc
 
     def compute_med_static_areas(
         self,
