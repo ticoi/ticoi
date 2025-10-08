@@ -1,4 +1,14 @@
-"""Utility functions to download and find example data."""
+"""Utility functions to download and find example data.
+
+Authors : Laurane Charrier, Lei Guo, Nathan Lioret
+The package is based on the methodological developments published in:
+- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
+  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+
+- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
+  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
+  60, 1-10.
+"""
 
 import os
 import shutil

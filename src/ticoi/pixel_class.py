@@ -1,3 +1,14 @@
+"""
+Authors : Laurane Charrier, Lei Guo, Nathan Lioret
+The package is based on the methodological developments published in:
+- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
+  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+
+- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
+  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
+  60, 1-10.
+"""
+
 import copy
 from typing import List
 
@@ -13,6 +24,12 @@ import scipy.signal as signal
 import seaborn as sns
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error
+
+from typing import Literal
+
+
+TypeData = Literal["invert", "interp", "obs"]
+Filter = Literal["lowpass", "highpass"]
 
 # %%========================================================================= #
 #                           DATAFRAME_DATA OBJECT                             #
@@ -38,11 +55,10 @@ class DataframeData:
             self.dataf["temporal_baseline"] = np.array([delta[i].days for i in range(delta.shape[0])])
         self.dataf["offset_bar"] = delta // 2  # to plot the temporal baseline of the plots
 
-    def set_vx_vy_invert(self, type_data: str = "invert", conversion: int = 365):
+    def set_vx_vy_invert(self, conversion: int = 365):
         """
         Convert displacements into velocity
 
-        :param type_data: [str] [default is "invert"] --- Type of the data to be converted to velocities (generally "invert" or "obs_filt")
         :param conversion: [int] [default is 365] --- Conversion factor: 365 is the unit of the velocity is m/y and 1 if it is m/d
         """
 
@@ -51,7 +67,7 @@ class DataframeData:
         self.dataf["vx"] = self.dataf["vx"] / self.dataf["temporal_baseline"] * conversion
         self.dataf["vy"] = self.dataf["vy"] / self.dataf["temporal_baseline"] * conversion
 
-    def set_vx_vy_my(self, type_data: str = "obs_filt", conversion: int = 365):
+    def set_vx_vy_my(self, conversion: int = 365):
         if "result_dx" in self.dataf.columns:
             self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
         self.dataf["vx"] = self.dataf["vx"] * conversion
@@ -118,7 +134,11 @@ class PixelClass:
         self.A = A
 
     def set_data_from_pandas_df(
-        self, dataf_ilf: pd.DataFrame, type_data: str = "invert", conversion: int = 365, variables: List[str] = ["vv"]
+        self,
+        dataf_ilf: pd.DataFrame,
+        type_data: TypeData = "invert",
+        conversion: int = 365,
+        variables: List[str] = ["vv"],
     ):
         """
         Set the data as a pandas DataFrame (using methods from the dataframe_data object).
@@ -149,9 +169,9 @@ class PixelClass:
 
         datatemp.set_temporal_baseline_central_date_offset_bar()  # Set the temporal baseline,
         if type_data == "invert":
-            datatemp.set_vx_vy_invert(type_data=type_data, conversion=conversion)  # Convert displacement in vx and vy
+            datatemp.set_vx_vy_invert(conversion=conversion)  # Convert displacement in vx and vy
         elif type_data == "obs_filt":
-            datatemp.set_vx_vy_my(type_data=type_data, conversion=conversion)
+            datatemp.set_vx_vy_my(conversion=conversion)
         if "vv" in variables:
             datatemp.set_vv()  # set velocity magnitude
         datatemp.set_minmax()  # set min and max, for figures plots
@@ -159,8 +179,7 @@ class PixelClass:
     def load(
         self,
         dataf: pd.DataFrame | List[pd.DataFrame],
-        type_data: str = "obs",
-        dataformat: str = "df",
+        type_data: TypeData | list = "obs",
         save: bool = False,
         show: bool = False,
         figsize: tuple[int, int] = (10, 6),
@@ -174,8 +193,7 @@ class PixelClass:
         Initialize the object with general plotting parameters.
 
         :param dataf: [pd.DataFrame | List[pd.DataFrame]] --- observations orresults from the inversion
-        :param type_data: [str] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
-        :param dataformat: [str] [default is 'df'] --- id 'df' dataf is a pd.DataFrame
+        :param type_data: [TypeData | list ] [default is 'obs'] --- of 'obs' dataf corresponds to obsevations, if 'invert', it corresponds to inverted velocity
         :param save: [bool] [default is False]  --- if True, save the figures
         :param show: [bool] [default is True]  --- if True, show the figures
         :param figsize: tuple[int, int]  --- size of the figure
@@ -188,37 +206,41 @@ class PixelClass:
 
         self.__init__(save=save, show=show, figsize=figsize, unit=unit, path_save=path_save, A=A)
 
-        conversion = self.get_conversion()  # Conversion factor
+        conversion = self.get_conversion()  # Conversion factor for the units
         if isinstance(dataf, list) and len(dataf) > 1:
             assert isinstance(type_data, list) and (len(dataf) == len(type_data)), (
                 "If 'dataf' is a list, 'type_data' must be a list of the same length"
             )
 
             for i in range(len(dataf)):
-                if dataformat == "df":
-                    self.set_data_from_pandas_df(
-                        dataf[i], type_data=type_data[i], conversion=conversion, variables=variables
-                    )
+                self.set_data_from_pandas_df(
+                    dataf[i], type_data=type_data[i], conversion=conversion, variables=variables
+                )
         elif (isinstance(dataf, list) and len(dataf) == 1) or isinstance(dataf, pd.DataFrame):
             assert (isinstance(type_data, list) and len(type_data) == 1) or isinstance(type_data, str), (
                 "If 'dataf' is a dataframe or list of a single dataframe, 'type_data' must either be a list of a single string element, or a string"
             )
 
-            if dataformat == "df":
-                self.set_data_from_pandas_df(
-                    dataf[0] if isinstance(dataf, list) else dataf,
-                    type_data=type_data[0] if isinstance(type_data, list) else type_data,
-                    conversion=conversion,
-                    variables=variables,
-                )
+            self.set_data_from_pandas_df(
+                dataf[0] if isinstance(dataf, list) else dataf,
+                type_data=type_data[0] if isinstance(type_data, list) else type_data,
+                conversion=conversion,
+                variables=variables,
+            )
         else:
             raise ValueError(f"'dataf' must be a list or a pandas dataframe, not {type(dataf)}")
 
-    def get_dataf_invert_or_obs_or_interp(self, type_data: str = "obs") -> (pd.DataFrame, str):  # type: ignore
+    def set_cumulative_displacement(self, data: "PixelClass.DataframeData", variable):
+        conversion = self.get_conversion()
+        disp = data[variable] * self.datainvert.dataf["temporal_baseline"] / conversion
+        data[f"disp_{variable}"] = np.cumsum(disp)
+        return data
+
+    def get_dataf_invert_or_obs_or_interp(self, type_data: TypeData = "obs") -> (pd.DataFrame, str):  # type: ignore
         """
         Get dataframe either obs or invert
 
-        :param type_data: [str] [default is 'obs'] --- If 'obs', dataf corresponds to obsevations. If 'invert', it corresponds to the inverted velocities
+        :param type_data: [str] [default is 'obs'] --- If 'obs', dataf corresponds to obsevations. If 'invert', it corresponds to the inverted velocities. It 'interp' it corresponds to interpolated velocities.
 
         :return [pd.DataFrame] --- Dataframe from obs, invert or interp
         :return [str] --- Label used in the legend of the figures
@@ -276,7 +298,7 @@ class PixelClass:
         directionm_mean *= 360 / (2 * np.pi)
         return directionm, directionm_mean
 
-    def get_filtered_results(self, filt: str | None = None):
+    def get_filtered_results(self, filt: Filter | None = None) -> (np.array, np.array, np.array):
         """
         Filter TICOI results using a given filter.
 
@@ -361,7 +383,7 @@ class PixelClass:
 
     def get_best_matching_sinus(
         self,
-        filt: str | None = None,
+        filt: Filter | None = None,
         impose_frequency: bool = True,
         raw_seasonality: bool = False,
         several_freq: int = 1,
@@ -669,10 +691,10 @@ class PixelClass:
             fig, ax = plt.subplots(figsize=self.figsize)
         else:
             fig = plt.gcf()
-        if vminmax is None:
-            ax.set_ylim(data.vvymin, data.vvymax)
-        else:
+
+        if vminmax is not None and vminmax != [False, False]:
             ax.set_ylim(vminmax[0], vminmax[1])
+
         ax.set_ylabel(f"Velocity magnitude  [{self.unit}]", fontsize=14)
         ax.plot(
             data.dataf["date_cori"],
@@ -742,13 +764,17 @@ class PixelClass:
         save = copy.copy(self.save)
         self.show, self.save = False, False
         if ax is None:
-            fig, ax = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)
+            fig, ax = self.plot_vv(color=colors[0], type_data="obs")
         else:
-            fig, ax = self.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax, ax=ax)
+            fig, ax = self.plot_vv(color=colors[0], type_data="obs", ax=ax)
         self.show, self.save = show, save
 
         if zoom_on_results:
             ax.set_ylim(data.vvymin, data.vvymax)
+
+        elif vminmax is not None or vminmax != [False, False]:
+            ax.set_ylim(vminmax[0], vminmax[1])
+
         ax.plot(
             data.dataf["date_cori"],
             data.dataf["vv"],
@@ -756,7 +782,7 @@ class PixelClass:
             zorder=1,
             marker="o",
             lw=0.7,
-            markersize=2,
+            markersize=4,
             color=colors[1],
             label="Results from the inversion",
         )
@@ -904,7 +930,7 @@ class PixelClass:
             fig, ax = plt.subplots(figsize=self.figsize)
         else:
             fig = plt.gcf()
-        ax.plot(data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=2, color=color, label=label)
+        ax.plot(data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=4, color=color, label=label)
         if plot_mean:
             ax.hlines(
                 directionm_mean,
@@ -959,7 +985,7 @@ class PixelClass:
         directionm, directionm_mean = self.get_direction(data)
 
         ax.plot(
-            data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=2, color=colors[1], label=label
+            data.dataf["date_cori"], directionm, linestyle="", marker="o", markersize=5, color=colors[1], label=label
         )
         ax.set_ylim(0, 360)
         ax.set_ylabel("Direction [°]", fontsize=14)
@@ -980,7 +1006,7 @@ class PixelClass:
 
         return fig, ax
 
-    def plot_quality_metrics(self, color: str = "orange", ax: Axes | None = None):
+    def plot_quality_metrics(self, color: str = "orange", ax: Axes | None = None, vminmax: list | None = None):
         """
         Plot quality metrics on top of velocity magnitude. It can be the number of observations used for each estimation, and/or the confidence intervals.
         :param color: [str] [default is 'orange'] --- Color used for the plot
@@ -1005,10 +1031,10 @@ class PixelClass:
             data["confidence_y"] = data["sigma0"].iloc[3] * data["error_y"]
             data["confidence_v"] = np.nanmean(data["sigma0"].iloc[2:4]) * data["error_v"]
 
-        if "xcount_x" in data.columns:
+        if "xcount_x" in data.columns:  # create the norm to plot x_count
             xcount_mean = np.nanmean([data["xcount_x"], data["xcount_y"]], axis=0)
             max_xcount = int(np.nanmax(xcount_mean))
-            base_bounds = [0, 100, 200, 500, 1000, 2000, 5000, 10000]
+            base_bounds = [0, 10, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
             bounds = sorted(set([b for b in base_bounds if b <= max_xcount] + [max_xcount]))
             cmap_full = plt.get_cmap("Blues", len(bounds) + 1)
             colors = [cmap_full(i) for i in range(2, cmap_full.N)]
@@ -1042,9 +1068,10 @@ class PixelClass:
             )
             # Create custom legend entries for confidence interval
             conf_legend = malines.Line2D([], [], color="#7292fd", alpha=0.7, lw=8, label="95% confidence interval")
-            if "xcount_x" in data.columns:
-                plt.subplots_adjust(bottom=-0.01)
-            # Add the legends for confidence interval and GPS
+            # if "xcount_x" in data.columns:
+            #     plt.subplots_adjust(bottom=1)
+
+            # Add the legends for confidence interval
             ax.legend(
                 [conf_legend],
                 ["95% Confidence Interval"],
@@ -1056,12 +1083,15 @@ class PixelClass:
                 frameon=False,
             )
 
+        if vminmax is not None and vminmax != [False, False]:
+            ax.set_ylim(vminmax[0], vminmax[1])
+
         if "xcount_x" in data.columns:
             scat = ax.scatter(
                 data["date_cori"], data["vv"], c=xcount_mean, cmap=cmap, norm=norm, s=15, edgecolor=".3", linewidth=0.3
             )
             # Add the colorbar for xcount
-            cax = ax.inset_axes([0.03, 0.8, 0.45, 0.03])  # [left, bottom, width, height]
+            cax = ax.inset_axes((0.03, 0.8, 0.45, 0.03))  # [left, bottom, width, height]
             cbar = fig.colorbar(scat, cax=cax, boundaries=bounds, orientation="horizontal", pad=0.1)
             cbar.set_label("Number of image-pair velocities used", fontsize=10)
             cbar.ax.xaxis.set_ticklabels([f"{b}" for b in bounds], fontsize=8)
@@ -1085,7 +1115,7 @@ class PixelClass:
         """
         Plot the observation contribution to the inversion on top of velocities x and y components.
 
-        :param cmap: [str] [default is 'rainbow] --- Color map used to mark the xcount values in the plots.
+        :param cmap: [str] [default is 'viridis] --- Color map used to mark the xcount values in the plots.
         :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
 
         :return fig, ax: Axis and Figure of the plot
@@ -1130,6 +1160,74 @@ class PixelClass:
             plt.show(block=block_plot)
         if self.save:
             fig.savefig(f"{self.path_save}/X_dates_contribution_vx_vy.png")
+
+        return fig, ax
+
+    def plot_cumulative_vv(
+        self, cmap: str = "viridis", block_plot: bool = True, ax: Axes | None = None, vminmax: list | None = None
+    ):
+        """
+        Plot the observation contribution to the inversion on top of the velocity magnitude.
+
+        :param cmap: [str] [default is 'rainbow''] --- Color map used in the plots
+        :param block_plot: [bool] [default is True] --- If True, the plot persists on the screen until the user manually closes it. If False, it disappears instantly after plotting.
+
+        :return fig, ax: Axis and Figure of the plot
+        """
+
+        assert self.datainvert is not None, (
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+        )
+
+        dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="invert")
+        data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values
+
+        data["disp_vv"] = np.cumsum(data["vv"] * data["temporal_baseline"] / 365)
+
+        if "xcount_x" in data.columns:  # create the norm to plot x_count
+            xcount_mean = np.nanmean([data["xcount_x"], data["xcount_y"]], axis=0)
+            max_xcount = int(np.nanmax(xcount_mean))
+            base_bounds = [0, 5, 10, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
+            bounds = sorted(set([b for b in base_bounds if b <= max_xcount] + [max_xcount]))
+            cmap_full = plt.get_cmap("Blues", len(bounds) + 1)
+            colors = [cmap_full(i) for i in range(2, cmap_full.N)]
+            cmap = mcolors.ListedColormap(colors)
+            norm = mcolors.BoundaryNorm(bounds, cmap.N)
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize)
+        else:
+            fig = plt.gcf()
+        ax.set_ylabel("Cumulative displacement magnitude [m]", fontsize=14)
+        ax.set_xlabel("Central dates", fontsize=14)
+
+        if vminmax is not None and vminmax != [False, False]:
+            ax.set_ylim(vminmax[0], vminmax[1])
+
+        if "xcount_x" in data.columns:
+            scat = ax.scatter(
+                data["date2"], data["disp_vv"], c=xcount_mean, cmap=cmap, norm=norm, s=25, edgecolor=".3", linewidth=0.3
+            )
+            # Add the colorbar for xcount
+            cbar = fig.colorbar(scat, ax=ax, boundaries=bounds, orientation="vertical", pad=0.1)
+            cbar.set_label("Number of image-pair velocities used", fontsize=10)
+            # Set ticks and labels properly
+            cbar.set_ticks(bounds)
+            cbar.set_ticklabels([f"{b}" for b in bounds])
+            cbar.ax.tick_params(labelsize=8)
+        else:
+            scat = ax.scatter(
+                data["date2"],
+                data["disp_vv"],
+                c=(self.datainvert.dataf["xcount_x"] + self.datainvert.dataf["xcount_y"]) / 2,
+                s=8,
+                cmap=cmap,
+            )
+
+        if self.show:
+            plt.show(block=block_plot)
+        if self.save:
+            fig.savefig(f"{self.path_save}/cumulative_disp_vv.png")
 
         return fig, ax
 
