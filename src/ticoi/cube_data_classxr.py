@@ -28,6 +28,7 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
+import matplotlib.pyplot as plt
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
@@ -1853,7 +1854,7 @@ class CubeDataClass:
 
         return line_df_vv
 
-    def vvc(self, verbose=True):
+    def compute_vvc(self):
         """
         Compute the Velocity Vector Coherence (VVC) for every pixel of the cube.
         """
@@ -1876,10 +1877,86 @@ class CubeDataClass:
         # Compute VVC
         vvc = np.sqrt(sum_vx**2 + sum_vy**2) / self.nz
 
-        if verbose:
-            print(f"Computed NCVV for {self.nx}×{self.ny} pixels")
-
         return vvc
+
+    def get_lonlat_grid(self, output_CRS: int = 4326) -> (np.array, np.array):
+        """
+        Build 2D longitude and latitude grids for an xarray Dataset in given output CRS
+        that has 1D x/y coordinates and a CRS stored in ds.rio.crs.
+
+        Works even if the current CRS is projected (UTM, Lambert, etc.).
+
+        :param output_CRS: number of the EPSG projection system of the output grid
+        :return: longitude, latitude grid
+        """
+
+        # --- 1. Extract coordinates ---
+        x = self.ds.coords["x"].values  # 1D array of x (e.g., eastings)
+        y = self.ds.coords["y"].values  # 1D array of y (e.g., northings)
+
+        # --- 2. Build meshgrid ---
+        X2D, Y2D = np.meshgrid(x, y, indexing="xy")
+
+        # --- 3. Get CRS info ---
+        if not hasattr(self.ds, "rio") or self.ds.rio.crs is None:
+            raise ValueError("Dataset has no CRS defined in ds.rio.crs")
+
+        src_crs = CRS.from_user_input(self.ds.rio.crs)
+        dst_crs = CRS.from_epsg(output_CRS)
+
+        # --- 4. Transform coordinates ---
+        transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+        lon, lat = transformer.transform(X2D, Y2D)
+
+        return lon, lat
+
+    def plot_vvc(
+        self,
+        vvc: np.array,
+        vmin: float | None = None,
+        vmax: float | None = None,
+        savepath: str | None = None,
+        figsize: tuple[int, int] = (10, 6),
+        cmap: str = "inferno",
+        output_CRS: int = 4326,
+    ):
+        """
+        Plot NCVV on lon/lat grid with a specified EPSG code.
+        :param vvc: 2D array shape (nx, ny) or (ny, nx) matching lon/lat shapes.
+        :param vmin: minimum VVC
+        :param vmax: maximum VVC
+        :param savepath: path to save the figure
+        :param figsize: figure size
+        :param cmap: colormap
+        :param output_CRS: number of the EPSG projection system of the output grid
+        """
+
+        lon, lat = self.get_lonlat_grid(output_CRS=output_CRS)
+
+        ny, nx = self.ds.sizes["y"], self.ds.sizes["x"]
+        if vvc.shape != (ny, nx):
+            # try transpose fallback
+            if vvc.T.shape == (ny, nx):
+                vvc = vvc.T
+            else:
+                raise ValueError("Shapes of ncvv and lon/lat do not match.")
+
+        fig, ax = plt.subplots(figsize=figsize)
+        mesh = ax.pcolormesh(lon, lat, vvc, shading="auto", vmin=vmin, vmax=vmax, cmap=cmap)
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        if vmin is not None and vmax is not None:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal", extend="both")
+        elif vmin is not None:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal", extend="min")
+        elif vmax is not None:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal", extend="max")
+        else:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal")
+
+        if savepath:
+            plt.savefig(savepath, dpi=200, bbox_inches="tight")
+        plt.show()
 
     def compute_med_static_areas(
         self,
