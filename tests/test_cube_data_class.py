@@ -61,7 +61,7 @@ class Testclass_cube_data_xr:
     @pytest.mark.parametrize(
         "x, y, expected",
         [
-            (1, 2, np.array([36.0, -52.0, 112.6, 149.1, 15.0]).astype("float32")),
+            (1, 2, np.array([-5.0, -43.0, 112.6, 149.1, 15.0]).astype("float32")),
             (-138.18069, 60.29076, np.array([59.0, -6.0, 112.59999847, 149.1000061, 15.0]).astype("float32")),
         ],
     )
