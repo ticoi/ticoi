@@ -101,7 +101,7 @@ class Test_inversion:
         "regu, expected",
         [
             (
-                1,
+                "1",
                 np.array(
                     [
                         [-0.0625, 0.0625, 0, 0, 0, 0, 0, 0],
@@ -115,7 +115,7 @@ class Test_inversion:
                 ).astype("float32"),
             ),  # Shortened for brevity
             (
-                2,
+                "2",
                 np.array(
                     [
                         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],

@@ -52,13 +52,14 @@ save = True  # If True, save TICOI results to a netCDF file
 save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
-cube_name = "/home/charriel/Documents/Scripts_dossier/ticoi/test_data/TerraTrack_luggye_tshoNEW.nc"
+cube_name = (
+    "/home/charriel/Documents/Collaborations/Maximilian/wetransfer_fixed-data-cubes_2025-09-26_1038/datacubefixed.nc"
+)
 path_save = (
     os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")),
+        os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")),
         "examples",
-        "results",
-        "cube",
+        "result",
     )
     + "/"
 )  # path where to save our results

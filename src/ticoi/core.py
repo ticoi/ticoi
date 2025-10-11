@@ -9,12 +9,14 @@ Main functions to process the temporal inversion of glacier's surface velocity u
     - process: Launch the entire process, data loading, inversion and interpolation
     - visualisation: Different figures can be shown in this function, according to what the user wants
 
-Author : Laurane Charrier
-Reference:
-    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
-    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
-    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
-    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+Authors : Laurane Charrier, Lei Guo, Nathan Lioret
+The package is based on the methodological developments published in:
+- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
+  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+
+- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
+  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
+  60, 1-10.
 """
 
 import asyncio
@@ -49,8 +51,16 @@ from ticoi.inversion_functions import (
     weight_for_inversion,
 )
 from ticoi.pixel_class import PixelClass
+from typing import Literal
+
 
 warnings.filterwarnings("ignore")
+
+
+Regu = Literal["1accelnotnull", "1", "2", "directionxy"]
+
+Solver = Literal["LSMR", "LSMR_ini", "LSQR", "LS", "L1"]
+
 
 # %% ======================================================================== #
 #                                 INVERSION                                   #
@@ -61,13 +71,13 @@ def inversion_iteration(
     data: np.ndarray,
     A: np.ndarray,
     dates_range: np.ndarray,
-    solver: str,
+    solver: Solver,
     coef: int,
     Weight: np.ndarray,
     result_dx: np.ndarray,
     result_dy: np.ndarray,
     mu: np.ndarray,
-    regu: int | str = 1,
+    regu: Regu = 1,
     accel: np.ndarray | None = None,
     linear_operator=Union["class_linear_operator", None],
     result_quality: list | str | None = None,
@@ -161,10 +171,10 @@ def inversion_iteration(
                 dates_range,
                 0,
                 data,
-                solver,
                 weightx,
                 mu,
                 coef=coef,
+                solver=solver,
                 ini=result_dx,
                 result_quality=result_quality,
                 regu=regu,
@@ -176,10 +186,10 @@ def inversion_iteration(
                 dates_range,
                 1,
                 data,
-                solver,
                 weighty,
                 mu,
                 coef=coef,
+                solver=solver,
                 ini=result_dy,
                 result_quality=result_quality,
                 regu=regu,
@@ -192,10 +202,10 @@ def inversion_iteration(
                 dates_range,
                 0,
                 data,
-                solver,
                 weightx,
                 mu,
                 coef=coef,
+                solver=solver,
                 ini=ini[0],
                 result_quality=result_quality,
                 regu=regu,
@@ -207,10 +217,10 @@ def inversion_iteration(
                 dates_range,
                 1,
                 data,
-                solver,
                 weighty,
                 mu,
                 coef=coef,
+                solver=solver,
                 ini=ini[1],
                 result_quality=result_quality,
                 regu=regu,
@@ -224,10 +234,10 @@ def inversion_iteration(
             dates_range,
             0,
             data,
-            solver,
             weightx,
             mu,
             coef=coef,
+            solver=solver,
             result_quality=result_quality,
             regu=regu,
             accel=accel,
@@ -238,10 +248,10 @@ def inversion_iteration(
             dates_range,
             1,
             data,
-            solver,
             weighty,
             mu,
             coef=coef,
+            solver=solver,
             result_quality=result_quality,
             regu=regu,
             accel=accel,
@@ -256,8 +266,8 @@ def inversion_core(
     i: float | int,
     j: float | int,
     dates_range: np.ndarray | None = None,
-    solver: str = "LSMR",
-    regu: int | str = "1accelnotnull",
+    solver: Solver = "LSMR",
+    regu: Regu = "1accelnotnull",
     coef: int = 100,
     apriori_weight: bool = False,
     iteration: bool = True,
@@ -401,9 +411,9 @@ def inversion_core(
                 dates_range,
                 0,
                 data_values,
-                solver,
                 Weightx,
                 mu,
+                solver=solver,
                 coef=coef,
                 ini=mean_ini,
                 result_quality=None,
@@ -416,9 +426,9 @@ def inversion_core(
                 dates_range,
                 1,
                 data_values,
-                solver,
                 Weighty,
                 mu,
+                solver=solver,
                 coef=coef,
                 ini=mean_ini,
                 result_quality=None,
@@ -889,8 +899,8 @@ def process(
     i: float | int,
     j: float | int,
     path_save,
-    solver: str = "LSMR_ini",
-    regu: int | str = "1accelnotnull",
+    solver: Solver = "LSMR_ini",
+    regu: Regu = "1accelnotnull",
     coef: int = 100,
     flag: xr.Dataset | None = None,
     apriori_weight: bool = False,
@@ -1289,7 +1299,6 @@ def visualization_core(
 
     pixel_object = PixelClass()
     pixel_object.load(list_dataf, save=save, show=show, A=A, path_save=path_save, figsize=figsize, type_data=type_data)
-
     dico_visual = {
         "obs_xy": (lambda pix: pix.plot_vx_vy(color=colors[0], type_data="obs")),
         "obs_magnitude": (lambda pix: pix.plot_vv(color=colors[0], type_data="obs", vminmax=vminmax)),
@@ -1306,6 +1315,7 @@ def visualization_core(
         "xcount_vv": (lambda pix: pix.plot_xcount_vv(cmap=cmap)),
         "invert_weight": (lambda pix: pix.plot_weights_inversion()),
         "direction": (lambda pix: pix.plot_direction()),
+        "cumulative_dv": (lambda pix: pix.plot_cumulative_vv(cmap=cmap, vminmax=vminmax)),
     }
 
     for option in option_visual:

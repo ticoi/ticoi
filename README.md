@@ -73,11 +73,11 @@ mamba activate ticoi_env  # Or any other name specified above
 
 ### Advanced examples
 
-* [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/cube_ticoi_demo_its_live.py)
+* [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/demo_for_different_datasets/cube_ticoi_demo_its_live.py)
 * [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
-* [How to apply GLAFT on TICOI results](examples/advanced/glaft_for_ticoi_results.py)
-* [How to compute statistics in static areas](examples/advanced/stats_in_static_areas.py)
-* [How to process one IGE cube](examples/advanced/Demo_for_different_datasets/cube_ticoi_demo_IGE_S2.py)
+* [How to apply GLAFT on TICOI results](examples/advanced/quality_metrics/glaft_for_ticoi_results.py)
+* [How to compute statistics in static areas](examples/advanced/quality_metrics/stats_in_static_areas.py)
+* [How to process one IGE cube](examples/advanced/demo_for_different_datasets/cube_ticoi_demo_IGE_S2.py)
 
 ## TO USE YOUR OWN DATASET
 
@@ -90,12 +90,15 @@ modifying [this script](examples/advanced/cube_prep_from_geotiff.py).
 
 If it is [ITS_LIVE data]((https://its-live.jpl.nasa.gov/)), or [Millan et al., 2022](https://www.theia-land.fr/en/blog/product/glacier-surface-flow-velocity/), you can directly use them!
 If not, there are two options:
-* you can modify your variables to match TICOI compatible format. For that, your dimensions need to be ("mid_date", "y", "x"), with "mid_date" your time dimension. Your variables need to be:
-                    [vx, vy, date1, date2]: necessary,
-                    [sensor, source, errorx, errory]: optional
-"vx", "vy" are the velocity along your x and y axis in m/y; "date1" and "date2" correspond the first and second date of acquisition of the image-pair,
-if you want to specify the name of the author and the source of the dataset, it should be inside an attribute called author and source respectively.
-if you provide errors, it should be in variables called "errorx" for "vx" and "errory" for "vy".
+* you can modify your variables to match TICOI compatible format. 
+For that, your dimensions need to be ("mid_date", "y", "x"), with "mid_date" your time dimension. 
+Your variables need to be:
+  *     vx, vy (necessary): "vx", "vy" are the velocity along your x and y axis in m/y
+  *     date1, date2 (necessary): "date1" and "date2" correspond to the first and second date of acquisition of the image-pair
+  *     errorx, errory (optional): "errorx", "errory" are the errors along your x and y axis in m/y
+Your attributes:
+  *     author (optional): if you want to specify the name of the author
+  *     source (optional): if you want to specify the source of the dataset
 * you can directly add your own data loader to convert your format in TICOI format, inside the TICOI package. For that see an example [here](examples/advanced/custom_loader.py)
 
 ## HYPERPARAMETERS AND OUTPUTS

@@ -1,12 +1,14 @@
 """
 auxiliary functions to process the temporal inversion.
 
-Author : Laurane Charrier, Lei Guo, Nathan Lioret
-Reference:
-    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
-    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
-    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
-    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+Authors : Laurane Charrier, Lei Guo, Nathan Lioret
+The package is based on the methodological developments published in:
+- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
+  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+
+- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
+  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
+  60, 1-10.
 """
 
 import math as m
@@ -17,13 +19,24 @@ import scipy.optimize as opt
 import scipy.sparse as sp
 from numba import jit
 from scipy.linalg import inv
+from typing import Literal
+
+
+# %% ======================================================================== #
+#                             POSSIBLE PARAMTERS VALUES                       #
+# =========================================================================%% #
+
+Regu = Literal["1accelnotnull", "1", "2", "directionxy"]
+
+Solver = Literal["LSMR", "LSMR_ini", "LSQR", "LS", "L1"]
+
 
 # %% ======================================================================== #
 #                             CONSTRUCTION OF THE SYSTEM                      #
 # =========================================================================%% #
 
 
-def mu_regularisation(regu: str | int, A: np.ndarray, dates_range: np.ndarray, ini: np.ndarray | None = None):
+def mu_regularisation(regu: Regu, A: np.ndarray, dates_range: np.ndarray, ini: np.ndarray | None = None):
     """
     Compute the Tikhonov regularisation matrix
 
@@ -36,7 +49,7 @@ def mu_regularisation(regu: str | int, A: np.ndarray, dates_range: np.ndarray, i
     """
 
     # First order Tikhonov regularisation
-    if regu == 1:
+    if regu == "1":
         mu = np.diag(np.full(A.shape[1], -1, dtype="float32"))
         mu[np.arange(A.shape[1] - 1), np.arange(A.shape[1] - 1) + 1] = 1
         mu /= np.diff(dates_range) / np.timedelta64(1, "D")
@@ -50,7 +63,7 @@ def mu_regularisation(regu: str | int, A: np.ndarray, dates_range: np.ndarray, i
         mu = np.delete(mu, -1, axis=0)
 
     # Second order Tikhonov regularisation
-    elif regu == 2:
+    elif regu == "2":
         delta = np.diff(dates_range) / np.timedelta64(1, "D")
         mu = np.zeros((A.shape[1], A.shape[1]), dtype="float64")
         mu[range(1, A.shape[1] - 1), range(0, A.shape[1] - 2)] = 1 / delta[:-2]
@@ -81,7 +94,7 @@ def mu_regularisation(regu: str | int, A: np.ndarray, dates_range: np.ndarray, i
                 mu[k, k + len(dates_range) - 1] = ini[1][k] / 365 / int(delta[k]) / vv[k]  # vy * meanvy
 
     else:
-        raise ValueError("Enter 1, 2,'1accelnotnull', 'directionxy")
+        raise ValueError("Enter '1', '2','1accelnotnull', 'directionxy")
 
     return mu
 
@@ -146,19 +159,16 @@ def weight_for_inversion(
     """
 
     # Weight based on data quality
-    if weight_origine and not inside_Tukey:
-        if conf:  # Based on data quality given in confidence indicator, i.e. between 0 and 1 (1 is highest quality)
-            Weight = data[:, pos]
-        else:  # The data quality corresponds to errors in m/y or m/d
-            # Normalization of the errors
 
+    # compute the weight to put inside Tukey's biweight, if the errors are not all equal to 1
+    if weight_origine and not inside_Tukey and not (data[:, pos] == 1).all():
+        # Based on data quality given in confidence indicator, i.e. between 0 and 1 (1 is highest quality)
+        if conf:
+            Weight = data[:, pos]
+        # The data quality corresponds to errors in m/y or m/d
+        # Normalization of the errors
+        else:
             Weight = 1 - (data[:, pos] - np.min(data[:, pos])) / (np.max(data[:, pos]) - np.min(data[:, pos]))
-            # try:
-            #     Weight = data[:, pos] / (stats.median_abs_deviation(data[:, pos]) / 0.6745)
-            # except ZeroDivisionError:
-            #     Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            # # Weight = data[:, pos] / (average_absolute_deviation(data[:, pos]) / 0.6745)
-            # Weight = TukeyBiweight(Weight, 4.685)
 
         if temporal_decorrelation is not None:
             Weight = np.multiply(temporal_decorrelation, Weight)
@@ -229,6 +239,8 @@ def studentized_residual(
     :param A: matrix of the temporal invserion system AX=Y
     :param residu: residual (difference between AX and Y (or BY))
     :param dates_range: an array with all the dates included in data, list
+    :param coef: coefficient of the regularization
+    :param regu: regularization matrix
     :return: internally studentized residual
     """
     if A.shape[0] == A.shape[1]:
@@ -249,6 +261,8 @@ def externally_studentized_residual(
     :param A: matrix of the temporal invserion system AX=Y
     :param residu:
     :param dates_range: an array with all the dates included in data, list
+    :param coef: coefficient of the regularization
+    :param regu: regularization matrix
     :return: externally studentized residual
     """
     n = A.shape[0]
@@ -433,13 +447,13 @@ def inversion_one_component(
     dates_range: np.ndarray,
     v_pos: int,
     data: np.ndarray,
-    solver: str,
     Weight: int | np.ndarray,
     mu: np.ndarray,
     coef: int = 1,
+    solver: Solver = "LSMR",
     ini: None | np.ndarray = None,
     result_quality: None | list = None,
-    regu: int | str = 1,
+    regu: Regu = "1",
     accel: None | np.ndarray = None,
     linear_operator: "class_linear_operator" = None,
     verbose: bool = False,
@@ -451,10 +465,10 @@ def inversion_one_component(
     :param dates_range: An array with all the dates included in data, list (dates of X)
     :param v_pos: Position of the v variable within data
     :param data: An array where each line is (date1, date2, other elements) for which a velocity is computed (Y)
-    :param solver: Solver used for the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
     :param Weight:  Weight for the inversion if Weight=1 perform an Ordinary Least Square
     :param mu: Regularization matrix
     :param coef: Coefficient of the regularization
+    :param solver: Solver used for the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
     :param ini: Initialization of the inversion
     :param: result_quality: None or list of str, which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param regu : type of regularization
@@ -545,7 +559,7 @@ def inversion_one_component(
         X, istop, itn, r1norm = sp.linalg.lsqr(F, D)[:4]
 
     else:
-        raise ValueError("Enter 'LSMR', 'LSMR_ini', 'LS', 'LSQR'")
+        raise ValueError("Enter 'LSMR', 'LSMR_ini', 'LS', 'LSQR' or 'L1'")
 
     if result_quality is not None and "Norm_residual" in result_quality:  # to show the L_curve
         R_lcurve = F.dot(X) - D  # 50.7 µs ± 327 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
@@ -564,9 +578,9 @@ def inversion_two_components(
     dates_range: np.ndarray,
     v_pos: int,
     data: np.ndarray,
-    solver: str,
     Weight: int | np.ndarray,
     mu: np.ndarray,
+    solver: Solver = "LSMR",
     coef: int = 1,
     ini: None | np.ndarray = None,
     show_L_curve: bool = False,
@@ -579,9 +593,12 @@ def inversion_two_components(
     :param dates_range: An array with all the dates included in data, list
     :param v_pos: Position of the v variable within data
     :param data: An array where each line is (date1, date2, other elements) for which a velocity is computed
-    :param solver: LS_regu, LS_SVD, LSQR or LSQR_ini
-    :param coef: Coef of Tikhonov regularisation
     :param Weight:  Weight for the inversion if Weight=1 perform an Ordinary Least Square
+    :param mu: regularization matrix
+    :param solver: solver used to solve the system AX=Y
+    :param coef: Coef of Tikhonov regularisation
+    :param ini: Initialization vector
+    :param show_L_curve: If True, show the L-curve of the inversion
 
     :return result_dx, result_dy: Computed displacements along x and y axis
     :return residu_normx, residu_norm_y: Norm of the residu along x and y axis (when showing the L curve)
@@ -646,7 +663,7 @@ def inversion_two_components(
         X, istop, itn, r1norm = sp.linalg.lsqr(F, D)[:4]
 
     else:
-        raise ValueError("Enter LS, LS_SVD,LSMR, LSQR or LSQR_ini")
+        raise ValueError("Enter LS, LSMR, LSMR_ini, LSQR or LSQR_ini")
 
     if show_L_curve:
         R_lcurve = F.dot(X) - D
@@ -668,7 +685,7 @@ def inversion_two_components(
         )
 
     # %% ======================================================================== #
-    #                             OLD FUNCTION                                    #
+    #                             OLD FUNCTION USED TO COMPUTE FRACTIONS OF DISPLACEMENT AS IN CHARRIER ET AL 2022 GRSL    #
     # =========================================================================%% #
 
 

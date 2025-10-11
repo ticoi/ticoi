@@ -1,15 +1,17 @@
 """
 Class object to store and manipulate velocity observation data
 
-Author : Laurane Charrier, Lei Guo, Nathan Lioret
-Reference:
-    Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an optimal temporal sampling from displacement
-    observation networks. IEEE Transactions on Geoscience and Remote Sensing.
-    Charrier, L., Yan, Y., Colin Koeniguer, E., Mouginot, J., Millan, R., & Trouvé, E. (2022). Fusion of multi-temporal and multi-sensor ice velocity observations.
-    ISPRS annals of the photogrammetry, remote sensing and spatial information sciences, 3, 311-318.
+Authors : Laurane Charrier, Lei Guo, Nathan Lioret
+The package is based on the methodological developments published in:
+
+- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
+  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+
+- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
+  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
+  60, 1-10.
 """
 
-import itertools
 import os
 import time
 import warnings
@@ -29,7 +31,7 @@ from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
-from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
@@ -39,6 +41,8 @@ from typing import Literal
 
 MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
 ReturnAs = Literal["dataframe", "cube"]
+Regu = Literal["1accelnotnull", "1", "2", "directionxy"]
+Solver = Literal["LSMR", "LSMR_ini", "LSQR", "LS", "L1"]
 
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
@@ -141,15 +145,18 @@ class CubeDataClass:
         if len(self.ds["x"].values) == 0 and len(self.ds["y"].values) == 0:
             print(f"[Data loading] The given subset is not part of cube {self.filename}")
 
-    def buffer(self, proj: str, buffer: list):
+    def buffer(self, proj: str, buffer: list[float | int, float | int, float | int, float | int]):
         """
-        Crop the dataset around a given pixel, the amount of surroundings pixels kept is given by the buffer.
+        Crop the dataset around a given pixel, the amount of surrounding pixels kept is provided by the buffer.
+        The pixel and buffer values could be given in pixel position (integer numbers), or as coordinates with a projection proj.
 
         :param proj: [str] --- EPSG system of the coordinates given in subset
-        :param buffer:  [list] --- A list of 3 float, the first two are the longitude and the latitude of the central point, the last is the buffer size
+        :param buffer:  [list] --- A list of 3 float, the first two are the longitude and the latitude of the central point, or the pixel position, the last is the buffer size
         """
 
-        if CRS(self.ds.proj4) != CRS(proj):  # Convert the coordinates from proj to self.ds.proj4
+        if isinstance(buffer[0], float) and CRS(self.ds.proj4) != CRS(
+            proj
+        ):  # Convert the coordinates from proj to self.ds.proj4
             transformer = Transformer.from_crs(CRS(proj), CRS(self.ds.proj4))
             i1, j1 = transformer.transform(buffer[1] + buffer[2], buffer[0] - buffer[2])
             i2, j2 = transformer.transform(buffer[1] - buffer[2], buffer[0] + buffer[2])
@@ -163,9 +170,14 @@ class CubeDataClass:
         else:
             i1, j1 = buffer[0] - buffer[2], buffer[1] + buffer[2]
             i2, j2 = buffer[0] + buffer[2], buffer[1] - buffer[2]
-            self.ds = self.ds.sel(
-                x=slice(np.min([i1, i2]), np.max([i1, i2])), y=slice(np.max([j1, j2]), np.min([j1, j2]))
-            )
+            if isinstance(buffer[0], float):  # i, j correspond to coordinates
+                self.ds = self.ds.sel(
+                    x=slice(np.min([i1, i2]), np.max([i1, i2])), y=slice(np.max([j1, j2]), np.min([j1, j2]))
+                )
+            else:  # i,j correspond to pixel position, not coordinates
+                self.ds = self.ds.isel(
+                    x=slice(np.min([i1, i2]), np.max([i1, i2])), y=slice(np.min([j1, j2]), np.max([j1, j2]))
+                )
             del i1, i2, j1, j2, buffer
 
         if len(self.ds["x"].values) == 0 and len(self.ds["y"].values) == 0:
@@ -474,7 +486,7 @@ class CubeDataClass:
         if conf:
             errorx_1d = self._normalize_error_to_confidence(errorx_1d)
             errory_1d = self._normalize_error_to_confidence(errory_1d)
-        ny, nx = self.ds.dims["y"], self.ds.dims["x"]
+        ny, nx = self.ds.sizes["y"], self.ds.sizes["x"]
         errorx = np.tile(errorx_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         errory = np.tile(errory_1d.values[:, np.newaxis, np.newaxis], (1, ny, nx))
         # standardize date format
@@ -853,10 +865,10 @@ class CubeDataClass:
         i: int | float,
         j: int | float,
         unit: int = 365,
-        regu: int | str = "1accelnotnull",
+        regu: Regu = "1accelnotnull",
         coef: int = 100,
         flag: xr.Dataset | None = None,
-        solver: str = "LSMR_ini",
+        solver: Solver = "LSMR",
         interp: MethodInterp = "nearest",
         proj: str = "EPSG:4326",
         rolling_mean: xr.Dataset | None = None,
@@ -871,7 +883,7 @@ class CubeDataClass:
         :param regu: [int | str] [default is '1accelnotnull'] --- Type of regularization
         :param coef: [int] [default is 100] --- Coef of Tikhonov regularisation
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
-        :param solver: [str] [default is 'LSMR_ini'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LS_bounded', 'LSQR'
+        :param solver: [str] [default is 'LSMR'] --- Solver of the inversion: 'LSMR', 'LSMR_ini', 'LS', 'LSQR'
         :param interp: [str] [default is 'nearest'] --- Interpolation method used to load the pixel when it is not in the dataset ('nearest' or 'linear')
         :param proj: [str] [default is 'EPSG:4326'] --- Projection of (i, j) coordinates
         :param rolling_mean: [xr dataset | None] [default is None] --- Filtered dataset (e.g. rolling mean)
@@ -892,16 +904,17 @@ class CubeDataClass:
             else ["date1", "date2", "vx", "vy", "errorx", "errory", "temporal_baseline", "sensor", "source"]
         )
 
-        if proj == "int":
+        if isinstance(i, int):
             data = self.ds.isel(x=i, y=j)[var_to_keep]
         else:
             i, j = self.convert_coordinates(i, j, proj=proj)  # convert the coordinates to the projection of the cube
             # Interpolate only necessary variables and drop NaN values
             if interp == "nearest":
                 data = self.ds.sel(x=i, y=j, method="nearest")[var_to_keep]
-                data = data.dropna(dim="mid_date")
             else:
                 data = self.ds.interp(x=i, y=j, method=interp)[var_to_keep].dropna(dim="mid_date")
+
+        data = data.dropna(dim="mid_date")  # drop nan values
 
         if flag is not None:
             if isinstance(regu, dict) and isinstance(coef, dict):
@@ -1265,9 +1278,10 @@ class CubeDataClass:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(baseline < select_baseline)
                 while (
-                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 200)
+                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 500)
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
+                    idx = np.where(baseline < select_baseline)
                 mid_dates = mid_dates.isel(mid_date=idx[0])
                 da_arr = da_arr.isel(mid_date=idx[0])
 
@@ -1843,38 +1857,109 @@ class CubeDataClass:
 
         return line_df_vv
 
-    # @jit(nopython=True)
-    def nvvc(self, nb_cpu=8, verbose=True):
+    def compute_vvc(self):
         """
-        Compute the Normalized Coherence Vector Velocity for every pixel of the cube.
-
+        Compute the Velocity Vector Coherence (VVC) for every pixel of the cube.
         """
 
-        def ncvv_pixel(cube, i, j):
-            return (
-                np.sqrt(
-                    np.nansum(
-                        cube.ds["vx"].isel(x=i, y=j)
-                        / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
-                    )
-                    ** 2
-                    + np.nansum(
-                        cube.ds["vy"].isel(x=i, y=j)
-                        / np.sqrt(cube.ds["vx"].isel(x=i, y=j) ** 2 + cube.ds["vy"].isel(x=i, y=j) ** 2)
-                    )
-                    ** 2
-                )
-                / cube.nz
-            )
+        vx = self.ds["vx"].values  # shape (nz, nx, ny)
+        vy = self.ds["vy"].values
 
-        xy_values = itertools.product(range(self.nx), range(self.ny))
-        xy_values_tqdm = tqdm(xy_values, total=self.nx * self.ny, mininterval=0.5)
+        # Compute magnitude (avoid division by zero)
+        mag = np.sqrt(vx**2 + vy**2)
+        mag[mag == 0] = np.nan
 
-        return np.array(
-            Parallel(n_jobs=nb_cpu, verbose=0)(
-                delayed(ncvv_pixel)(self, i, j) for i, j in (xy_values_tqdm if verbose else xy_values)
-            )
-        ).reshape(self.nx, self.ny)
+        # Normalize velocity components
+        vx_n = vx / mag
+        vy_n = vy / mag
+
+        # Compute sums along z-axis (time or depth)
+        sum_vx = np.nansum(vx_n, axis=0)
+        sum_vy = np.nansum(vy_n, axis=0)
+
+        # Compute VVC
+        vvc = np.sqrt(sum_vx**2 + sum_vy**2) / self.nz
+
+        return vvc
+
+    def get_lonlat_grid(self, output_CRS: int = 4326) -> (np.array, np.array):
+        """
+        Build 2D longitude and latitude grids for an xarray Dataset in given output CRS
+        that has 1D x/y coordinates and a CRS stored in ds.rio.crs.
+
+        Works even if the current CRS is projected (UTM, Lambert, etc.).
+
+        :param output_CRS: number of the EPSG projection system of the output grid
+        :return: longitude, latitude grid
+        """
+
+        # --- 1. Extract coordinates ---
+        x = self.ds.coords["x"].values  # 1D array of x (e.g., eastings)
+        y = self.ds.coords["y"].values  # 1D array of y (e.g., northings)
+
+        # --- 2. Build meshgrid ---
+        X2D, Y2D = np.meshgrid(x, y, indexing="xy")
+
+        # --- 3. Get CRS info ---
+        if not hasattr(self.ds, "rio") or self.ds.rio.crs is None:
+            raise ValueError("Dataset has no CRS defined in ds.rio.crs")
+
+        src_crs = CRS.from_user_input(self.ds.rio.crs)
+        dst_crs = CRS.from_epsg(output_CRS)
+
+        # --- 4. Transform coordinates ---
+        transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+        lon, lat = transformer.transform(X2D, Y2D)
+
+        return lon, lat
+
+    def plot_vvc(
+        self,
+        vvc: np.array,
+        vmin: float | None = None,
+        vmax: float | None = None,
+        savepath: str | None = None,
+        figsize: tuple[int, int] = (10, 6),
+        cmap: str = "inferno",
+        output_CRS: int = 4326,
+    ):
+        """
+        Plot NCVV on lon/lat grid with a specified EPSG code.
+        :param vvc: 2D array shape (nx, ny) or (ny, nx) matching lon/lat shapes.
+        :param vmin: minimum VVC
+        :param vmax: maximum VVC
+        :param savepath: path to save the figure
+        :param figsize: figure size
+        :param cmap: colormap
+        :param output_CRS: number of the EPSG projection system of the output grid
+        """
+
+        lon, lat = self.get_lonlat_grid(output_CRS=output_CRS)
+
+        ny, nx = self.ds.sizes["y"], self.ds.sizes["x"]
+        if vvc.shape != (ny, nx):
+            # try transpose fallback
+            if vvc.T.shape == (ny, nx):
+                vvc = vvc.T
+            else:
+                raise ValueError("Shapes of ncvv and lon/lat do not match.")
+
+        fig, ax = plt.subplots(figsize=figsize)
+        mesh = ax.pcolormesh(lon, lat, vvc, shading="auto", vmin=vmin, vmax=vmax, cmap=cmap)
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        if vmin is not None and vmax is not None:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal", extend="both")
+        elif vmin is not None:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal", extend="min")
+        elif vmax is not None:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal", extend="max")
+        else:
+            plt.colorbar(mesh, ax=ax, label="VVC", orientation="horizontal")
+
+        if savepath:
+            plt.savefig(savepath, dpi=200, bbox_inches="tight")
+        plt.show()
 
     def compute_med_static_areas(
         self,
