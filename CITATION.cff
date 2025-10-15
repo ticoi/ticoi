@@ -31,11 +31,10 @@ preferred-citation:
       given-names: Christine
     - family-names: Halas
       given-names: Paul
-  doi: "10.5194/egusphere-2024-3409"
-  title: "TICOI: an operational Python package to generate regularized glacier velocity time series"
-  journal: "EGUsphere"
+  title: "TICOI: an operational Python package to generate regular glacier velocity time series"
   year: 2025
-  month: 7
-  start: 1 # First page number
-  end: 40 # Last page number
-  volume: 1
+  journal: "The Cryosphere"
+  volume: 19
+  start: 4555
+  end: 4583
+  doi: "10.5194/tc-19-4555-2025"
