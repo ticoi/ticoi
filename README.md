@@ -17,7 +17,7 @@ The package is based on the methodological developments published in:
 
 - Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., Copland, L., Maier, N., Dow, C., and Halas, P.: TICOI: an operational Python package to generate regular glacier velocity time series, The Cryosphere, 19, 4555–4583, https://doi.org/10.5194/tc-19-4555-2025, 2025.
 
-- CCharrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E "Extraction of Velocity Time Series With an Optimal Temporal Sampling From Displacement Observation Networks," in IEEE Transactions on Geoscience and Remote Sensing, vol. 60, pp. 1-10, 2022, Art no. 4302810, doi: 10.1109/TGRS.2021.3128289.
+- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E "Extraction of Velocity Time Series With an Optimal Temporal Sampling From Displacement Observation Networks," in IEEE Transactions on Geoscience and Remote Sensing, vol. 60, pp. 1-10, 2022, Art no. 4302810, doi: 10.1109/TGRS.2021.3128289.
 
 The main principle of TICOI relies on the temporal closure of the displacement measurement network.
 Measured displacements with different temporal baselines are expressed as linear combinations of estimated
@@ -90,12 +90,12 @@ If not, there are two options:
 * you can modify your variables to match TICOI compatible format. 
 For that, your dimensions need to be ("mid_date", "y", "x"), with "mid_date" your time dimension. 
 Your variables need to be:
-  *     vx, vy (necessary): "vx", "vy" are the velocity along your x and y axis in m/y
-  *     date1, date2 (necessary): "date1" and "date2" correspond to the first and second date of acquisition of the image-pair
-  *     errorx, errory (optional): "errorx", "errory" are the errors along your x and y axis in m/y
+  * vx, vy (necessary): velocities along your x and y axis in m/y
+  * date1, date2 (necessary): first and second date of acquisition of the image-pair
+  * errorx, errory (optional): errors along your x and y axis in m/y
 Your attributes:
-  *     author (optional): if you want to specify the name of the author
-  *     source (optional): if you want to specify the source of the dataset
+  * author (optional): if you want to specify the name of the author
+  * source (optional): if you want to specify the source of the dataset
 * you can directly add your own data loader to convert your format in TICOI format, inside the TICOI package. For that see an example [here](examples/advanced/custom_loader.py)
 
 ## HYPERPARAMETERS AND OUTPUTS
@@ -108,6 +108,12 @@ Your attributes:
 ## TO CONTRIBUTE
 
 We welcome any contribution to this package! See guidelines [here](CONTRIBUTING.md).
+
+## CITATION
+
+If you use this package, please cite:
+
+Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., Copland, L., Maier, N., Dow, C., and Halas, P.: TICOI: an operational Python package to generate regular glacier velocity time series, The Cryosphere, 19, 4555–4583, https://doi.org/10.5194/tc-19-4555-2025, 2025.
 
 [packaging guide]: https://packaging.python.org
 
