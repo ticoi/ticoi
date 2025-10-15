@@ -17,9 +17,7 @@ The package is based on the methodological developments published in:
 
 - Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., Copland, L., Maier, N., Dow, C., and Halas, P.: TICOI: an operational Python package to generate regular glacier velocity time series, The Cryosphere, 19, 4555–4583, https://doi.org/10.5194/tc-19-4555-2025, 2025.
 
-- Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
-  optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
-  60, 1-10.
+- CCharrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E "Extraction of Velocity Time Series With an Optimal Temporal Sampling From Displacement Observation Networks," in IEEE Transactions on Geoscience and Remote Sensing, vol. 60, pp. 1-10, 2022, Art no. 4302810, doi: 10.1109/TGRS.2021.3128289.
 
 The main principle of TICOI relies on the temporal closure of the displacement measurement network.
 Measured displacements with different temporal baselines are expressed as linear combinations of estimated
