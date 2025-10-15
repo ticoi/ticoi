@@ -15,8 +15,7 @@ velocities, that you may have generated yourself. It also natively supports data
 
 The package is based on the methodological developments published in:
 
-- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., ... & Halas, P. (2025). TICOI: an operational
-  Python package to generate regular glacier velocity time series. EGUsphere, 2025, 1-40.
+- Charrier, L., Dehecq, A., Guo, L., Brun, F., Millan, R., Lioret, N., Copland, L., Maier, N., Dow, C., and Halas, P.: TICOI: an operational Python package to generate regular glacier velocity time series, The Cryosphere, 19, 4555–4583, https://doi.org/10.5194/tc-19-4555-2025, 2025.
 
 - Charrier, L., Yan, Y., Koeniguer, E. C., Leinss, S., & Trouvé, E. (2021). Extraction of velocity time series with an
   optimal temporal sampling from displacement observation networks. IEEE Transactions on Geoscience and Remote Sensing,
