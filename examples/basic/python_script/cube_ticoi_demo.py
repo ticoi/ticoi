@@ -54,14 +54,11 @@ save_mean_velocity = False  # Save a .tiff file with the mean resulting velociti
 
 ## ------------------------------ Data selection --------------------------- ##
 cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
-path_save = (
-    os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")),
-        "examples",
-        "results",
-        "cube",
-    )
-    + "/"
+path_save = os.path.join(
+    os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")),
+    "examples",
+    "results",
+    "cube",
 )  # path where to save our results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
 

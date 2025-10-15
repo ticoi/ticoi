@@ -772,7 +772,7 @@ class PixelClass:
         if zoom_on_results:
             ax.set_ylim(data.vvymin, data.vvymax)
 
-        elif vminmax is not None or vminmax != [False, False]:
+        elif vminmax is not None and vminmax != [False, False]:
             ax.set_ylim(vminmax[0], vminmax[1])
 
         ax.plot(
