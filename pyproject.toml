@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
   "aiohttp",
   "dask",
+  "filelock",
   "geopandas",
   "jdcal",
   "joblib",
