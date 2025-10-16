@@ -76,11 +76,14 @@ def download_examples(overwrite: bool = False) -> None:
                 dir_name,
             )
 
+            if overwrite:
+                shutil.rmtree(_EXAMPLES_DIRECTORY)  # remove the directories to overwrite
+
             # Copy the temporary extracted data to the example directory.
             shutil.copytree(tmp_dir_name, os.path.join(_EXAMPLES_DIRECTORY, dir_name))
 
 
-def get_path(name: str) -> str:
+def get_path(name: str, overwrite: bool = False) -> str:
     """
     Get path of example data. List of available files can be found in "examples.available".
 
@@ -89,7 +92,7 @@ def get_path(name: str) -> str:
     """
 
     if name in list(_FILEPATHS_DATA.keys()):
-        download_examples()
+        download_examples(overwrite=overwrite)
         return _FILEPATHS_DATA[name]
     else:
         raise ValueError('Data name should be one of "' + '" , "'.join(list(_FILEPATHS_DATA.keys())) + '".')
