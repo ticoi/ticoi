@@ -1278,7 +1278,7 @@ class CubeDataClass:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(baseline < select_baseline)
                 while (
-                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 500)
+                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 200)
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
                     idx = np.where(baseline < select_baseline)
