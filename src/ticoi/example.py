@@ -75,16 +75,12 @@ def download_examples(overwrite: bool = False) -> None:
             # Identify the top-level extracted directory
             top_level = next(d for d in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, d)))
 
-            # Copy Argentiere and Lowell safely
             for dir_name in ["Argentiere", "Lowell"]:
-                tmp_dir_name = os.path.join(tmp_dir, top_level, dir_name)
-                target_dir = os.path.join(_EXAMPLES_DIRECTORY, dir_name)
-
-                # Clean old data if needed
-                if os.path.exists(target_dir):
-                    shutil.rmtree(target_dir)
-
-                shutil.copytree(tmp_dir_name, target_dir)
+                src = os.path.join(tmp_dir, top_level, dir_name)
+                dst = os.path.join(_EXAMPLES_DIRECTORY, dir_name)
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
 
         print("Example datasets downloaded successfully.")
 
