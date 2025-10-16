@@ -331,8 +331,7 @@ def dask_smooth_wrapper(
 
 
 def df_smooth_wrapper(
-    df: pd.DataFrame | dd.DataFrame,
-    dates: pd.Series,
+    data_array: np.ndarray,
     t_out: np.ndarray,
     smooth_method: str = "savgol",
     t_win: int = 90,
@@ -355,15 +354,16 @@ def df_smooth_wrapper(
 
     :return: Smoothed DataFrame
     """
+    dates = data_array.index.to_numpy()
+    data_v = data_array[["vx", "vy"]].to_numpy()
+    # Conversion of the mid_date of the observations into numerical values
+    # It corresponds to the difference between each mid_date and the minimal date, in days
+    t_obs = (dates - dates.min()) / np.timedelta64(1, "D")
 
-    # Convert observation dates to numeric values (days since min)
-    t_obs = (dates - dates.min()).astype("timedelta64[ns]").dt.days.astype("float64")
-
-    if t_out.dtype == "datetime64[ns]" or t_out.dtype == "<M8[s]":
-        t_out = (t_out - dates.min()).astype("timedelta64[ns]").astype("int")
-
+    if t_out.dtype == "datetime64[ns]" or t_out.dtype == "<M8[s]":  # Convert ns to days
+        t_out = ((t_out - dates.min()) / np.timedelta64(1, "D")).astype("int")
     if t_out.min() < 0:
-        t_obs = t_obs - t_out.min()
+        t_obs = t_obs - t_out.min()  # Ensure the output time points are within the range of interpolated points
         t_out = t_out - t_out.min()
 
     while np.unique(t_obs).size < t_obs.size:
@@ -381,26 +381,20 @@ def df_smooth_wrapper(
         "lowess": lowess_smooth,
     }[smooth_method]
 
-    # If pandas dataframe
-    if isinstance(df, pd.DataFrame):
-        smoothed = df.apply(
-            lambda series: filt_func(
-                series.values,
-                t_obs=t_obs,
-                t_interp=t_interp,
-                t_out=t_out,
-                t_win=t_win,
-                sigma=sigma,
-                order=order,
-            ),
-            axis=axis,
-            result_type="expand",
+    smoothed_vx, smoothed_vy = [
+        filt_func(
+            data_v[:, col].astype("float64"),
+            t_obs=t_obs,
+            t_interp=t_interp,
+            t_out=t_out,
+            t_win=t_win,
+            sigma=sigma,
+            order=order,
         )
-        smoothed.index = t_out if axis == 0 else df.index
-        smoothed.columns = df.columns if axis == 0 else t_out
-        return smoothed
+        for col in [0, 1]
+    ]
 
-    raise TypeError("df must be a pandas.DataFrame")
+    return smoothed_vx, smoothed_vy
 
 
 def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):

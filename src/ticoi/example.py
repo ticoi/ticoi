@@ -15,6 +15,7 @@ import shutil
 import tarfile
 import tempfile
 import urllib
+from filelock import FileLock
 
 # Define the location of the data in the example directory
 _EXAMPLES_DIRECTORY = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test_data"))
@@ -36,51 +37,55 @@ available = list(_FILEPATHS_DATA.keys())
 
 def download_examples(overwrite: bool = False) -> None:
     """
-    Fetch the example files.
-
-    :param overwrite: Do not download the files again if they already exist.
+    Fetch example files safely across OSes and parallel test runs.
+    Removes stale directories and uses a file lock to prevent race conditions.
     """
-    if not overwrite and all(map(os.path.isfile, list(_FILEPATHS_DATA.values()))):
-        print("Datasets exist")
-        return
+    os.makedirs(_EXAMPLES_DIRECTORY, exist_ok=True)
+    lock_path = os.path.join(_EXAMPLES_DIRECTORY, ".example_data.lock")
 
-    # Static commit hash to be bumped every time it needs to be.
-    commit = "3121f37e8de767cb7ea21cbd93b4dd59a81b1ced"
-    # The URL from which to download the repository
-    url = f"https://github.com/ticoi/ticoi_data/tarball/main#commit={commit}"
+    with FileLock(lock_path):
+        # Skip download if all files exist and overwrite is False
+        if not overwrite and all(map(os.path.isfile, _FILEPATHS_DATA.values())):
+            print("Datasets exist")
+            return
 
-    # Create a temporary directory to extract the tarball in.
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tar_path = os.path.join(tmp_dir, "data.tar.gz")
+        # Static commit hash to be bumped when data changes
+        commit = "3121f37e8de767cb7ea21cbd93b4dd59a81b1ced"
+        url = f"https://github.com/ticoi/ticoi_data/tarball/main#commit={commit}"
 
-        response = urllib.request.urlopen(url)
-        # If the response was right, download the tarball to the temporary directory
-        if response.getcode() == 200:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tar_path = os.path.join(tmp_dir, "data.tar.gz")
+
+            # Download the tarball
+            response = urllib.request.urlopen(url)
+            if response.getcode() != 200:
+                raise ValueError(f"Example data fetch gave non-200 response: {response.status}")
+
             with open(tar_path, "wb") as outfile:
                 outfile.write(response.read())
-        else:
-            raise ValueError(f"Example data fetch gave non-200 response: {response.status_code}")
 
-        # Extract the tarball
-        with tarfile.open(tar_path) as tar:
+            # Extract the tarball
             try:
-                tar.extractall(tmp_dir, filter="tar")
-            except TypeError:  # For compatibility with different versions of python: The filter argument, which was added in Python 3.10.12, specifies how members are modified or rejected before extraction.
-                tar.extractall(tmp_dir)
+                with tarfile.open(tar_path) as tar:
+                    tar.extractall(tmp_dir, filter="tar")
+            except TypeError:
+                with tarfile.open(tar_path) as tar:
+                    tar.extractall(tmp_dir)
 
-        # Find the first directory in the temp_dir (should only be one) and construct the example data dir paths.
-        for dir_name in ["Argentiere", "Lowell"]:
-            tmp_dir_name = os.path.join(
-                tmp_dir,
-                [dirname for dirname in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, dirname))][0],
-                dir_name,
-            )
+            # Identify the top-level extracted directory
+            top_level = next(d for d in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, d)))
 
-            # Copy the temporary extracted data to the example directory.
-            shutil.copytree(tmp_dir_name, os.path.join(_EXAMPLES_DIRECTORY, dir_name))
+            for dir_name in ["Argentiere", "Lowell"]:
+                src = os.path.join(tmp_dir, top_level, dir_name)
+                dst = os.path.join(_EXAMPLES_DIRECTORY, dir_name)
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+
+        print("Example datasets downloaded successfully.")
 
 
-def get_path(name: str) -> str:
+def get_path(name: str, overwrite: bool = False) -> str:
     """
     Get path of example data. List of available files can be found in "examples.available".
 
@@ -89,7 +94,7 @@ def get_path(name: str) -> str:
     """
 
     if name in list(_FILEPATHS_DATA.keys()):
-        download_examples()
+        download_examples(overwrite=overwrite)
         return _FILEPATHS_DATA[name]
     else:
         raise ValueError('Data name should be one of "' + '" , "'.join(list(_FILEPATHS_DATA.keys())) + '".')
