@@ -1428,7 +1428,7 @@ def ticoi_one_pixel(
             {"first_date_interpol": first_date_interpol, "last_date_interpol": last_date_interpol}
         )
 
-    else:
+    else:  # use already loaded data
         data, mean, dates_range = already_loaded
         cube_date1 = data["date1"].tolist()
         cube_date1 = cube_date1 + data["date2"].tolist()
