@@ -53,7 +53,7 @@ save = False  # If True, save TICOI results to a netCDF file
 save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
-cube_name = example.get_path("ITS_LIVE_Lowell_Lower", overwrite=True)
+cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
 path_save = os.path.join(
     os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")),
     "examples",
