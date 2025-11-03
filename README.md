@@ -51,6 +51,7 @@ git clone https://github.com/ticoi/ticoi.git
 cd ticoi
 mamba env create -f environment.yml -n ticoi_env  # change the name if you want
 mamba activate ticoi_env  # Or any other name specified above
+pip install -e . #to use the package everywhere locally
 ```
 
 
