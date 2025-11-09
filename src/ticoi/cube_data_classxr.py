@@ -15,6 +15,8 @@ The package is based on the methodological developments published in:
 import os
 import time
 import warnings
+from tqdm import tqdm
+import gc
 from functools import reduce
 from typing import Optional
 
@@ -1125,9 +1127,9 @@ class CubeDataClass:
             vy = self.ds["vy"].values
 
         temporal_baseline = self.ds["temporal_baseline"].values
-        temporal_baseline = temporal_baseline[np.newaxis, np.newaxis, :]
-        vx_weighted = np.nansum(vx * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
-        vy_weighted = np.nansum(vy * temporal_baseline, axis=2) / np.nansum(temporal_baseline, axis=2)
+        temporal_baseline = temporal_baseline[:, np.newaxis, np.newaxis]
+        vx_weighted = np.nansum(vx * temporal_baseline, axis=0) / np.nansum(temporal_baseline, axis=0)
+        vy_weighted = np.nansum(vy * temporal_baseline, axis=0) / np.nansum(temporal_baseline, axis=0)
 
         v_mean_weighted = np.sqrt(vx_weighted**2 + vy_weighted**2)
 
@@ -1138,7 +1140,7 @@ class CubeDataClass:
 
         direction = xr.Dataset(
             data_vars=dict(
-                direction=(["y", "x"], np.array(direction.T)),
+                direction=(["x", "y"], np.array(direction.T)),
             ),
             coords=dict(x=(["x"], self.ds.x.data), y=(["y"], self.ds.y.data)),
         )
@@ -1501,49 +1503,80 @@ class CubeDataClass:
         cube_to_match: Optional["CubeDataClass"] = None,
     ):
         """
-        Repreject the cube_data_self to a given projection system, and (optionally) resample this cube to a given resolution.
-        The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
-        The new resolution can be defined by the variable new_res or by a cube stored in cube_to_match.
+        Coordinate reprojection for multiple cube alignment.
 
-        :param new_proj: [str]  --- EPSG code of the new projection
-        :param new_res: [float]  --- new resolution in the unit of the new projection system
-        :param interp_method: [str]  ---
-        :param cube_to_match:  [cube_data_class]  --- cube used as a reference to reproject self
+        Parameters:
+        - new_proj: target projection (e.g. "EPSG:4326"). If None and cube_to_match is supplied,
+                the projection of cube_to_match will be used.
+        - new_res: target resolution in projection units. If None the default resolution is used.
+        - interp_method: resampling method, "nearest" or "bilinear".
+        - cube_to_match: if provided, align this cube to cube_to_match's grid/CRS using rioxarray.reproject_match.
         """
-        # assign coordinate system
+
+        print("[Preprocessing] Coordinate Reprojection")
+        start_time = time.time()
+
+        # assign csc info
         if cube_to_match is not None:
             cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
+            print(f"      Target CRS: {cube_to_match.ds.proj4}")
         self.ds = self.ds.rio.write_crs(self.ds.proj4)
+        print(f"      Source CRS: {self.ds.proj4}")
+
+        # check dimension order
         if tuple(self.ds.dims) != ("mid_date", "y", "x"):
             self.ds = self.ds.transpose("mid_date", "y", "x")
 
-        # Reproject coordinates
-        if cube_to_match is not None:
-            if interp_method == "nearest":
-                self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.nearest)
-            elif interp_method == "bilinear":
-                self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=rasterio.enums.Resampling.bilinear)
-            if new_res is not None or new_proj is not None:
-                print("The new projection has been defined according to cube_to_match.")
-        elif new_res is None:
-            self.ds = self.ds.rio.reproject(new_proj)
-        else:
-            self.ds = self.ds.rio.reproject(new_proj, resolution=new_res)
+        # enable Dask chunking
+        if "mid_date" in self.ds.dims and len(self.ds.mid_date) > 1:
+            chunk_size = min(10, len(self.ds.mid_date))
+            self.ds = self.ds.chunk({"mid_date": chunk_size, "y": -1, "x": -1})
 
-        # Reject abnormal data (when the cube sizes are not the same and data are missing, the interpolation leads to infinite or nearly-infinite values)
+        if interp_method == "nearest":
+            resampling = rasterio.enums.Resampling.nearest
+        elif interp_method == "bilinear":
+            resampling = rasterio.enums.Resampling.bilinear
+        else:
+            resampling = rasterio.enums.Resampling.nearest
+
+        # reproject coordinates
+        if cube_to_match is not None:
+            print("[Preprocessing] Matching reference cube")
+            print("[Preprocessing] This may take a while for large datasets...")
+
+            # wrap with tqdm (if possible)
+            with tqdm(
+                total=100, desc="[Preprocessing] Progress", bar_format="{l_bar}{bar}| {elapsed}<{remaining}", ncols=70
+            ) as pbar:
+                self.ds = self.ds.rio.reproject_match(cube_to_match.ds, resampling=resampling)
+                pbar.update(100)
+
+        elif new_res is None:
+            self.ds = self.ds.rio.reproject(new_proj, resampling=resampling)
+        else:
+            self.ds = self.ds.rio.reproject(new_proj, resolution=new_res, resampling=resampling)
+
+        # filter outliers
         self.ds[["vx", "vy"]] = self.ds[["vx", "vy"]].where(
             (np.abs(self.ds["vx"].values) < 10000) | (np.abs(self.ds["vy"].values) < 10000), np.nan
         )
 
-        # Update of cube_data_classxr attributes
-        warnings.filterwarnings("ignore", category=UserWarning, module="pyproj")  # prevent to have a warning
+        # update attributes
+        warnings.filterwarnings("ignore", category=UserWarning, module="pyproj")
         if new_proj is None:
             new_proj = cube_to_match.ds.proj4
             self.ds = self.ds.assign_attrs({"proj4": new_proj})
         else:
             self.ds = self.ds.assign_attrs({"proj4": CRS.from_epsg(new_proj[5:]).to_proj4()})
+
         self.ds = self.ds.assign_coords({"x": self.ds.x, "y": self.ds.y})
         self.update_dimension()
+
+        # done
+        total_time = time.time() - start_time
+        print("\n" + "-" * 70)
+        print("[Preprocessing] Coordinate Reprojection Complete")
+        print(f"   Total time: {total_time:.1f}s")
 
     def reproj_vel(
         self,
@@ -1553,60 +1586,75 @@ class CubeDataClass:
         nb_cpu: int = 8,
     ):
         """
-        Reproject the velocity vector in a new projection grid (i.e. the x and y variables are not changed, only vx and vy are modified).
-        The new projection can be defined by the variable new_proj or by a cube stored in cube_to_match.
+        Velocity reprojection for multiple cube alignment.
 
-        :param new_proj: [str]  --- EPSG code of the new projection
-        :param cube_to_match: [cube_data_class]  --- cube used as a reference to reproject self
-        :param unit: [int] [default is 365] --- 365 if the unit of the velocity are m/y, 1 if they are m/d
-        :param nb_cpu: [int] [default is 8] --- number of CPUs used for the parallelization
+        Parameters:
+        - new_proj: target projection (e.g. "EPSG:4326"). If None and cube_to_match is supplied,
+                the projection of cube_to_match will be used.
+        - cube_to_match: if provided, align this cube to cube_to_match's grid/CRS using rioxarray.reproject_match.
+        - unit: unit of the velocity, 365 for m/y, 1 for m/d
+        - nb_cpu: number of CPU to use for parallel processing.
         """
+        print("[Preprocessing] Velocity Reprojection")
+        start_time = time.time()
 
+        # assign csc info
         if new_proj is None:
             if cube_to_match is not None:
                 new_proj = cube_to_match.ds.proj4
                 transformer = Transformer.from_crs(self.ds.proj4, new_proj)
             else:
-                raise ValueError("Please provide new_proj or cube_to_match")
+                raise ValueError("[Preprocessing] Please provide new_proj or cube_to_match")
         else:
             transformer = Transformer.from_crs(self.ds.proj4, CRS.from_epsg(new_proj[5:]).to_proj4())
 
-        # Prepare grid and transformer
-        grid = np.meshgrid(self.ds["x"], self.ds["y"])
-        grid_transformed = transformer.transform(grid[0], grid[1])
-        # temp = self.temp_base_()
-        temp = np.array([30] * self.nz)
+        print(f"[Preprocessing] Source: {self.ds.proj4}")
+        print(f"[Preprocessing] Target: {new_proj}")
+        print(f"[Preprocessing] Unit: {unit} ({'m/y' if unit == 365 else 'm/d'})")
 
+        # create coordinate grids
+        grid = np.meshgrid(self.ds["x"], self.ds["y"])
+
+        # transform grid
+        grid_transformed = transformer.transform(grid[0], grid[1])
+
+        # prepare temporal information
+        temp = self.temp_base_()
+
+        # parallel velocity transformation
         def transform_slice(z):
-            """Transform the velocity slice for a single time step."""
-            # compute the coordinate for the ending point of the vector
+            """single timestep transformation"""
             vx_slice = self.ds["vx"].isel(mid_date=z).values
             vy_slice = self.ds["vy"].isel(mid_date=z).values
+
             if vx_slice.shape != grid[0].shape:
                 vx_slice = vx_slice.T
                 vy_slice = vy_slice.T
+
             endx = (vx_slice * temp[z] / unit) + grid[0]
             endy = (vy_slice * temp[z] / unit) + grid[1]
-
-            # Transform final coordinates
             t = transformer.transform(endx, endy)
-            # Compute differences in the new coordinate system
+
             vx = (grid_transformed[0] - t[0]) / temp[z] * unit
             vy = (t[1] - grid_transformed[1]) / temp[z] * unit
 
             return vx, vy
 
-        results = np.array(Parallel(n_jobs=nb_cpu, verbose=0)(delayed(transform_slice)(z) for z in range(self.nz)))
+        results = np.array(
+            Parallel(n_jobs=nb_cpu, verbose=0)(
+                delayed(transform_slice)(z)
+                for z in tqdm(
+                    range(self.nz),
+                    desc="[Preprocessing] Velocity Projection",
+                    ncols=70,
+                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+                )
+            )
+        )
 
-        # results = np.array(
-        #     Parallel(n_jobs=nb_cpu, verbose=0)(
-        #         delayed(transform_slice, temp, grid, transformer)(z) for z in range(self.nz)
-        #     )
-        # )
-        # Unpack the results
+        # unpack and update
         vx, vy = results[:, 0, :, :], results[:, 1, :, :]
 
-        # Updating DataArrays
         self.ds["vx"] = xr.DataArray(
             vx.astype("float32"),
             dims=["mid_date", "y", "x"],
@@ -1621,7 +1669,15 @@ class CubeDataClass:
         )
         self.ds["vy"].encoding = {"vy": {"dtype": "float32", "scale_factor": 0.1, "units": "m/y"}}
 
+        # clean up memory
         del grid, transformer, temp, vx, vy
+        gc.collect()
+
+        # done
+        total_time = time.time() - start_time
+        print("\n" + "-" * 70)
+        print("[Preprocessing] Velocity Reprojection Complete")
+        print(f"   Total time: {total_time:.1f}s")
 
     def align_cube(
         self,
@@ -1633,27 +1689,34 @@ class CubeDataClass:
         nb_cpu: int = 8,
     ):
         """
-        Reproject cube to match the resolution, projection, and region of self.
-
-        :param cube: Cube to align to self
-        :param unit: Unit of the velocities (365 for m/y, 1 for m/d) (default is 365)
-        :param reproj_vel: Whether the velocity have to be reprojected or not -> it will modify their value (default is True)
-        :param reproj_coord: Whether the coordinates have to be interpolated or not (using interp_method) (default is True)
-        :param interp_method: Interpolation method used to reproject cube (default is 'nearest')
-        :param nb_cpu: [int] [default is 8] --- number of CPUs used for the parallelization
-
-        :return: Cube projected to self
+        Multiple cube alignment to match the resolution, projection, and geographic gird.
+        Parameters:
+        - cube: the cube to be aligned to self
+        - unit: unit of the velocity, 365 for m/y, 1 for m/d
+        - reproj_vel: if True, reproject the velocity field
+        - reproj_coord: if True, reproject the coordinates
+        - interp_method: resampling method for coordinate reprojection, "nearest" or "bilinear"
+        - nb_cpu: number of CPU to use for parallel processing of velocity reprojection
         """
-        # if the velocity components have to be reprojected in the new projection system
+        cube_name = cube.ds.attrs.get("author", "unknown")
+
+        print(f"[Preprocessing] Aligning Cube: {cube_name}")
+        overall_start = time.time()
+
+        # reproject velocity
         if reproj_vel:
             cube.reproj_vel(cube_to_match=self, unit=unit, nb_cpu=nb_cpu)
 
-        # if the coordinates have to be reprojected in the new projection system
+        # reproject coordinates
         if reproj_coord:
-            cube.reproj_coord(cube_to_match=self)
+            cube.reproj_coord(cube_to_match=self, interp_method=interp_method)
 
-        cube.ds = cube.ds.assign_attrs({"author": f"{cube.ds.author} aligned"})
+        cube.ds = cube.ds.assign_attrs({"author": f"{cube_name} aligned"})
         cube.update_dimension()
+
+        overall_time = time.time() - overall_start
+        print(f"[Preprocessing] CUBE ALIGNMENT COMPLETE: {cube_name}")
+        print(f"[Preprocessing] Total alignment time: {overall_time:.1f}s ({overall_time / 60:.1f} min)")
 
         return cube
 
