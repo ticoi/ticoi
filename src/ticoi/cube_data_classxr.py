@@ -1516,7 +1516,7 @@ class CubeDataClass:
         print("[Preprocessing] Coordinate Reprojection")
         start_time = time.time()
 
-        # assign csc info
+        # assign CRS info
         if cube_to_match is not None:
             cube_to_match.ds = cube_to_match.ds.rio.write_crs(cube_to_match.ds.proj4)
             print(f"      Target CRS: {cube_to_match.ds.proj4}")
