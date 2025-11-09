@@ -1598,7 +1598,7 @@ class CubeDataClass:
         print("[Preprocessing] Velocity Reprojection")
         start_time = time.time()
 
-        # assign csc info
+        # assign CRS info
         if new_proj is None:
             if cube_to_match is not None:
                 new_proj = cube_to_match.ds.proj4
