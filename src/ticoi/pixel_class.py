@@ -24,12 +24,17 @@ import scipy.signal as signal
 import seaborn as sns
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error
-
 from typing import Literal
+
+from ticoi.inversion_functions import construction_dates_range_np
+from ticoi.filtering_functions import df_smooth_wrapper
 
 
 TypeData = Literal["invert", "interp", "obs"]
-Filter = Literal["lowpass", "highpass"]
+FilterTICOI = Literal["lowpass", "highpass"]
+FilterObs = Literal["mz_score", "median_angle"]
+VariableName = Literal["vv", "vx", "vy"]
+
 
 # %%========================================================================= #
 #                           DATAFRAME_DATA OBJECT                             #
@@ -68,6 +73,11 @@ class DataframeData:
         self.dataf["vy"] = self.dataf["vy"] / self.dataf["temporal_baseline"] * conversion
 
     def set_vx_vy_my(self, conversion: int = 365):
+        """
+        Convert velocity in m/y to velocity in m/d, or the contrary
+        :param conversion: conversion factor
+        :return:
+        """
         if "result_dx" in self.dataf.columns:
             self.dataf = self.dataf.rename(columns={"result_dx": "vx", "result_dy": "vy"})
         self.dataf["vx"] = self.dataf["vx"] * conversion
@@ -90,6 +100,44 @@ class DataframeData:
         if "vv" in self.dataf.columns:
             self.vvymin = int(self.dataf["vv"].min())
             self.vvymax = int(self.dataf["vv"].max())
+
+    def set_displacement(self, variable: VariableName, conversion: int = 365):
+        """
+        Set displacement for a given dataframe
+        :return:
+        """
+
+        disp_name = f"d{variable[1]}"
+        self.dataf[disp_name] = self.dataf[variable] * (self.dataf["temporal_baseline"]) / conversion
+        if variable == "vx" or variable == "vy":
+            self.dataf[f"error{variable[1]}"] = (
+                self.dataf[f"error{variable[1]}"] * (self.dataf["temporal_baseline"]) / conversion
+            )
+
+    def compute_modified_zscore(self):
+        med = self.data[["vx", "vy"]].median(axis=0)
+        mad = np.median(np.abs(self.data[["vx", "vy"]] - med), axis=0)
+        self.data[["mz_vx", "mz_vy"]] = 0.6745 * (self.data[["vx", "vy"]] - med) / mad
+        data_filtered = self.data[(self.data["mz_vx"].abs() < 3.5) & (self.data["mz_vy"].abs() < 3.5)]
+
+        self.data = data_filtered
+
+    def compute_median_angle(self):
+        median_vx = np.median(self.data["vx"])
+        median_vy = np.median(self.data["vy"])
+
+        # Compute the angle of each vector and of the median vector
+        angles = np.arctan2(self.data["vy"], self.data["vx"])
+        median_angle = np.arctan2(median_vy, median_vx)
+
+        # Compute angular difference (ensure it's between 0 and π)
+        angle_diff = np.abs(angles - median_angle)
+        angle_diff = np.where(angle_diff > np.pi, 2 * np.pi - angle_diff, angle_diff)
+
+        # Keep only rows within 45° (π/4 radians) of the median vector
+        angle_threshold = np.deg2rad(45)
+        data_filtered = self.data[angle_diff <= angle_threshold]
+        self.data = data_filtered
 
 
 # %%========================================================================= #
@@ -230,11 +278,18 @@ class PixelClass:
         else:
             raise ValueError(f"'dataf' must be a list or a pandas dataframe, not {type(dataf)}")
 
-    def set_cumulative_displacement(self, data: "PixelClass.DataframeData", variable):
+    def set_cumulative_displacement(self, variable: VariableName):
+        """
+        Set cumuluative displacement for a particular variable in inverted dataframe.
+        :param variable: variable name
+        :return:
+        """
+        assert self.datainvert is not None, (
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling this function"
+        )
         conversion = self.get_conversion()
-        disp = data[variable] * self.datainvert.dataf["temporal_baseline"] / conversion
-        data[f"disp_{variable}"] = np.cumsum(disp)
-        return data
+        disp = self.datainvert.dataf[variable] * self.datainvert.dataf["temporal_baseline"] / conversion
+        self.datainvert.dataf[f"disp_{variable}"] = np.cumsum(disp)
 
     def get_dataf_invert_or_obs_or_interp(self, type_data: TypeData = "obs") -> (pd.DataFrame, str):  # type: ignore
         """
@@ -298,7 +353,24 @@ class PixelClass:
         directionm_mean *= 360 / (2 * np.pi)
         return directionm, directionm_mean
 
-    def get_filtered_results(self, filt: Filter | None = None) -> (np.array, np.array, np.array):
+    def get_filtered_obs(self, filters: list[FilterObs] = ["mz_score"]):
+        """
+        Filter obervations according to the provided filters
+        :param filters: name of the filters to use, mz_score for modified zscore, and median angle to filter observations which are 45° away from the median vector
+        :return:
+        """
+        assert self.dataobs is not None, (
+            "No observation data found, think of loading the results of an observation to this pixel_class before calling this function"
+        )
+
+        dic_filter = {
+            "median_angle": DataframeData.compute_median_angle,
+            "mz_score": DataframeData.compute_modified_zscore,
+        }
+        for filt in filters:
+            dic_filter[filt]
+
+    def get_filtered_results(self, filt: FilterTICOI | None = None) -> (np.array, np.array, np.array):
         """
         Filter TICOI results using a given filter.
 
@@ -383,7 +455,7 @@ class PixelClass:
 
     def get_best_matching_sinus(
         self,
-        filt: Filter | None = None,
+        filt: FilterTICOI | None = None,
         impose_frequency: bool = True,
         raw_seasonality: bool = False,
         several_freq: int = 1,
@@ -527,6 +599,45 @@ class PixelClass:
             stats,
             stats_raw,
         )
+
+    def prepare_for_inversion(
+        self, select_temp_baseline, regu="1accelnotnull", smooth_method="savgol", t_win=90, sigma=3
+    ):
+        assert self.dataobs is not None, (
+            "No observation data found, think of loading the results of an observation to this pixel_class before calling this function"
+        )
+
+        self.dataobs.set_displacement(variable="vx")
+        self.dataobs.set_displacement(variable="vy")
+        self.dataobs.dataf["mid_date"] = (
+            self.dataobs.dataf["date1"] + (self.dataobs.dataf["date2"] - self.dataobs.dataf["date1"]) / 2
+        )
+
+        if "sensor" not in self.dataobs.dataf.columns:
+            self.dataobs.dataf["sensor"] = np.full("", self.dataobs.dataf.shape[0])
+
+        dates_range = construction_dates_range_np(
+            self.dataobs.dataf[["date1", "date2"]].to_numpy().astype("datetime64[D]")
+        )
+        date_out = pd.to_datetime(dates_range[:-1] + np.diff(dates_range) // 2)
+
+        data_original_subset = self.dataobs.dataf[self.dataobs.dataf["temporal_baseline"] < select_temp_baseline]
+
+        if regu == "1accelnotnull":
+            mean = df_smooth_wrapper(
+                data_original_subset,
+                t_out=date_out,
+                smooth_method=smooth_method,
+                t_win=t_win,
+                sigma=sigma,
+                order=3,
+                axis=0,
+            )
+            mean = [mean[i] / 365 for i in range(len(mean))]
+        else:
+            mean = None
+
+        return dates_range, self.dataobs.dataf, mean
 
     # %%========================================================================= #
     #              PLOTS ABOUT RAW DATA / INTERPOLATION RESULTS                   #
@@ -1176,13 +1287,12 @@ class PixelClass:
         """
 
         assert self.datainvert is not None, (
-            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling plot_xcount_vv()"
+            "No inverted data found, think of loading the results of an inversion to this pixel_class before calling this function"
         )
 
+        self.set_cumulative_displacement(variable="vv")
         dataf, label = self.get_dataf_invert_or_obs_or_interp(type_data="invert")
         data = dataf.dataf.dropna(subset=["vx", "vy"])  # drop rows where with no velocity values
-
-        data["disp_vv"] = np.cumsum(data["vv"] * data["temporal_baseline"] / 365)
 
         if "xcount_x" in data.columns:  # create the norm to plot x_count
             xcount_mean = np.nanmean([data["xcount_x"], data["xcount_y"]], axis=0)
@@ -1206,7 +1316,7 @@ class PixelClass:
 
         if "xcount_x" in data.columns:
             scat = ax.scatter(
-                data["date2"], data["disp_vv"], c=xcount_mean, cmap=cmap, norm=norm, s=25, edgecolor=".3", linewidth=0.3
+                data["date2"], data["dv"], c=xcount_mean, cmap=cmap, norm=norm, s=25, edgecolor=".3", linewidth=0.3
             )
             # Add the colorbar for xcount
             cbar = fig.colorbar(scat, ax=ax, boundaries=bounds, orientation="vertical", pad=0.1)
@@ -1218,7 +1328,7 @@ class PixelClass:
         else:
             scat = ax.scatter(
                 data["date2"],
-                data["disp_vv"],
+                data["dv"],
                 c=(self.datainvert.dataf["xcount_x"] + self.datainvert.dataf["xcount_y"]) / 2,
                 s=8,
                 cmap=cmap,

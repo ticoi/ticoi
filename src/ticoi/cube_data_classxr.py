@@ -53,6 +53,7 @@ class CubeDataClass:
     _loader_registry = {
         "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "_loader_itslive",
         "J. Mouginot, R.Millan, A.Derkacheva": "_loader_millan",
+        "Cube of Sentinel-2 Ice Velocity": "_loader_millan",
         "L. Charrier, L. Guo": "_loader_charrier",
         "L. Charrier": "_loader_charrier",
         "E. Ducasse": "_loader_ducasse",
@@ -268,9 +269,11 @@ class CubeDataClass:
             "S1": "Sentinel-1",
             "S1A": "Sentinel-1",
             "S1B": "Sentinel-1",
+            "Sen-1": "Sentinel-1",
             "S2": "Sentinel-2",
             "S2A": "Sentinel-2",
             "S2B": "Sentinel-2",
+            "Sen-2": "Sentinel-2",
             # other
             "Pleiades": "Pleiades",
             # add more mappings as needed
@@ -408,8 +411,10 @@ class CubeDataClass:
         # standardize sensor names if sensor variable exists
         if "sensor" in self.ds:
             sensor = self.ds["sensor"].values
+            sensor = self._standardize_sensor_names(sensor)
         elif "sensor" in self.ds.attrs:
             sensor = self.ds.attrs["sensor"]
+            sensor = self._standardize_sensor_names(sensor)
         else:
             sensor = "Unknown"
 
@@ -476,6 +481,7 @@ class CubeDataClass:
         self.author = "IGE"
         self.source = self.ds.source
         self.ds = self.ds.rename({"z": "mid_date"})
+        self.ds.attrs = {"proj4": self.ds.mapping.spatial_ref}
 
         # standardize sensor names
         sensor_raw = np.char.strip(self.ds["sensor"].values.astype(str), " ")
@@ -570,6 +576,26 @@ class CubeDataClass:
         reproj_vel: bool = False,
         verbose: bool = False,
     ):
+        """
+
+        :param filepath:
+        :param chunks: chunks mode
+        chunks="auto" will use dask auto chunking taking into account the engine preferred chunks.
+        chunks=-1 loads the data with dask using a single chunk for all arrays.
+        chunks={} loads the data with dask using the engine’s preferred chunk size, generally identical to the format’s chunk size. If not available, a single chunk for all arrays.
+        :param conf:
+        :param subset:
+        :param buffer:
+        :param pick_date:
+        :param pick_sensor:
+        :param pick_temp_bas:
+        :param proj:
+        :param mask:
+        :param reproj_coord:
+        :param reproj_vel:
+        :param verbose:
+        :return:
+        """
         self.__init__()
 
         if isinstance(filepath, list):
@@ -654,13 +680,16 @@ class CubeDataClass:
 
         # get standardized data
         author = self.ds.attrs.get("author", "Unknown")
-        loader = self._loader_registry.get(author, self._loader_generic)
+        loader = self._loader_registry.get(
+            author, self._loader_generic
+        )  # provide the loader which correspond to the author, if the author does not exist in the dictionary, return the generic loader
         if isinstance(loader, str):
-            loader = getattr(self, loader)
+            loader = getattr(self, loader)  # provide the function of the class
         if verbose:
-            print(
-                f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
-            )
+            if loader == self._loader_registry:
+                print(
+                    f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
+                )
         standard_data = loader(conf)
 
         # keep only certain variable and attributes
@@ -687,10 +716,11 @@ class CubeDataClass:
                 print("[Data loading] Masking cube...")
             self.mask_cube(mask)
 
-        if verbose:
-            print("[Data loading] Computing optimal chunk size...")
-        tc, yc, xc = self.determine_optimal_chunk_size(verbose=verbose)
-        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
+        if chunks == -1:
+            if verbose:
+                print("[Data loading] Computing optimal chunk size...")
+            tc, yc, xc = self.determine_optimal_chunk_size(verbose=verbose)
+            self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
 
         self.ds = self.ds.sortby("mid_date")
         self.standardize_cube_for_processing()
@@ -709,7 +739,7 @@ class CubeDataClass:
         """
 
         self.ds = self.ds.unify_chunks()
-        if self.ds.chunksizes[time_dim] != (self.nz,):  # no chunk in time
+        if not self.ds.chunksizes == {} and self.ds.chunksizes[time_dim] != (self.nz,):  # no chunk in time
             self.ds = self.ds.chunk({time_dim: self.nz})
 
         if not self.is_TICO:
@@ -1278,7 +1308,7 @@ class CubeDataClass:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(baseline < select_baseline)
                 while (
-                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 200)
+                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 500)
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
                     idx = np.where(baseline < select_baseline)
