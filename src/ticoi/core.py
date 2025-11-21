@@ -673,6 +673,7 @@ def interpolation_core(
 
     :return dataf_lp: [pd dataframe] --- Result of the temporal interpolation
     """
+
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     if first_date_interpol is None:
@@ -909,14 +910,14 @@ def process(
     obs_filt: xr.Dataset | None = None,
     interpolation_load_pixel: str = "nearest",
     iteration: bool = True,
-    interval_output: int = 1,
+    interval_output: int = 30,
     first_date_interpol: np.datetime64 | None = None,
     last_date_interpol: np.datetime64 | None = None,
     proj="EPSG:4326",
     threshold_it: float = 0.1,
     conf: bool = True,
     option_interpol: str = "spline",
-    redundancy: int | None = None,
+    redundancy: int | None = 5,
     detect_temporal_decorrelation: bool = True,
     unit: int = 365,
     result_quality: list | str | None = None,
