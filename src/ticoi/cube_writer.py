@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import xarray as xr
+import os
 
 from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.interpolation_functions import smooth_results
@@ -118,6 +119,7 @@ class CubeResultsWriter:
 
         :return cubenew: [cube_data_class] --- New cube where the results are saved
         """
+
         if not self._validate_input(result):
             return "No results to write or save."
 
@@ -439,7 +441,7 @@ class CubeResultsWriter:
             coords={
                 "x": ("x", self.ds["x"].values, x_attrs),
                 "y": ("y", self.ds["y"].values, y_attrs),
-                "time": ("time", time_values.values, time_attrs),
+                "mid_date": ("mid_date", time_values.values, time_attrs),
             }
         )
 
@@ -454,7 +456,10 @@ class CubeResultsWriter:
             date2_values = (non_null_el["date2"] - epoch).dt.total_seconds() / (24 * 3600)
             time_bnds_data = np.vstack([date1_values, date2_values]).T
             cubenew.ds["time_bnds"] = (("time", "bnds"), time_bnds_data)
-            cubenew.ds["time"].attrs["bounds"] = "time_bnds"
+            cubenew.ds["mid_date"].attrs["bounds"] = "time_bnds"
+            # #TODO:  decide if we should keep the date1 and 2 or time_bnds, or both.
+            cubenew.ds["date1"] = xr.DataArray(non_null_el["date1"].values, dims="mid_date")
+            cubenew.ds["date2"] = xr.DataArray(non_null_el["date2"].values, dims="mid_date")
 
         return cubenew
 
@@ -476,9 +481,11 @@ class CubeResultsWriter:
         :return:
         """
         data_array = xr.DataArray(
-            data, dims=["x", "y", "time"], coords={"x": cube.ds["x"], "y": cube.ds["y"], "time": cube.ds["time"]}
+            data,
+            dims=["x", "y", "mid_date"],
+            coords={"x": cube.ds["x"], "y": cube.ds["y"], "mid_date": cube.ds["mid_date"]},
         )
-        cube.ds[var] = data_array.transpose("time", "y", "x")
+        cube.ds[var] = data_array.transpose("mid_date", "y", "x")
         attrs = {"units": unit, "long_name": long_name, "grid_mapping": "grid_mapping"}
 
         attrs["short_name"] = var  # no standard_name exist for our variables
@@ -506,7 +513,7 @@ class CubeResultsWriter:
 
     def _validate_input(self, result: list) -> bool:
         """
-        Check if the inputs are valid
+        Check if the inputs are not empty
         :param result: [list] --- List of pd xarray, results from the TICOI method
         :return:
         """
@@ -639,10 +646,21 @@ class CubeResultsWriter:
         if "time_bnds" in cube.ds:
             encoding["time_bnds"] = {"_FillValue": None}
 
-        filepath = f"{savepath}/{filename}.nc"
+        # Build base filepath
+        base_filepath = os.path.join(savepath, f"{filename}.nc")
+        filepath = base_filepath
+
+        # Auto-increment if file already exists
+        if os.path.exists(filepath):
+            counter = 1
+            while True:
+                new_filepath = os.path.join(savepath, f"{filename}_{counter}.nc")
+                if not os.path.exists(new_filepath):
+                    filepath = new_filepath
+                    break
+                counter += 1
+
         cube.ds.to_netcdf(filepath, engine="h5netcdf", encoding=encoding)
-        if verbose:
-            print(f"[Writing results] Saved to {filepath}")
 
     def _parse_proj4_to_cf_attrs(self) -> dict:
         """convert proj4 string to CF attributes."""
