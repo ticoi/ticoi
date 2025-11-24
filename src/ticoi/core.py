@@ -1339,6 +1339,29 @@ def save_cube_parameters(
     :param inversion_kwargs: [dict] --- parameters used to load the cube
     :return:
     """
+
+    # --- DEFAULT VALUES ---
+    default_load = {
+        "pick_date": None,
+        "pick_temp_bas": None,
+        "subset": None,
+    }
+
+    default_inversion = {
+        "apriori_weight": False,
+        "coef": 1.0,
+        "option_interpol": None,
+        "interval_output": None,
+        "redundancy": None,
+    }
+
+    # --- MERGE WITH INPUTS ---
+    # if a value is missing, take the default value
+    load_kwargs = {**default_load, **(load_kwargs or {})}
+    inversion_kwargs = {**default_inversion, **(inversion_kwargs or {})}
+
+    # --- DATA SUBSET NAMES ---
+    # extract sensor names
     sensor_array = np.unique(cube.ds["sensor"])
     sensor_strings = [str(sensor) for sensor in sensor_array]
     sensor = ", ".join(sensor_strings)
@@ -1357,7 +1380,7 @@ def save_cube_parameters(
     if inversion_kwargs["apriori_weight"]:
         source += " and apriori weight"
     source += f". The regularisation coefficient is {inversion_kwargs['coef']}."
-    if "interp" in returned:
+    if returned and "interp" in returned:
         source += f"The interpolation method used is {inversion_kwargs['option_interpol']}."
         source += f"The interpolation baseline is {inversion_kwargs['interval_output']} days."
         source += f"The temporal spacing (redundancy) is {inversion_kwargs['redundancy']} days."
