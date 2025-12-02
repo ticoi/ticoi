@@ -744,7 +744,7 @@ class CubeDataClass:
         if not self.ds.chunksizes == {} and self.ds.chunksizes[time_dim] != (self.nz,):  # no chunk in time
             self.ds = self.ds.chunk({time_dim: self.nz})
 
-        if not self.is_TICO:
+        if not self.is_TICO:  # not inverted results
             # Create a variable for temporal_baseline
             self.ds["temporal_baseline"] = xr.DataArray(
                 (self.ds["date2"] - self.ds["date1"]).dt.days.values, dims="mid_date"
@@ -1834,7 +1834,6 @@ class CubeDataClass:
             ds_mean = []
             for variable in return_variable:
                 mean_v = dico_variable[variable].to_numpy().astype(np.float32)
-                mean_v = np.flip(mean_v.T, axis=0)
 
                 if save:
                     # Create the GeoTIFF file
@@ -1916,16 +1915,20 @@ class CubeDataClass:
             if verbose:
                 print("i,j", i, j)
 
+            # Define a 3×3 window around (i, j)
+            x_vals = slice(i - self.resolution, i + self.resolution)
+            y_vals = slice(j + self.resolution, j - self.resolution)
+
             if variable == "vv":
-                v = np.sqrt(
-                    self.ds["vx"].interp(x=i, y=j, method=method_interp).load() ** 2
-                    + self.ds["vy"].interp(x=i, y=j, method="linear").load() ** 2
-                )
-            elif variable == "vx" or variable == "vy":
-                v = self.ds[variable].interp(x=i, y=j, method=method_interp).load()
+                vx_win = self.ds["vx"].sel(x=x_vals, y=y_vals).load()
+                vy_win = self.ds["vy"].sel(x=x_vals, y=y_vals).load()
+                v = np.sqrt(vx_win**2 + vy_win**2).mean(dim=["x", "y"], skipna=True)
+
+            elif variable in ["vx", "vy"]:
+                v = self.ds[variable].sel(x=x_vals, y=y_vals).load().mean(dim=["x", "y"], skipna=True)
 
             data = np.array([date1, date2, v.values], dtype=object).T
-            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Slort according to the first date
+            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Sort according to the first date
 
             return data[:, 2]
 
