@@ -64,9 +64,9 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
         return np.array([[dates_ini[z], ini[z]] for z in range(len(dates_ini))])
 
 
-def find_granule_by_point(input_point):  # [lon,lat]
+def find_granule_by_point(input_point: list[float, float]):  # [lon,lat]
     """
-    Takes an input dictionary (a geojson catalog) and a point to represent AOI and returns a list of the s3 urls corresponding to
+    Takes as input a point to represent AOI and returns a list of the s3 urls corresponding to
     zarr datacubes whose footprint covers the AOI.
     Function from https://github.com/e-marshall/itslivetools.git
 
