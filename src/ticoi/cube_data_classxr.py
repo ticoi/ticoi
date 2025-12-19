@@ -342,7 +342,7 @@ class CubeDataClass:
         if pick_temp_bas is not None:
             temp_baseline = (self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")
             mask = (temp_baseline >= pick_temp_bas[0]) & (temp_baseline <= pick_temp_bas[1])
-            self.ds = self.ds.where(mask, drop=True)
+            self.ds = self.ds.where(mask.compute(), drop=True)
 
         # final dimension update
         self.update_dimension()
