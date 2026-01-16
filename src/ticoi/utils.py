@@ -26,6 +26,7 @@ from shapely.geometry import Point, Polygon
 
 from ticoi.core import interpolation_core, interpolation_to_data, inversion_core
 from ticoi.cube_data_classxr import CubeDataClass
+from urllib.parse import urlparse
 
 
 def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_lines: bool = False) -> np.ndarray:
@@ -64,6 +65,20 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
         return np.array([[dates_ini[z], ini[z]] for z in range(len(dates_ini))])
 
 
+def _http_to_s3_zarr(url: str) -> str:
+    """
+    Convert http to s3 url
+    :param url: http url
+    :return: s3fs
+    """
+    parsed = urlparse(url)
+
+    if not parsed.netloc.startswith("its-live-data.s3"):
+        raise ValueError("Not an ITS-LIVE S3 URL")
+
+    return f"s3://its-live-data{parsed.path}"
+
+
 def find_granule_by_point(input_point: list[float, float]):  # [lon,lat]
     """
     Takes as input a point to represent AOI and returns a list of the s3 urls corresponding to
@@ -89,7 +104,8 @@ def find_granule_by_point(input_point: list[float, float]):  # [lon,lat]
             bbox_gdf = gpd.GeoDataFrame(index=[0], crs="epsg:4326", geometry=[bbox_geom])
 
             if bbox_gdf.contains(point_gdf).all():
-                target_granule_urls.append(granule["properties"]["zarr_url"])
+                s3_path = http_to_s3_zarr(granule["properties"]["zarr_url"])
+                target_granule_urls.append(s3_path)
 
     return target_granule_urls
 

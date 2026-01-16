@@ -34,6 +34,7 @@ from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
 import matplotlib.pyplot as plt
+import s3fs
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
@@ -670,7 +671,12 @@ class CubeDataClass:
                     )
                 self.ds = xr.open_dataset(filepath, chunks={})
         elif ext == "zarr":
-            self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
+            if filepath[:2] == "s3":
+                fs = s3fs.S3FileSystem(anon=True, client_kwargs={"region_name": "us-west-2"})
+                store = s3fs.S3Map(root=filepath, s3=fs, check=False)
+            else:
+                store = filepath
+            self.ds = xr.open_dataset(store, decode_timedelta=True, engine="zarr", consolidated=False, chunks=chunks)
         else:
             raise ValueError(f"File extension {ext} not recognized, only .nc and .zarr are supported.")
 
@@ -1007,9 +1013,8 @@ class CubeDataClass:
         self,
         delete_outliers: str | float,
         flag: xr.Dataset | None = None,
-        slope: xr.Dataset | None = None,
-        aspect: xr.Dataset | None = None,
         direction: xr.Dataset | None = None,
+        obs_filt: xr.Dataset | None = None,
         **kwargs,
     ):
         """
@@ -1032,6 +1037,7 @@ class CubeDataClass:
                     self.ds["vy"],
                     filt_method=delete_outliers,
                     direction=direction,
+                    obs_filt=obs_filt,
                     axis=axis,
                     **kwargs,
                 )
@@ -1085,8 +1091,6 @@ class CubeDataClass:
                         self.delete_outliers("vvc_angle", flag)
                     else:
                         self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
-                elif method == "topo_angle":
-                    self.delete_outliers("topo_angle", flag, slope=slope, aspect=aspect)
                 elif method == "flow_angle":
                     self.delete_outliers("flow_angle", flag, direction=direction)
                 elif method == "mz_score":
@@ -1094,12 +1098,20 @@ class CubeDataClass:
                         self.delete_outliers("mz_score", flag)
                     else:
                         self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
+                elif method == "moving_mz_score":
+                    if obs_filt is not None:
+                        if delete_outliers["moving_mz_score"] is None:
+                            self.delete_outliers("moving_mz_score", flag, obs_filt=obs_filt)
+                        else:
+                            self.delete_outliers(
+                                "moving_mz_score", flag, obs_filt=obs_filt, z_thres=delete_outliers["moving_mz_score"]
+                            )
                 else:
                     raise ValueError(
-                        "Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
+                        "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
-            raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
+            raise ValueError(f"delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
 
     def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
@@ -1396,22 +1408,13 @@ class CubeDataClass:
         start = time.time()
 
         if delete_outliers is not None:  # remove outliers beforehand
-            slope, aspect, direction = None, None, None
-            if (isinstance(delete_outliers, str) and delete_outliers == "topo_angle") or (
-                isinstance(delete_outliers, dict) and "topo_angle" in delete_outliers.keys()
-            ):
-                if isinstance(dem_file, str):
-                    slope, aspect = self.compute_slo_asp(dem_file=dem_file)
-                else:
-                    raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
+            direction = None
 
-            elif (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
+            if (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(
-                delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction
-            )
+            self.delete_outliers(delete_outliers=delete_outliers, flag=None, direction=direction)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
@@ -1462,6 +1465,8 @@ class CubeDataClass:
         else:
             obs_filt = None
 
+        if "moving_mz_score" in delete_outliers.keys():
+            self.delete_outliers(delete_outliers=delete_outliers, flag=None, direction=direction, obs_filt=obs_filt)
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit

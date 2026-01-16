@@ -34,6 +34,7 @@ dependencies = [
   "rasterio",
   "requests",
   "rioxarray",
+  "s3fs",
   "scipy",
   "scikit-learn",
   "seaborn",
