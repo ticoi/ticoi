@@ -1465,8 +1465,6 @@ class CubeDataClass:
         else:
             obs_filt = None
 
-        if "moving_mz_score" in delete_outliers.keys():
-            self.delete_outliers(delete_outliers=delete_outliers, flag=None, direction=direction, obs_filt=obs_filt)
         # Unify the observations to displacement to provide displacement values during inversion
         self.ds["vx"] = self.ds["vx"] * self.ds["temporal_baseline"] / unit
         self.ds["vy"] = self.ds["vy"] * self.ds["temporal_baseline"] / unit
