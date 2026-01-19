@@ -24,6 +24,7 @@ dependencies = [
   "jdcal",
   "joblib",
   "h5netcdf",
+  "h5py",
   "matplotlib",
   "notebook",
   "numba",
