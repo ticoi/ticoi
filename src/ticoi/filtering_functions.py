@@ -676,15 +676,6 @@ def dask_filt_warpper(
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
-    elif filt_method == "moving_mz_score":
-        inlier_mask_vx = da_vx.data.map_blocks(
-            moving_mz_score_filt, obs_filt=obs_filt["vx_filt"], mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype
-        )
-        inlier_mask_vy = da_vy.data.map_blocks(
-            moving_mz_score_filt, obs_filt=obs_filt["vy_filt"], mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype
-        )
-        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
-
     elif filt_method == "magnitude":  # delete observations according to a threshold in magnitude
         obs_arr = np.hypot(da_vx.data, da_vy.data)
         inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
