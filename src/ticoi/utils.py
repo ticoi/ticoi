@@ -67,9 +67,9 @@ def moving_average_dates(dates: np.ndarray, data: np.ndarray, v_pos: int, save_l
 
 def _http_to_s3_zarr(url: str) -> str:
     """
-    Convert http to s3 url
+    Convert http to s3
     :param url: http url
-    :return: s3fs
+    :return: link to s3 bucket
     """
     parsed = urlparse(url)
 
@@ -104,7 +104,7 @@ def find_granule_by_point(input_point: list[float, float]):  # [lon,lat]
             bbox_gdf = gpd.GeoDataFrame(index=[0], crs="epsg:4326", geometry=[bbox_geom])
 
             if bbox_gdf.contains(point_gdf).all():
-                s3_path = http_to_s3_zarr(granule["properties"]["zarr_url"])
+                s3_path = _http_to_s3_zarr(granule["properties"]["zarr_url"])
                 target_granule_urls.append(s3_path)
 
     return target_granule_urls
