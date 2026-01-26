@@ -365,6 +365,25 @@ def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
     return inlier_flag
 
 
+def moving_mz_score_filt(obs: da.array,obs_filt:da.array, mz_thres: int = 3.5, axis: int = 2):
+    """
+    Remove the observations if it is 3.5 time the MAD from the median of observations over this pixel
+    :param obs: cube data to filter
+    :param mz_thres: a threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
+    :param axis: axis on which to perform the zscore computation
+    :return: boolean mask
+    """
+
+    med = np.nanmedian(obs, axis=axis, keepdims=True)
+    mad = np.nanmedian(abs(obs - med), axis=axis, keepdims=True)
+
+    # mad = median_abs_deviation(obs, axis=axis)
+
+    mz_scores = 0.6745 * (obs - med) / mad
+    inlier_flag = np.abs(mz_scores) < mz_thres
+
+    return inlier_flag
+
 def NVVC_angle_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
 ) -> np.array:
@@ -540,7 +559,6 @@ def flow_angle_filt(
 
     return xr.DataArray(inlier_flag, dims=obs_cpx.dims, coords=obs_cpx.coords)
 
-
 def dask_filt_warpper(
     da_vx: xr.DataArray,
     da_vy: xr.DataArray,
@@ -553,6 +571,7 @@ def dask_filt_warpper(
     median_magnitude_thres=3,
     error_thres: int = 100,
     direction: xr.Dataset = None,
+    obs_filt: xr.Dataset = None,
     axis: int = 2,
 ):
     """
@@ -603,6 +622,15 @@ def dask_filt_warpper(
     elif filt_method == "mz_score":  # threshold according to the zscore
         inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "moving_mz_score":
+        inlier_mask_vx = da_vx.data.map_blocks(
+            moving_mz_score_filt, obs_filt=obs_filt["vx_filt"], mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype
+        )
+        inlier_mask_vy = da_vy.data.map_blocks(
+            moving_mz_score_filt, obs_filt=obs_filt["vy_filt"], mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype
+        )
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "magnitude":  # delete observations according to a threshold in magnitude
