@@ -18,6 +18,10 @@ import scipy.sparse as sp
 from numba import jit
 from scipy.linalg import inv
 
+import os
+
+os.environ["KMP_WARNINGS"] = "0"  # to avoid OMP: Info #276
+
 # %% ======================================================================== #
 #                             CONSTRUCTION OF THE SYSTEM                      #
 # =========================================================================%% #
@@ -99,7 +103,7 @@ def construction_dates_range_np(data: np.ndarray) -> np.ndarray:
     return dates
 
 
-@jit(nopython=True)  # use numba
+@jit(nopython=True, parallel=True)  # use numba
 def construction_a_lf(dates: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
     """
     Construction of the design matrix A in the formulation AX = Y.
