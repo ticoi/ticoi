@@ -59,23 +59,31 @@ pip install -e . #to use the package everywhere locally
 
 ### Basic examples
 
-**- notebook**
+#### notebook
 
 * [How to process one pixel of a NetCDF file](examples/basic/notebook/pixel_demo_local_ncdata.ipynb)
 * [How to process one pixel of ITS_LIVE data, stored on a cloud](examples/basic/notebook/pixel_demo_its_live_on_cloud.ipynb)
+* [How to process a subset of a NetCDF file](examples/basic/notebook/cube_demo_local_ncdata.ipynb)
 
-**- python_script**
+
+#### python_script
 
 * [How to process one cube](examples/basic/python_script/cube_ticoi_demo.py)
 * [How to process one pixel](examples/basic/python_script/pixel_ticoi_demo.py)
 
 ### Advanced examples
 
+#### TICOI processing
 * [How to process one ITS_LIVE cube directly from the cloud](/examples/advanced/demo_for_different_datasets/cube_ticoi_demo_its_live.py)
-* [How to format several geotiff files into a netCDF file](examples/advanced/cube_prep_from_geotiff.py)
-* [How to apply GLAFT on TICOI results](examples/advanced/quality_metrics/glaft_for_ticoi_results.py)
-* [How to compute statistics in static areas](examples/advanced/quality_metrics/stats_in_static_areas.py)
 * [How to process one IGE cube](examples/advanced/demo_for_different_datasets/cube_ticoi_demo_IGE_S2.py)
+
+#### Choice of hyperparameters
+* [How to select the regularization coefficient based on the Velocity Vector Coherence curve](examples/advanced/hyperparameter_choice/coef_regu_based_on_vvc.py)
+
+#### Criterion to evaluate the quality of TICOI results
+* [How to the Velocity Vector Coherence of TICOI results](examples/advanced/quality_metrics/VVC.ipynb)
+* [How to apply GLAFT on TICOI results](examples/advanced/quality_metrics/glaft_for_ticoi_results.py)
+* [How to compute statistics over static areas](examples/advanced/quality_metrics/stats_in_static_areas.py)
 
 ## TO USE YOUR OWN DATASET
 

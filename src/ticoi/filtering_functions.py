@@ -623,6 +623,7 @@ def dask_filt_warpper(
     median_magnitude_thres=3,
     error_thres: int = 100,
     direction: xr.Dataset = None,
+    obs_filt: xr.Dataset = None,
     axis: int = 2,
 ):
     """

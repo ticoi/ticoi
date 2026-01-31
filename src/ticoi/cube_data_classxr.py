@@ -34,6 +34,7 @@ from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from pyproj import CRS, Proj, Transformer
 import matplotlib.pyplot as plt
+import s3fs
 
 from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
@@ -55,6 +56,7 @@ class CubeDataClass:
     _loader_registry = {
         "ITS_LIVE, a NASA MEaSUREs project (its-live.jpl.nasa.gov)": "_loader_itslive",
         "J. Mouginot, R.Millan, A.Derkacheva": "_loader_millan",
+        "Cube of Sentinel-2 Ice Velocity": "_loader_millan",
         "L. Charrier, L. Guo": "_loader_charrier",
         "L. Charrier": "_loader_charrier",
         "E. Ducasse": "_loader_ducasse",
@@ -270,9 +272,11 @@ class CubeDataClass:
             "S1": "Sentinel-1",
             "S1A": "Sentinel-1",
             "S1B": "Sentinel-1",
+            "Sen-1": "Sentinel-1",
             "S2": "Sentinel-2",
             "S2A": "Sentinel-2",
             "S2B": "Sentinel-2",
+            "Sen-2": "Sentinel-2",
             # other
             "Pleiades": "Pleiades",
             # add more mappings as needed
@@ -339,7 +343,7 @@ class CubeDataClass:
         if pick_temp_bas is not None:
             temp_baseline = (self.ds["date2"] - self.ds["date1"]) / np.timedelta64(1, "D")
             mask = (temp_baseline >= pick_temp_bas[0]) & (temp_baseline <= pick_temp_bas[1])
-            self.ds = self.ds.where(mask, drop=True)
+            self.ds = self.ds.where(mask.compute(), drop=True)
 
         # final dimension update
         self.update_dimension()
@@ -410,8 +414,10 @@ class CubeDataClass:
         # standardize sensor names if sensor variable exists
         if "sensor" in self.ds:
             sensor = self.ds["sensor"].values
+            sensor = self._standardize_sensor_names(sensor)
         elif "sensor" in self.ds.attrs:
             sensor = self.ds.attrs["sensor"]
+            sensor = self._standardize_sensor_names(sensor)
         else:
             sensor = "Unknown"
 
@@ -478,6 +484,7 @@ class CubeDataClass:
         self.author = "IGE"
         self.source = self.ds.source
         self.ds = self.ds.rename({"z": "mid_date"})
+        self.ds.attrs = {"proj4": self.ds.mapping.spatial_ref}
 
         # standardize sensor names
         sensor_raw = np.char.strip(self.ds["sensor"].values.astype(str), " ")
@@ -572,6 +579,26 @@ class CubeDataClass:
         reproj_vel: bool = False,
         verbose: bool = False,
     ):
+        """
+
+        :param filepath:
+        :param chunks: chunks mode
+        chunks="auto" will use dask auto chunking taking into account the engine preferred chunks.
+        chunks=-1 loads the data with dask using a single chunk for all arrays.
+        chunks={} loads the data with dask using the engine’s preferred chunk size, generally identical to the format’s chunk size. If not available, a single chunk for all arrays.
+        :param conf:
+        :param subset:
+        :param buffer:
+        :param pick_date:
+        :param pick_sensor:
+        :param pick_temp_bas:
+        :param proj:
+        :param mask:
+        :param reproj_coord:
+        :param reproj_vel:
+        :param verbose:
+        :return:
+        """
         self.__init__()
 
         if isinstance(filepath, list):
@@ -644,7 +671,12 @@ class CubeDataClass:
                     )
                 self.ds = xr.open_dataset(filepath, chunks={})
         elif ext == "zarr":
-            self.ds = xr.open_dataset(filepath, decode_timedelta=False, engine="zarr", consolidated=True, chunks=chunks)
+            if filepath[:2] == "s3":
+                fs = s3fs.S3FileSystem(anon=True, client_kwargs={"region_name": "us-west-2"})
+                store = s3fs.S3Map(root=filepath, s3=fs, check=False)
+            else:
+                store = filepath
+            self.ds = xr.open_dataset(store, decode_timedelta=True, engine="zarr", consolidated=False, chunks=chunks)
         else:
             raise ValueError(f"File extension {ext} not recognized, only .nc and .zarr are supported.")
 
@@ -656,13 +688,16 @@ class CubeDataClass:
 
         # get standardized data
         author = self.ds.attrs.get("author", "Unknown")
-        loader = self._loader_registry.get(author, self._loader_generic)
+        loader = self._loader_registry.get(
+            author, self._loader_generic
+        )  # provide the loader which correspond to the author, if the author does not exist in the dictionary, return the generic loader
         if isinstance(loader, str):
-            loader = getattr(self, loader)
+            loader = getattr(self, loader)  # provide the function of the class
         if verbose:
-            print(
-                f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
-            )
+            if loader == self._loader_registry:
+                print(
+                    f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
+                )
         standard_data = loader(conf)
 
         # keep only certain variable and attributes
@@ -689,10 +724,11 @@ class CubeDataClass:
                 print("[Data loading] Masking cube...")
             self.mask_cube(mask)
 
-        if verbose:
-            print("[Data loading] Computing optimal chunk size...")
-        tc, yc, xc = self.determine_optimal_chunk_size(verbose=verbose)
-        self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
+        if chunks == -1:
+            if verbose:
+                print("[Data loading] Computing optimal chunk size...")
+            tc, yc, xc = self.determine_optimal_chunk_size(verbose=verbose)
+            self.ds = self.ds.chunk({"mid_date": tc, "x": xc, "y": yc})
 
         self.ds = self.ds.sortby("mid_date")
         self.standardize_cube_for_processing()
@@ -711,10 +747,10 @@ class CubeDataClass:
         """
 
         self.ds = self.ds.unify_chunks()
-        if self.ds.chunksizes[time_dim] != (self.nz,):  # no chunk in time
+        if not self.ds.chunksizes == {} and self.ds.chunksizes[time_dim] != (self.nz,):  # no chunk in time
             self.ds = self.ds.chunk({time_dim: self.nz})
 
-        if not self.is_TICO:
+        if not self.is_TICO:  # not inverted results
             # Create a variable for temporal_baseline
             self.ds["temporal_baseline"] = xr.DataArray(
                 (self.ds["date2"] - self.ds["date1"]).dt.days.values, dims="mid_date"
@@ -977,9 +1013,8 @@ class CubeDataClass:
         self,
         delete_outliers: str | float,
         flag: xr.Dataset | None = None,
-        slope: xr.Dataset | None = None,
-        aspect: xr.Dataset | None = None,
         direction: xr.Dataset | None = None,
+        obs_filt: xr.Dataset | None = None,
         **kwargs,
     ):
         """
@@ -1002,6 +1037,7 @@ class CubeDataClass:
                     self.ds["vy"],
                     filt_method=delete_outliers,
                     direction=direction,
+                    obs_filt=obs_filt,
                     axis=axis,
                     **kwargs,
                 )
@@ -1055,8 +1091,6 @@ class CubeDataClass:
                         self.delete_outliers("vvc_angle", flag)
                     else:
                         self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
-                elif method == "topo_angle":
-                    self.delete_outliers("topo_angle", flag, slope=slope, aspect=aspect)
                 elif method == "flow_angle":
                     self.delete_outliers("flow_angle", flag, direction=direction)
                 elif method == "mz_score":
@@ -1064,12 +1098,20 @@ class CubeDataClass:
                         self.delete_outliers("mz_score", flag)
                     else:
                         self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
+                elif method == "moving_mz_score":
+                    if obs_filt is not None:
+                        if delete_outliers["moving_mz_score"] is None:
+                            self.delete_outliers("moving_mz_score", flag, obs_filt=obs_filt)
+                        else:
+                            self.delete_outliers(
+                                "moving_mz_score", flag, obs_filt=obs_filt, z_thres=delete_outliers["moving_mz_score"]
+                            )
                 else:
                     raise ValueError(
-                        "Filtering method should be either 'median_angle', 'vvc_angle', 'topo_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
+                        "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
                     )
         else:
-            raise ValueError("delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
+            raise ValueError(f"delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
 
     def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
@@ -1280,7 +1322,7 @@ class CubeDataClass:
                 baseline = self.ds["temporal_baseline"].compute()
                 idx = np.where(baseline < select_baseline)
                 while (
-                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 200)
+                    len(idx[0]) < 3 * len(date_out) & (select_baseline < 500)
                 ):  # Increase the threshold by 30, if the number of observation is lower than 3 times the number of estimated displacement
                     select_baseline += 30
                     idx = np.where(baseline < select_baseline)
@@ -1366,22 +1408,13 @@ class CubeDataClass:
         start = time.time()
 
         if delete_outliers is not None:  # remove outliers beforehand
-            slope, aspect, direction = None, None, None
-            if (isinstance(delete_outliers, str) and delete_outliers == "topo_angle") or (
-                isinstance(delete_outliers, dict) and "topo_angle" in delete_outliers.keys()
-            ):
-                if isinstance(dem_file, str):
-                    slope, aspect = self.compute_slo_asp(dem_file=dem_file)
-                else:
-                    raise ValueError("dem_file must be given if delete_outliers is 'topo_angle'")
+            direction = None
 
-            elif (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
+            if (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(
-                delete_outliers=delete_outliers, flag=None, slope=slope, aspect=aspect, direction=direction
-            )
+            self.delete_outliers(delete_outliers=delete_outliers, flag=None, direction=direction)
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
@@ -1804,7 +1837,6 @@ class CubeDataClass:
             ds_mean = []
             for variable in return_variable:
                 mean_v = dico_variable[variable].to_numpy().astype(np.float32)
-                mean_v = np.flip(mean_v.T, axis=0)
 
                 if save:
                     # Create the GeoTIFF file
@@ -1886,16 +1918,20 @@ class CubeDataClass:
             if verbose:
                 print("i,j", i, j)
 
+            # Define a 3×3 window around (i, j)
+            x_vals = slice(i - self.resolution, i + self.resolution)
+            y_vals = slice(j + self.resolution, j - self.resolution)
+
             if variable == "vv":
-                v = np.sqrt(
-                    self.ds["vx"].interp(x=i, y=j, method=method_interp).load() ** 2
-                    + self.ds["vy"].interp(x=i, y=j, method="linear").load() ** 2
-                )
-            elif variable == "vx" or variable == "vy":
-                v = self.ds[variable].interp(x=i, y=j, method=method_interp).load()
+                vx_win = self.ds["vx"].sel(x=x_vals, y=y_vals).load()
+                vy_win = self.ds["vy"].sel(x=x_vals, y=y_vals).load()
+                v = np.sqrt(vx_win**2 + vy_win**2).mean(dim=["x", "y"], skipna=True)
+
+            elif variable in ["vx", "vy"]:
+                v = self.ds[variable].sel(x=x_vals, y=y_vals).load().mean(dim=["x", "y"], skipna=True)
 
             data = np.array([date1, date2, v.values], dtype=object).T
-            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Slort according to the first date
+            data = np.ma.array(sorted(data, key=lambda date: date[0]))  # Sort according to the first date
 
             return data[:, 2]
 

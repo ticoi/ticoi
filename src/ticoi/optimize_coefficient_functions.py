@@ -262,3 +262,60 @@ def find_good_coefs(
         )
 
     return good_measure, good_coefs, best_measure, best_coef
+
+
+def plot_vvc_time_series(dataf, save_path, name):
+    # Extract param and VVC columns as independent and dependent variables
+    x_data = dataf["param"].values
+    y_data = dataf["VVC"].values
+
+    # Define the function 1 - exp(-a * x) + b, where b is fixed
+    def exp_decay_fixed_b(x, a, gain):
+        return gain * (1 - np.exp(-x / a))
+
+    # Fix the value of b to max(y_data) - 1
+    gain = max(y_data)
+    print(f"Fixed b: {gain}")
+
+    # Define a wrapper function that only takes 'a' as a parameter
+    def exp_decay_fixed_b_wrapper(x, a):
+        return exp_decay_fixed_b(x, a, gain)
+
+    # Perform the curve fitting, optimizing only 'a'
+    popt, pcov = curve_fit(exp_decay_fixed_b_wrapper, x_data, y_data, p0=[100 / 3])
+    # popt contains the optimal parameter 'a'
+    a_opt = popt[0]
+
+    # Optional: Use the fitted function to make predictions with fixed b
+    y_pred = exp_decay_fixed_b(x_data, a_opt, gain)
+    # Calculate the good VVC threshold
+    goodVVC = max(y_pred) - 0.05 * (max(y_pred) - min(y_pred))
+    print(f"Good VVC threshold: {goodVVC}")
+    # Filter x_data for values where the prediction is greater than goodVVC
+    good_coef = x_data[y_data > goodVVC][0]
+    print("Good coef", good_coef)
+
+    fig1, ax1 = plt.subplots(figsize=(6, 4))
+    # Plotting to visualize the fit
+    plt.plot(x_data, y_data, linestyle="-", marker="o")
+    plt.legend()
+    plt.xlabel("Regularization coefficient", fontsize=16)
+    plt.ylabel("VVC", fontsize=16)
+    # Annotating the figure with the good VVC threshold and good coef values
+    plt.axhline(goodVVC, color="r", linestyle="--", label=f"VVC threshold = {round(goodVVC, 2)}")
+    # Annotating good coef data on the plot
+    ax1.axvline(good_coef, color="k", linestyle="--")
+    ax1.annotate(
+        f"Optimal coef: {int(good_coef)}",
+        xy=(good_coef, min(y_data)),
+        xytext=(50, 20),
+        textcoords="offset points",
+        color="k",
+        fontsize=12,
+        ha="center",
+        va="center",
+    )
+    plt.subplots_adjust(bottom=0.3)
+    plt.legend(fontsize=12, loc="lower center", bbox_to_anchor=(0.5, 0), bbox_transform=fig1.transFigure, shadow=True)
+    fig1.savefig(f"{save_path}/Compa_VVC_1-exp_{name}", dpi=300, bbox_inches="tight")
+    plt.show()
