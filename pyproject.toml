@@ -34,7 +34,7 @@ dependencies = [
   "pyarrow",
   "rasterio",
   "requests",
-  "rioxarray",
+  "rioxarray>=0.15.0",
   "s3fs",
   "scipy",
   "scikit-learn",
@@ -42,11 +42,9 @@ dependencies = [
   "shapely",
   "statsmodels",
   "tqdm",
-  "xarray",
+  "xarray>=2023.1.0",
   "zarr"
 ]
-
-
 
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
