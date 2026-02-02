@@ -34,7 +34,7 @@ dependencies = [
   "pyarrow",
   "rasterio",
   "requests",
-  "rioxarray==0.15.0",
+  "rioxarray>=0.15.0",
   "s3fs",
   "scipy",
   "scikit-learn",
@@ -42,7 +42,7 @@ dependencies = [
   "shapely",
   "statsmodels",
   "tqdm",
-  "xarray==2023.1.0",
+  "xarray>=2023.1.0",
   "zarr"
 ]
 
