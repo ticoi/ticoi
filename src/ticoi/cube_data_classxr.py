@@ -29,7 +29,7 @@ import rasterio as rio
 import rasterio.enums
 import rasterio.warp
 import xarray as xr
-import rioxarray
+import rioxarray  # noqa: F401  # needed to register the .rio accessor on xarray
 from dask.array.lib.stride_tricks import sliding_window_view
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
