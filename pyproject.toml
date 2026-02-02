@@ -46,8 +46,6 @@ dependencies = [
   "zarr"
 ]
 
-
-
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
 Issues = "https://github.com/ticoi/ticoi/issues"
