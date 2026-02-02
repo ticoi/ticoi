@@ -18,11 +18,11 @@ dependencies:
   - pyarrow
   - rasterio
   - requests
-  - rioxarray>=0.15.5
+  - rioxarray
   - scipy
   - seaborn
   - shapely
   - statsmodels
   - tqdm
-  - xarrayy>=2024.1.0 
+  - xarrayy
   - zarr
