@@ -484,7 +484,8 @@ class CubeDataClass:
         self.author = "IGE"
         self.source = self.ds.source
         self.ds = self.ds.rename({"z": "mid_date"})
-        self.ds.attrs = {"proj4": self.ds.mapping.spatial_ref}
+        crs = CRS(self.ds.mapping.spatial_ref)
+        self.ds.attrs = {"proj4": crs.to_proj4()}
 
         # standardize sensor names
         sensor_raw = np.char.strip(self.ds["sensor"].values.astype(str), " ")
