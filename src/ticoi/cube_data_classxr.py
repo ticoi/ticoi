@@ -1035,29 +1035,23 @@ class CubeDataClass:
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
         """
 
-        if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
-            if isinstance(delete_outliers, int):  # filter according to the maximal error
-                inlier_mask = dask_filt_warpper(
-                    self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
-                )
+        def apply_delete_outliers_filter(delete_outliers, flag, **kwargs):
+            axis = self.ds["vx"].dims.index("mid_date")
+            inlier_mask = dask_filt_warpper(
+                self.ds["vx"],
+                self.ds["vy"],
+                filt_method=delete_outliers,
+                direction=direction,
+                axis=axis,
+                **kwargs,
+            )
 
-            elif isinstance(delete_outliers, str):  # filter according to other criterion
-                axis = self.ds["vx"].dims.index("mid_date")
-                inlier_mask = dask_filt_warpper(
-                    self.ds["vx"],
-                    self.ds["vy"],
-                    filt_method=delete_outliers,
-                    direction=direction,
-                    axis=axis,
-                    **kwargs,
-                )
-
-                if flag is not None:
-                    if delete_outliers != "vvc_angle":
-                        flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
-                        flag_condition = flag == 0
-                        flag_condition = np.expand_dims(flag_condition, axis=axis)
-                        inlier_mask = np.logical_or(inlier_mask, flag_condition)
+            if flag is not None:
+                if delete_outliers != "vvc_angle":
+                    flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
+                    flag_condition = flag == 0
+                    flag_condition = np.expand_dims(flag_condition, axis=axis)
+                    inlier_mask = np.logical_or(inlier_mask, flag_condition)
 
             inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
             for var in ["vx", "vy"]:
@@ -1065,39 +1059,41 @@ class CubeDataClass:
 
             self.ds = self.ds.persist()
 
-        elif isinstance(delete_outliers, dict):
-            for method in delete_outliers.keys():
-                if method == "error":
-                    self.delete_outliers(delete_outliers["error"], flag)
-                elif method == "magnitude":
-                    self.delete_outliers("magnitude", flag, magnitude_thres=delete_outliers["magnitude"])
-                elif method == "median_magnitude":
-                    self.delete_outliers(
-                        "median_magnitude", flag, median_magnitude_thres=delete_outliers["median_magnitude"]
-                    )
-                elif method == "z_score":
-                    self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
-
-                elif method == "mz_score":
-                    self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
-
-                elif method == "iqr":
-                    self.delete_outliers("iqr", flag, iqr_thres=delete_outliers["iqr"])
-
-                elif method == "median_angle":
-                    self.delete_outliers("median_angle", flag, z_thres=delete_outliers["median_angle"])
-
-                elif method == "vvc_angle":
-                    self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
-                elif method == "flow_angle":
-                    self.delete_outliers("flow_angle", flag, direction=direction)
-
-                else:
-                    raise ValueError(
-                        "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
-                    )
-        else:
-            raise ValueError(f"delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
+        for method in delete_outliers.keys():
+            if method == "error":
+                apply_delete_outliers_filter(delete_outliers="error", flag=flag, error_thres=delete_outliers["error"])
+            elif method == "magnitude":
+                apply_delete_outliers_filter(
+                    delete_outliers="magnitude", flag=flag, magnitude_thres=delete_outliers["magnitude"]
+                )
+            elif method == "median_magnitude":
+                apply_delete_outliers_filter(
+                    delete_outliers="median_magnitude",
+                    flag=flag,
+                    median_magnitude_thres=delete_outliers["median_magnitude"],
+                )
+            elif method == "z_score":
+                apply_delete_outliers_filter(delete_outliers="z_score", flag=flag, z_thres=delete_outliers["z_score"])
+            elif method == "mz_score":
+                apply_delete_outliers_filter(
+                    delete_outliers="mz_score", flag=flag, mz_thres=delete_outliers["mz_score"]
+                )
+            elif method == "iqr":
+                apply_delete_outliers_filter(delete_outliers="iqr", flag=flag, iqr_thres=delete_outliers["iqr"])
+            elif method == "median_angle":
+                apply_delete_outliers_filter(
+                    delete_outliers="median_angle", flag=flag, angle_thres=delete_outliers["median_angle"]
+                )
+            elif method == "vvc_angle":
+                apply_delete_outliers_filter(
+                    delete_outliers="vcc_angle", flag=flag, angle_thres=delete_outliers["vcc_angle"]
+                )
+            elif method == "flow_angle":
+                apply_delete_outliers_filter(delete_outliers="flow_angle", flag=flag, direction=direction)
+            else:
+                raise ValueError(
+                    "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
+                )
 
     def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
