@@ -27,6 +27,7 @@ from tqdm import tqdm
 from ticoi.core import process, process_blocks_refine, save_cube_parameters
 from ticoi.cube_data_classxr import CubeDataClass
 from ticoi.cube_writer import CubeResultsWriter
+from ticoi.utils import find_granule_by_point
 
 warnings.filterwarnings("ignore")
 
@@ -54,10 +55,11 @@ save_mean_velocity = False  # Save a .tiff file with the mean resulting velociti
 ## ------------------------------ Data selection --------------------------- ##
 # List of the paths where the data cubes are stored
 # List of the paths where the data cubes are stored
-cube_name = "http://its-live-data.s3.amazonaws.com/datacubes/v2/N60W130/ITS_LIVE_vel_EPSG3413_G0120_X-3250000_Y150000.zarr"  # Path where the Sentinel-2 IGE cubes are stored
 path_save = "path_save"  # Path where to stored the results
 result_fn = "Lowell_example"  # Name of the netCDF file to be created
-subset = [-138.28962881999922274, -138.279, 60.25934205396930565, 60.261]  # or None
+i, j = -138.28962881999922274, 60.25934205396930565  # or None
+cube_name = find_granule_by_point([i, j])
+buffer = [i, j, 0.001]
 proj = "EPSG:3413"  # EPSG system of the given coordinates
 
 # What results must be returned from TICOI processing (can be a list of both)
@@ -68,8 +70,8 @@ returned = ["interp"]
 load_kwargs = {
     "chunks": {},
     "conf": False,  # If True, confidence indicators will be put between 0 and 1, with 1 the lowest errors
-    "subset": subset,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
-    "buffer": None,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
+    "subset": None,  # Subset of the data to be loaded ([xmin, xmax, ymin, ymax] or None)
+    "buffer": buffer,  # Area to be loaded around the pixel ([longitude, latitude, buffer size] or None)
     "pick_date": ["2015-01-01", "2023-01-01"],  # Select dates ([min, max] or None to select all)
     "pick_sensor": None,  # Select sensors (None to select all)
     "pick_temp_bas": None,  # Select temporal baselines ([min, max] in days or None to select all)
@@ -81,11 +83,11 @@ load_kwargs = {
 # For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
 regu = "1accelnotnull"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
-delete_outlier = "vvc_angle"
+delete_outlier = {"median_angle": 45}
 apriori_weight = True
 
 preData_kwargs = {
-    "smooth_method": "gaussian",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'savgol', 'lowess')
+    "smooth_method": "savgol",  # Smoothing method to be used to smooth the data in time ('gaussian', 'median', 'savgol', 'lowess')
     "s_win": 3,  # Size of the spatial window
     "t_win": 90,  # Time window size for 'ewma' smoothing
     "sigma": 3,  # Standard deviation for 'gaussian' filter
@@ -93,7 +95,6 @@ preData_kwargs = {
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": None,  # Divide the data in several areas where different methods should be used
-    "dem_file": None,
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
@@ -113,7 +114,6 @@ inversion_kwargs = {
     "apriori_weight": apriori_weight,  # If True, use apriori weights
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
     "linear_operator": None,  # Perform the inversion using this specific linear operator
-    "interval_output": 30,
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
     "result_quality": "X_contribution",  # Criterium used to evaluate the quality of the results ('Norm_residual', 'X_contribution')
