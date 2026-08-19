@@ -57,7 +57,6 @@ cube_name = example.get_path("IGE_Pleiades_Argentiere")
 path_save = (
     os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")),
-        "examples",
         "results",
         "cube",
     )
@@ -86,7 +85,7 @@ load_kwargs = {
 
 ## ----------------------- Data preparation parameters --------------------- ##
 # For the following parts we advice the user to change only the following parameter, the other parameters stored in a dictionary can be kept as it is for a first use
-regu = 1  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
+regu = "1"  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
 coef = 100  # Regularization coefficient.s to be used (for each flag if flag is not None)
 delete_outlier = None
 apriori_weight = True
@@ -100,7 +99,6 @@ preData_kwargs = {
     "unit": 365,  # 365 if the unit is m/y, 1 if the unit is m/d
     "delete_outliers": delete_outlier,  # Delete data with a poor quality indicator (if int), or with aberrant direction ('vvc_angle')
     "flag": None,  # Divide the data in several areas where different methods should be used
-    "dem_file": None,
     "regu": regu,  # Regularization method.s to be used (for each flag if flag is not None) : 1 minimize the acceleration, '1accelnotnull' minize the distance with an apriori on the acceleration computed over a spatio-temporal filtering of the cube
     "solver": "LSMR_ini",  # Solver for the inversion
     "proj": proj,  # EPSG system of the given coordinates
