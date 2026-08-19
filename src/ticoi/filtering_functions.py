@@ -35,6 +35,7 @@ FiltMethod = Literal[
     "median_magnitude",
     "error",
     "flow_angle",
+    "iqr",
 ]
 
 
@@ -435,6 +436,30 @@ def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
     return inlier_flag
 
 
+def iqr_filt(obs: da.array, iqr_thres: float = 1.5, axis: int = 2):
+    """
+    Remove observations if they are outside the IQR-based bounds.
+
+    :param obs: Cube data to filter.
+    :param iqr_thres: Threshold multiplier for IQR (default: 1.5 for mild outliers, 3.0 for extreme outliers).
+    :param axis: Axis on which to compute the IQR.
+    :return: Boolean mask where True indicates inliers.
+    """
+    # Compute Q1 (25th percentile) and Q3 (75th percentile)
+    Q1 = np.nanpercentile(obs, 25, axis=axis, keepdims=True)
+    Q3 = np.nanpercentile(obs, 75, axis=axis, keepdims=True)
+    IQR = Q3 - Q1
+
+    # Define bounds
+    lower_bound = Q1 - iqr_thres * IQR
+    upper_bound = Q3 + iqr_thres * IQR
+
+    # Flag inliers
+    inlier_flag = (obs >= lower_bound) & (obs <= upper_bound)
+
+    return inlier_flag
+
+
 def NVVC_angle_filt(
     obs_cpx: np.array, vvc_thres: float = 0.1, angle_thres: int = 45, z_thres: int = 2, axis: int = 2
 ) -> np.array:
@@ -618,12 +643,12 @@ def dask_filt_warpper(
     vvc_thres: float = 0.3,
     angle_thres: int = 45,
     z_thres: int = 2,
-    mz_thres=3.5,
+    mz_thres: float = 3.5,
+    iqr_thres: float = 1.5,
     magnitude_thres: int = 1000,
     median_magnitude_thres=3,
     error_thres: int = 100,
     direction: xr.Dataset = None,
-    obs_filt: xr.Dataset = None,
     axis: int = 2,
 ):
     """
@@ -649,7 +674,7 @@ def dask_filt_warpper(
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
 
-    elif filt_method == "vvc_angle":  # combination between z_score and median_angle
+    elif filt_method == "vvc_angle":  # based on the vvc
         obs_arr = da_vx.data + 1j * da_vy.data
         inlier_mask = obs_arr.map_blocks(
             NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
@@ -671,9 +696,14 @@ def dask_filt_warpper(
         inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
-    elif filt_method == "mz_score":  # threshold according to the zscore
+    elif filt_method == "mz_score":  # threshold according to the modified zscore
         inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
         inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "iqr":  # threshold according to the modified zscore
+        inlier_mask_vx = da_vx.data.map_blocks(iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=da_vx.dtype)
+        inlier_mask_vy = da_vy.data.map_blocks(iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=da_vy.dtype)
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "magnitude":  # delete observations according to a threshold in magnitude

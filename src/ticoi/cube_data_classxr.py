@@ -46,7 +46,18 @@ MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cub
 ReturnAs = Literal["dataframe", "cube"]
 Regu = Literal["1accelnotnull", "1", "2", "directionxy"]
 Solver = Literal["LSMR", "LSMR_ini", "LSQR", "LS", "L1"]
-
+FiltMethod = Literal[
+    "median_angle",
+    "vvc_angle",
+    "vvc_angle_mzscore",
+    "z_score",
+    "m_zscore",
+    "magnitude",
+    "median_magnitude",
+    "error",
+    "flow_angle",
+    "iqr",
+]
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -1015,7 +1026,6 @@ class CubeDataClass:
         delete_outliers: str | float,
         flag: xr.Dataset | None = None,
         direction: xr.Dataset | None = None,
-        obs_filt: xr.Dataset | None = None,
         **kwargs,
     ):
         """
@@ -1031,14 +1041,13 @@ class CubeDataClass:
                     self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
                 )
 
-            elif isinstance(delete_outliers, str):  # filter according to vcc_angle, zscore, median_angle
+            elif isinstance(delete_outliers, str):  # filter according to other criterion
                 axis = self.ds["vx"].dims.index("mid_date")
                 inlier_mask = dask_filt_warpper(
                     self.ds["vx"],
                     self.ds["vy"],
                     filt_method=delete_outliers,
                     direction=direction,
-                    obs_filt=obs_filt,
                     axis=axis,
                     **kwargs,
                 )
@@ -1059,54 +1068,30 @@ class CubeDataClass:
         elif isinstance(delete_outliers, dict):
             for method in delete_outliers.keys():
                 if method == "error":
-                    if delete_outliers["error"] is None:
-                        self.delete_outliers("error", flag)
-                    else:
-                        self.delete_outliers(delete_outliers["error"], flag)
+                    self.delete_outliers(delete_outliers["error"], flag)
                 elif method == "magnitude":
-                    if delete_outliers["magnitude"] is None:
-                        self.delete_outliers("magnitude", flag)
-                    else:
-                        self.delete_outliers("magnitude", flag, magnitude_thres=delete_outliers["magnitude"])
+                    self.delete_outliers("magnitude", flag, magnitude_thres=delete_outliers["magnitude"])
                 elif method == "median_magnitude":
-                    if delete_outliers["median_magnitude"] is None:
-                        self.delete_outliers("median_magnitude", flag)
-                    else:
-                        self.delete_outliers(
-                            "median_magnitude", flag, median_magnitude_thres=delete_outliers["median_magnitude"]
-                        )
+                    self.delete_outliers(
+                        "median_magnitude", flag, median_magnitude_thres=delete_outliers["median_magnitude"]
+                    )
                 elif method == "z_score":
-                    if delete_outliers["z_score"] is None:
-                        self.delete_outliers("z_score", flag)
-                    else:
-                        self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
+                    self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
+
+                elif method == "mz_score":
+                    self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
+
+                elif method == "iqr":
+                    self.delete_outliers("iqr", flag, iqr_thres=delete_outliers["iqr"])
 
                 elif method == "median_angle":
-                    if delete_outliers["median_angle"] is None:
-                        self.delete_outliers("median_angle", flag)
-                    else:
-                        self.delete_outliers("median_angle", flag, z_thres=delete_outliers["median_angle"])
+                    self.delete_outliers("median_angle", flag, z_thres=delete_outliers["median_angle"])
 
                 elif method == "vvc_angle":
-                    if delete_outliers["vvc_angle"] is None:
-                        self.delete_outliers("vvc_angle", flag)
-                    else:
-                        self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
+                    self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
                 elif method == "flow_angle":
                     self.delete_outliers("flow_angle", flag, direction=direction)
-                elif method == "mz_score":
-                    if delete_outliers["mz_score"] is None:
-                        self.delete_outliers("mz_score", flag)
-                    else:
-                        self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
-                elif method == "moving_mz_score":
-                    if obs_filt is not None:
-                        if delete_outliers["moving_mz_score"] is None:
-                            self.delete_outliers("moving_mz_score", flag, obs_filt=obs_filt)
-                        else:
-                            self.delete_outliers(
-                                "moving_mz_score", flag, obs_filt=obs_filt, z_thres=delete_outliers["moving_mz_score"]
-                            )
+
                 else:
                     raise ValueError(
                         "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
