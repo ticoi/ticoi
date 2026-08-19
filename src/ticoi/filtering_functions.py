@@ -678,7 +678,7 @@ def dask_filt_warpper(
     direction: xr.Dataset = None,
     axis: int = 2,
     compute_stats_on_small_baselines: int | None = None,
-):
+) -> np.array:
     """
     :param data: cube dataset with observations
     :param filt_method: filtering method
@@ -690,10 +690,10 @@ def dask_filt_warpper(
     :param magnitude_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 1000)
     :param median_magnitude_thres: threshold to remove observations, if the median magnitude is higher than this threshold (default is 1000)
     :param error_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 100)
-    :param axis: axis on which to perform the zscore computation (default is 2)
     :param direction: given flow direction
+    :param axis: axis on which to perform the zscore computation (default is 2)
     :param compute_stats_on_small_baselines: threshold defined small baselines. When it is not None, the statistics are computedusing small baselines only
-    :return:
+    :return: computed mask
     """
     if compute_stats_on_small_baselines is not None:
         small_bas = data["temporal_baseline"] < compute_stats_on_small_baselines
@@ -706,23 +706,6 @@ def dask_filt_warpper(
         obs_arr = data["vx"].data + 1j * data["vy"].data
         inlier_mask = obs_arr.map_blocks(
             median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype, small_bas=small_bas
-        )
-
-    elif filt_method == "vvc_angle":  # based on the vvc
-        obs_arr = data["vx"].data + 1j * data["vy"].data
-        inlier_mask = obs_arr.map_blocks(
-            NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
-        )
-
-    elif filt_method == "vvc_angle_mzscore":  # combination between z_score and median_angle
-        obs_arr = data["vx"].data + 1j * data["vy"].data
-        inlier_mask = obs_arr.map_blocks(
-            NVVC_angle_mzscore_filt,
-            vvc_thres=vvc_thres,
-            angle_thres=angle_thres,
-            mz_thres=mz_thres,
-            axis=axis,
-            dtype=obs_arr.dtype,
         )
 
     elif filt_method == "z_score":  # threshold according to the zscore
@@ -765,10 +748,27 @@ def dask_filt_warpper(
         )
 
     elif filt_method == "error":  # delete observations according to a threshold in error
-        inlier_mask_error_x = data["error_x"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
-        inlier_mask_error_y = data["error_y"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
+        inlier_mask_error_x = data["errorx"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
+        inlier_mask_error_y = data["errory"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
 
         inlier_mask = np.logical_and(inlier_mask_error_x, inlier_mask_error_y)
+
+    elif filt_method == "vvc_angle":  # based on the vvc
+        obs_arr = data["vx"].data + 1j * data["vy"].data
+        inlier_mask = obs_arr.map_blocks(
+            NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
+        )
+
+    elif filt_method == "vvc_angle_mzscore":  # combination between z_score and median_angle
+        obs_arr = data["vx"].data + 1j * data["vy"].data
+        inlier_mask = obs_arr.map_blocks(
+            NVVC_angle_mzscore_filt,
+            vvc_thres=vvc_thres,
+            angle_thres=angle_thres,
+            mz_thres=mz_thres,
+            axis=axis,
+            dtype=obs_arr.dtype,
+        )
 
     elif filt_method == "flow_angle":
         obs_arr = data["vx"].data + 1j * data["vy"].data
