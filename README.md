@@ -63,8 +63,8 @@ pip install -e . #to use the package everywhere locally
 
 * [How to process one pixel of a NetCDF file](examples/basic/notebook/pixel_demo_local_ncdata.ipynb)
 * [How to process one pixel of ITS_LIVE data, stored on a cloud](examples/basic/notebook/pixel_demo_its_live_on_cloud.ipynb)
-* [How to process a subset of a NetCDF file](examples/basic/notebook/cube_demo_local_ncdata.ipynb)
-
+* [How to process a subset of a NetCDF cube dataset](examples/basic/notebook/cube_demo_local_ncdata.ipynb)
+* [How to process a subset of a ITS_LIVE cube dataset, stored on the cloud file](examples/basic/notebook/cube_demo_its_live_on_cloud.ipynb)
 
 #### python_script
 
