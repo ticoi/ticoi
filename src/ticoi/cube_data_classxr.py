@@ -41,13 +41,24 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
-from typing import Literal
+from typing import Literal, get_args
 
 MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
 ReturnAs = Literal["dataframe", "cube"]
 Regu = Literal["1accelnotnull", "1", "2", "directionxy"]
 Solver = Literal["LSMR", "LSMR_ini", "LSQR", "LS", "L1"]
-
+FiltMethod = Literal[
+    "median_angle",
+    "vvc_angle",
+    "vvc_angle_mzscore",
+    "z_score",
+    "m_zscore",
+    "magnitude",
+    "median_magnitude",
+    "error",
+    "flow_angle",
+    "iqr",
+]
 # %% ======================================================================== #
 #                              CUBE DATA CLASS                                #
 # =========================================================================%% #
@@ -1016,40 +1027,38 @@ class CubeDataClass:
         delete_outliers: str | float,
         flag: xr.Dataset | None = None,
         direction: xr.Dataset | None = None,
-        obs_filt: xr.Dataset | None = None,
-        **kwargs,
+        compute_delete_outliers_stats_on_small_baselines: int | None = None,
     ):
         """
         Delete outliers according to a certain criterium.
 
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param direction [xr dataset | None] : given flow direction
+        :param compute_delete_outliers_stats_on_small_baselines [int | None] : threshold to define small baselines. When it is not None, the statistics are computed using small baselines only.
+
         """
 
-        if isinstance(delete_outliers, int) or isinstance(delete_outliers, str):
-            if isinstance(delete_outliers, int):  # filter according to the maximal error
-                inlier_mask = dask_filt_warpper(
-                    self.ds["vx"], self.ds["vy"], filt_method="error", error_thres=delete_outliers
-                )
+        def apply_delete_outliers_filter(delete_outliers, flag, **kwargs):
+            """
+            Function to apply dask wrapper.
+            """
+            axis = self.ds["vx"].dims.index("mid_date")
+            inlier_mask = dask_filt_warpper(
+                self.ds,
+                filt_method=delete_outliers,
+                direction=direction,
+                compute_stats_on_small_baselines=compute_delete_outliers_stats_on_small_baselines,
+                axis=axis,
+                **kwargs,
+            )
 
-            elif isinstance(delete_outliers, str):  # filter according to vcc_angle, zscore, median_angle
-                axis = self.ds["vx"].dims.index("mid_date")
-                inlier_mask = dask_filt_warpper(
-                    self.ds["vx"],
-                    self.ds["vy"],
-                    filt_method=delete_outliers,
-                    direction=direction,
-                    obs_filt=obs_filt,
-                    axis=axis,
-                    **kwargs,
-                )
-
-                if flag is not None:
-                    if delete_outliers != "vvc_angle":
-                        flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
-                        flag_condition = flag == 0
-                        flag_condition = np.expand_dims(flag_condition, axis=axis)
-                        inlier_mask = np.logical_or(inlier_mask, flag_condition)
+            if flag is not None:
+                if delete_outliers != "vvc_angle":
+                    flag = flag["flag"].values if flag["flag"].shape[0] == self.nx else flag["flag"].values.T
+                    flag_condition = flag == 0
+                    flag_condition = np.expand_dims(flag_condition, axis=axis)
+                    inlier_mask = np.logical_or(inlier_mask, flag_condition)
 
             inlier_flag = xr.DataArray(inlier_mask, dims=self.ds["vx"].dims)
             for var in ["vx", "vy"]:
@@ -1057,63 +1066,39 @@ class CubeDataClass:
 
             self.ds = self.ds.persist()
 
-        elif isinstance(delete_outliers, dict):
-            for method in delete_outliers.keys():
-                if method == "error":
-                    if delete_outliers["error"] is None:
-                        self.delete_outliers("error", flag)
-                    else:
-                        self.delete_outliers(delete_outliers["error"], flag)
-                elif method == "magnitude":
-                    if delete_outliers["magnitude"] is None:
-                        self.delete_outliers("magnitude", flag)
-                    else:
-                        self.delete_outliers("magnitude", flag, magnitude_thres=delete_outliers["magnitude"])
-                elif method == "median_magnitude":
-                    if delete_outliers["median_magnitude"] is None:
-                        self.delete_outliers("median_magnitude", flag)
-                    else:
-                        self.delete_outliers(
-                            "median_magnitude", flag, median_magnitude_thres=delete_outliers["median_magnitude"]
-                        )
-                elif method == "z_score":
-                    if delete_outliers["z_score"] is None:
-                        self.delete_outliers("z_score", flag)
-                    else:
-                        self.delete_outliers("z_score", flag, z_thres=delete_outliers["z_score"])
-
-                elif method == "median_angle":
-                    if delete_outliers["median_angle"] is None:
-                        self.delete_outliers("median_angle", flag)
-                    else:
-                        self.delete_outliers("median_angle", flag, z_thres=delete_outliers["median_angle"])
-
-                elif method == "vvc_angle":
-                    if delete_outliers["vvc_angle"] is None:
-                        self.delete_outliers("vvc_angle", flag)
-                    else:
-                        self.delete_outliers("vvc_angle", flag, **delete_outliers["vvc_angle"])
-                elif method == "flow_angle":
-                    self.delete_outliers("flow_angle", flag, direction=direction)
-                elif method == "mz_score":
-                    if delete_outliers["mz_score"] is None:
-                        self.delete_outliers("mz_score", flag)
-                    else:
-                        self.delete_outliers("mz_score", flag, z_thres=delete_outliers["mz_score"])
-                elif method == "moving_mz_score":
-                    if obs_filt is not None:
-                        if delete_outliers["moving_mz_score"] is None:
-                            self.delete_outliers("moving_mz_score", flag, obs_filt=obs_filt)
-                        else:
-                            self.delete_outliers(
-                                "moving_mz_score", flag, obs_filt=obs_filt, z_thres=delete_outliers["moving_mz_score"]
-                            )
-                else:
-                    raise ValueError(
-                        "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
-                    )
-        else:
-            raise ValueError(f"delete_outliers must be a int, a string or a dict, not {type(delete_outliers)}")
+        for method in delete_outliers.keys():
+            if method == "error":
+                apply_delete_outliers_filter(delete_outliers="error", flag=flag, error_thres=delete_outliers["error"])
+            elif method == "magnitude":
+                apply_delete_outliers_filter(
+                    delete_outliers="magnitude", flag=flag, magnitude_thres=delete_outliers["magnitude"]
+                )
+            elif method == "median_magnitude":
+                apply_delete_outliers_filter(
+                    delete_outliers="median_magnitude",
+                    flag=flag,
+                    median_magnitude_thres=delete_outliers["median_magnitude"],
+                )
+            elif method == "z_score":
+                apply_delete_outliers_filter(delete_outliers="z_score", flag=flag, z_thres=delete_outliers["z_score"])
+            elif method == "mz_score":
+                apply_delete_outliers_filter(
+                    delete_outliers="mz_score", flag=flag, mz_thres=delete_outliers["mz_score"]
+                )
+            elif method == "iqr":
+                apply_delete_outliers_filter(delete_outliers="iqr", flag=flag, iqr_thres=delete_outliers["iqr"])
+            elif method == "median_angle":
+                apply_delete_outliers_filter(
+                    delete_outliers="median_angle", flag=flag, angle_thres=delete_outliers["median_angle"]
+                )
+            elif method == "vvc_angle":
+                apply_delete_outliers_filter(
+                    delete_outliers="vcc_angle", flag=flag, angle_thres=delete_outliers["vcc_angle"]
+                )
+            elif method == "flow_angle":
+                apply_delete_outliers_filter(delete_outliers="flow_angle", flag=flag, direction=direction)
+            else:
+                raise ValueError(f"Filtering method should be one of {get_args(FiltMethod)}.")
 
     def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
@@ -1269,8 +1254,8 @@ class CubeDataClass:
         order: int = 3,
         unit: int = 365,
         delete_outliers: str | float | None = None,
+        compute_delete_outliers_stats_on_small_baselines: bool = True,
         flag: xr.Dataset | str | None = None,
-        dem_file: str | None = None,
         regu: int | str = "1accelnotnull",
         solver: str = "LSMR_ini",
         proj: str = "EPSG:4326",
@@ -1411,12 +1396,16 @@ class CubeDataClass:
 
         if delete_outliers is not None:  # remove outliers beforehand
             direction = None
-
             if (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(delete_outliers=delete_outliers, flag=None, direction=direction)
+            self.delete_outliers(
+                delete_outliers=delete_outliers,
+                flag=None,
+                direction=direction,
+                compute_delete_outliers_stats_on_small_baselines=compute_delete_outliers_stats_on_small_baselines,
+            )
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
