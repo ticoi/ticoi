@@ -18,7 +18,7 @@ from sklearn.decomposition import FastICA
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import pandas as pd
 import dask.dataframe as dd
-from typing import Literal
+from typing import Literal, get_args
 
 # %% ======================================================================== #
 #                             POSSIBLE PARAMTERS VALUES                       #
@@ -398,17 +398,24 @@ def df_smooth_wrapper(
     return smoothed_vx, smoothed_vy
 
 
-def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
+def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2, small_bas: int | None = None):
     """
     Remove the observations if it is 3 time the standard deviation from the average of observations over this pixel
     :param obs: cube data to filter
     :param z_thres: a threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation
+    :param small_bas: mask to define small baselines. When it is not None, the statistics are computed using small baselines only
+
     :return: boolean mask
     """
 
-    mean = np.nanmean(obs, axis=axis, keepdims=True)
-    std_dev = np.nanstd(obs, axis=axis, keepdims=True)
+    if small_bas is not None:
+        obs_ref = obs[small_bas]  # Keeps only elements where small_bas >= 100
+    else:
+        obs_ref = obs
+
+    mean = np.nanmean(obs_ref, axis=axis, keepdims=True)
+    std_dev = np.nanstd(obs_ref, axis=axis, keepdims=True)
 
     z_scores = (obs - mean) / std_dev
     inlier_flag = np.abs(z_scores) < z_thres
@@ -416,19 +423,23 @@ def z_score_filt(obs: da.array, z_thres: int = 2, axis: int = 2):
     return inlier_flag
 
 
-def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
+def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2, small_bas: int | None = None):
     """
     Remove the observations if it is 3.5 time the MAD from the median of observations over this pixel
     :param obs: cube data to filter
     :param mz_thres: a threshold to remove observations, if the absolute zscore is higher than this threshold (default is 3)
     :param axis: axis on which to perform the zscore computation
+    :param small_bas: mask to define small baselines. When it is not None, the statistics are computed using small baselines only
+
     :return: boolean mask
     """
+    if small_bas is not None:
+        obs_ref = obs[small_bas]  # Keeps only elements where small_bas >= 100
+    else:
+        obs_ref = obs
 
-    med = np.nanmedian(obs, axis=axis, keepdims=True)
-    mad = np.nanmedian(abs(obs - med), axis=axis, keepdims=True)
-
-    # mad = median_abs_deviation(obs, axis=axis)
+    med = np.nanmedian(obs_ref, axis=axis, keepdims=True)
+    mad = np.nanmedian(abs(obs_ref - med), axis=axis, keepdims=True)
 
     mz_scores = 0.6745 * (obs - med) / mad
     inlier_flag = np.abs(mz_scores) < mz_thres
@@ -436,18 +447,24 @@ def mz_score_filt(obs: da.array, mz_thres: int = 3.5, axis: int = 2):
     return inlier_flag
 
 
-def iqr_filt(obs: da.array, iqr_thres: float = 1.5, axis: int = 2):
+def iqr_filt(obs: da.array, iqr_thres: float = 1.5, axis: int = 2, small_bas: int | None = None):
     """
     Remove observations if they are outside the IQR-based bounds.
 
     :param obs: Cube data to filter.
     :param iqr_thres: Threshold multiplier for IQR (default: 1.5 for mild outliers, 3.0 for extreme outliers).
     :param axis: Axis on which to compute the IQR.
+    :param small_bas: mask to define small baselines. When it is not None, the statistics are computed using small baselines only
     :return: Boolean mask where True indicates inliers.
     """
+    if small_bas is not None:
+        obs_ref = obs[small_bas]  # Keeps only elements where small_bas >= 100
+    else:
+        obs_ref = obs
+
     # Compute Q1 (25th percentile) and Q3 (75th percentile)
-    Q1 = np.nanpercentile(obs, 25, axis=axis, keepdims=True)
-    Q3 = np.nanpercentile(obs, 75, axis=axis, keepdims=True)
+    Q1 = np.nanpercentile(obs_ref, 25, axis=axis, keepdims=True)
+    Q3 = np.nanpercentile(obs_ref, 75, axis=axis, keepdims=True)
     IQR = Q3 - Q1
 
     # Define bounds
@@ -544,7 +561,9 @@ def NVVC_angle_mzscore_filt(
     return inlier_flag
 
 
-def median_magnitude_filt(obs_cpx: np.array, median_magnitude_thres: int = 3, axis: int = 2):
+def median_magnitude_filt(
+    obs_cpx: np.array, median_magnitude_thres: int = 3, axis: int = 2, small_bas: int | None = None
+):
     """
     Remove the observation if it median_magnitude_thres times bigger than the mean velocity at pixel, or if it is
     1/median_magnitude_thres times smaller than the mean velocity at pixel
@@ -552,41 +571,57 @@ def median_magnitude_filt(obs_cpx: np.array, median_magnitude_thres: int = 3, ax
     :param obs_cpx: [np array] --- Cube data to filter (complex where the real part is vx and the imaginary part is vy)
     :param median_magnitude_thres: [int] [default is 3] --- Position of the threshold relatively to the mean velocity at pixel
     :param axis: [int] [default is 2] --- Axis on which the threshold should be applied (default is the time axis)
+    :param small_bas: mask to define small baselines. When it is not None, the statistics are computed using small baselines only
 
     :return inlier_flag: [np array] --- Boolean mask of the size of vx (and vy)
     """
 
     vv = np.abs(obs_cpx)
-    mean_magnitude = np.nanmedian(vv, axis=axis, keepdims=True)
+
+    if small_bas is not None:
+        vv_ref = vv[small_bas]  # Keeps only elements where small_bas >= 100
+    else:
+        vv_ref = vv
+
+    med_magnitude = np.nanmedian(vv_ref, axis=axis, keepdims=True)
 
     inlier_flag = np.where(
-        (vv > mean_magnitude / median_magnitude_thres) & (vv < mean_magnitude * median_magnitude_thres), True, False
+        (vv > med_magnitude / median_magnitude_thres) & (vv < med_magnitude * median_magnitude_thres), True, False
     )
 
     return inlier_flag
 
 
-def median_angle_filt(obs_cpx: np.array, angle_thres: int = 45, axis: int = 2):
+def median_angle_filt(obs_cpx: np.array, angle_thres: int = 45, axis: int = 2, small_bas: int | None = None):
     """
-    Remove the observation if it is angle_thres away from the median vector
+    if the median magnitude at the pixel is larger than 10 m/y, remove each observation when it is angle_thres away from the median vector
+    if the median magnitude at the pixel is lower than 10 m/y, apply a zscore filter
     :param obs_cpx: cube data to filter
     :param angle_thres: a threshold to remove observations, remove the observation if it is angle_thres away from the median vector
     :param axis: axis on which to perform the zscore computation
+    :param small_bas: mask to define small baselines. When it is not None, the statistics are computed using small baselines only
     :return: boolean mask
     """
 
     vx, vy = np.real(obs_cpx), np.imag(obs_cpx)
 
-    vx_mean = np.nanmedian(vx, axis=axis, keepdims=True)
-    vy_mean = np.nanmedian(vy, axis=axis, keepdims=True)
+    if small_bas is not None:
+        vx_ref = vx[small_bas]  # Keeps only elements where small_bas >= 100
+        vy_ref = vy[small_bas]
+    else:
+        vx_ref = vx
+        vy_ref = vy
 
-    mean_magnitude = np.hypot(vx_mean, vy_mean)
+    vx_med = np.nanmedian(vx_ref, axis=axis, keepdims=True)
+    vy_med = np.nanmedian(vy_ref, axis=axis, keepdims=True)
+
+    med_magnitude = np.hypot(vx_med, vy_med)
     velo_magnitude = np.hypot(vx, vy)
 
-    dot_product = vx_mean * vx + vy_mean * vy
-    angle_filter = dot_product / (mean_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
+    dot_product = vx_med * vx + vy_med * vy
+    angle_filter = dot_product / (med_magnitude * velo_magnitude) > np.cos(angle_thres * np.pi / 180)
 
-    bis_cond = mean_magnitude > 10
+    bis_cond = med_magnitude > 10
     inlier_flag = np.where(bis_cond, angle_filter, z_score_filt(velo_magnitude, z_thres=3, axis=axis))
 
     return inlier_flag
@@ -620,13 +655,6 @@ def flow_angle_filt(
 
     angle_filter = direction_diff < angle_thres
 
-    # if 1/5 of the observations larger than 5 m/y, then consider it as moving area
-    # valid_and_greater_than_10 = (~np.isnan(velo_magnitude)) & (velo_magnitude > 5)
-    # bis_ratio = np.sum(valid_and_greater_than_10, axis=2) / np.sum(~np.isnan(velo_magnitude), axis=2)
-    # bis_cond = bis_ratio.values[:, :, np.newaxis] > 0.2
-
-    # mag_filter = np.where(bis_cond, True, z_score_filt(velo_magnitude, z_thres=z_thres, axis=axis))
-    # angle_filter[np.expand_dims(np.isnan(direction), axis=2)] = True
     angle_filter = angle_filter.where(
         ~np.isnan(direction), True
     )  # change the stable area to true in case of all invalid data
@@ -637,8 +665,7 @@ def flow_angle_filt(
 
 
 def dask_filt_warpper(
-    da_vx: xr.DataArray,
-    da_vy: xr.DataArray,
+    data: xr.DataArray,
     filt_method: FiltMethod = "median_angle",
     vvc_thres: float = 0.3,
     angle_thres: int = 45,
@@ -650,38 +677,45 @@ def dask_filt_warpper(
     error_thres: int = 100,
     direction: xr.Dataset = None,
     axis: int = 2,
+    compute_stats_on_small_baselines: int | None = None,
 ):
     """
-
-    :param da_vx: vx observations
-    :param da_vy: vy observations
+    :param data: cube dataset with observations
     :param filt_method: filtering method
     :param vvc_thres: threshold to combine zscore and median_angle filter
     :param angle_thres: threshold to remove observations, remove the observation if it is angle_thres away from the median vector
-    :param z_thres: threshold to remove observations, if the absolute zscore is higher than this threshold (default is 2)
-    :param mz_thres: threshold to remove observations, if the absolute mzscore is higher than this threshold (default is 3.5)
+    :param z_thres: threshold to remove observations, remove the observations if its absolute value is higher than this z_score * this threshold (default is 2)
+    :param mz_thres: threshold to remove observations, remove the observations if its absolute value is higher than this mz_score * this threshold (default is 3.5)
+    :param iqr_thres: threshold to remove observations, remove the observations if it is outside from the IQR range * this treshold (default is 1.5)
     :param magnitude_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 1000)
     :param median_magnitude_thres: threshold to remove observations, if the median magnitude is higher than this threshold (default is 1000)
     :param error_thres: threshold to remove observations, if the magnitude is higher than this threshold (default is 100)
     :param axis: axis on which to perform the zscore computation (default is 2)
     :param direction: given flow direction
+    :param compute_stats_on_small_baselines: threshold defined small baselines. When it is not None, the statistics are computedusing small baselines only
     :return:
     """
+    if compute_stats_on_small_baselines is not None:
+        small_bas = data["temporal_baseline"] < compute_stats_on_small_baselines
+    else:
+        small_bas = None
 
     if (
         filt_method == "median_angle"
     ):  # delete observations according to a threshold in angle between observations and median vector
-        obs_arr = da_vx.data + 1j * da_vy.data
-        inlier_mask = obs_arr.map_blocks(median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype)
+        obs_arr = data["vx"].data + 1j * data["vy"].data
+        inlier_mask = obs_arr.map_blocks(
+            median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype, small_bas=small_bas
+        )
 
     elif filt_method == "vvc_angle":  # based on the vvc
-        obs_arr = da_vx.data + 1j * da_vy.data
+        obs_arr = data["vx"].data + 1j * data["vy"].data
         inlier_mask = obs_arr.map_blocks(
             NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
         )
 
     elif filt_method == "vvc_angle_mzscore":  # combination between z_score and median_angle
-        obs_arr = da_vx.data + 1j * da_vy.data
+        obs_arr = data["vx"].data + 1j * data["vy"].data
         inlier_mask = obs_arr.map_blocks(
             NVVC_angle_mzscore_filt,
             vvc_thres=vvc_thres,
@@ -692,39 +726,52 @@ def dask_filt_warpper(
         )
 
     elif filt_method == "z_score":  # threshold according to the zscore
-        inlier_mask_vx = da_vx.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vx.dtype)
-        inlier_mask_vy = da_vy.data.map_blocks(z_score_filt, z_thres=z_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask_vx = data["vx"].data.map_blocks(
+            z_score_filt, z_thres=z_thres, axis=axis, dtype=data["vx"].data.dtype
+        )
+        inlier_mask_vy = data["vy"].data.map_blocks(
+            z_score_filt, z_thres=z_thres, axis=axis, dtype=data["vy"].data.dtype
+        )
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "mz_score":  # threshold according to the modified zscore
-        inlier_mask_vx = da_vx.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vx.dtype)
-        inlier_mask_vy = da_vy.data.map_blocks(mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask_vx = data["vx"].data.map_blocks(
+            mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=data["vx"].data.dtype
+        )
+        inlier_mask_vy = data["vy"].data.map_blocks(
+            mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=data["vy"].data.dtype
+        )
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "iqr":  # threshold according to the modified zscore
-        inlier_mask_vx = da_vx.data.map_blocks(iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=da_vx.dtype)
-        inlier_mask_vy = da_vy.data.map_blocks(iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=da_vy.dtype)
+        inlier_mask_vx = data["vx"].data.map_blocks(
+            iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=data["vx"].data.dtype
+        )
+        inlier_mask_vy = data["vy"].data.map_blocks(
+            iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=data["vy"].data.dtype
+        )
         inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
 
     elif filt_method == "magnitude":  # delete observations according to a threshold in magnitude
-        obs_arr = np.hypot(da_vx.data, da_vy.data)
+        obs_arr = np.hypot(data["vx"].data, data["vy"].data)
         inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
 
     elif (
         filt_method == "median_magnitude"
     ):  # the threshold in magnitude is computed relatively to the median of the data
-        obs_arr = da_vx.data + 1j * da_vy.data
+        obs_arr = data["vx"].data + 1j * data["vy"].data
         inlier_mask = obs_arr.map_blocks(
             median_magnitude_filt, median_magnitude_thres=median_magnitude_thres, axis=axis, dtype=obs_arr.dtype
         )
 
     elif filt_method == "error":  # delete observations according to a threshold in error
-        inlier_mask_vx = da_vx.data.map_blocks(lambda x: x < error_thres, dtype=da_vx.dtype)
-        inlier_mask_vy = da_vy.data.map_blocks(lambda x: x < error_thres, dtype=da_vy.dtype)
-        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+        inlier_mask_error_x = data["error_x"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
+        inlier_mask_error_y = data["error_y"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
+
+        inlier_mask = np.logical_and(inlier_mask_error_x, inlier_mask_error_y)
 
     elif filt_method == "flow_angle":
-        obs_arr = da_vx + 1j * da_vy
+        obs_arr = data["vx"].data + 1j * data["vy"].data
         _, direction_expanded = xr.broadcast(obs_arr, direction["direction"])
         direction_expanded = direction_expanded.chunk(obs_arr.chunks)
         inlier_mask = xr.map_blocks(
@@ -735,8 +782,6 @@ def dask_filt_warpper(
             kwargs={"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis},
         )
     else:
-        raise ValueError(
-            "Filtering method should be either 'median_angle', 'vvc_angle','vvc_angle_mzscore', 'z_score', 'm_zscore', 'magnitude', 'median_magnitude', 'error', 'flow_angle'."
-        )
+        raise ValueError(f"Filtering method should be one of {get_args(FiltMethod)}.")
 
     return inlier_mask.compute()

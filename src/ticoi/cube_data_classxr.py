@@ -40,7 +40,7 @@ from ticoi.filtering_functions import dask_filt_warpper, dask_smooth_wrapper
 from ticoi.inversion_functions import construction_dates_range_np
 from ticoi.mjd2date import mjd2date
 
-from typing import Literal
+from typing import Literal, get_args
 
 MethodInterp = Literal["linear", "nearest", "zero", "slinear", "quadratic", "cubic"]
 ReturnAs = Literal["dataframe", "cube"]
@@ -1026,22 +1026,28 @@ class CubeDataClass:
         delete_outliers: str | float,
         flag: xr.Dataset | None = None,
         direction: xr.Dataset | None = None,
-        **kwargs,
+        compute_delete_outliers_stats_on_small_baselines: int | None = None,
     ):
         """
         Delete outliers according to a certain criterium.
 
         :param delete_outliers: [str | float] --- If float delete all velocities which a quality indicator higher than delete_outliers, if median_filter delete outliers that an angle 45° away from the average vector
         :param flag: [xr dataset | None] [default is None] --- If not None, the values of the coefficient used for stable areas, surge glacier and non surge glacier
+        :param direction [xr dataset | None] : given flow direction
+        :param compute_delete_outliers_stats_on_small_baselines [int | None] : threshold to define small baselines. When it is not None, the statistics are computed using small baselines only.
+
         """
 
         def apply_delete_outliers_filter(delete_outliers, flag, **kwargs):
+            """
+            Function to apply dask wrapper.
+            """
             axis = self.ds["vx"].dims.index("mid_date")
             inlier_mask = dask_filt_warpper(
-                self.ds["vx"],
-                self.ds["vy"],
+                self.ds,
                 filt_method=delete_outliers,
                 direction=direction,
+                compute_stats_on_small_baselines=compute_delete_outliers_stats_on_small_baselines,
                 axis=axis,
                 **kwargs,
             )
@@ -1091,9 +1097,7 @@ class CubeDataClass:
             elif method == "flow_angle":
                 apply_delete_outliers_filter(delete_outliers="flow_angle", flag=flag, direction=direction)
             else:
-                raise ValueError(
-                    "Filtering method should be either 'median_angle', 'vvc_angle', 'z_score','mz_score', 'magnitude', 'median_magnitude' or 'error'."
-                )
+                raise ValueError(f"Filtering method should be one of {get_args(FiltMethod)}.")
 
     def mask_cube(self, mask: gpd.GeoDataFrame | str, invert: bool = False):
         """
@@ -1249,8 +1253,8 @@ class CubeDataClass:
         order: int = 3,
         unit: int = 365,
         delete_outliers: str | float | None = None,
+        compute_delete_outliers_stats_on_small_baselines: bool = True,
         flag: xr.Dataset | str | None = None,
-        dem_file: str | None = None,
         regu: int | str = "1accelnotnull",
         solver: str = "LSMR_ini",
         proj: str = "EPSG:4326",
@@ -1391,12 +1395,16 @@ class CubeDataClass:
 
         if delete_outliers is not None:  # remove outliers beforehand
             direction = None
-
             if (isinstance(delete_outliers, str) and delete_outliers == "flow_angle") or (
                 isinstance(delete_outliers, dict) and "flow_angle" in delete_outliers.keys()
             ):
                 direction = self.compute_flow_direction(vx_file=None, vy_file=None)
-            self.delete_outliers(delete_outliers=delete_outliers, flag=None, direction=direction)
+            self.delete_outliers(
+                delete_outliers=delete_outliers,
+                flag=None,
+                direction=direction,
+                compute_delete_outliers_stats_on_small_baselines=compute_delete_outliers_stats_on_small_baselines,
+            )
             if verbose:
                 print(f"[Data filtering] Delete outlier took {round((time.time() - start), 1)} s")
 
