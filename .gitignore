@@ -162,3 +162,12 @@ cython_debug/
 /examples/results/cube/
 /examples/results/pixel/
 /examples/results/line/
+
+# Local code index and downloaded test fixtures
+/.codegraph/
+/test_data/
+
+# Generated offline configuration example
+/examples/basic/config/demo_cube.nc
+/examples/results/config_demo/
+/resolved-config.json

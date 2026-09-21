@@ -6,8 +6,23 @@ import numpy as np
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from ticoi.core import chunk_to_block, load_block
+from ticoi.core import _assign_block_results, chunk_to_block, load_block
 from ticoi.utils import optimize_coef
+
+
+def _stable_ground_coordinates(flag):
+    """Return stable coordinates in the original x-major, y-minor order."""
+    stable_x, stable_y = np.nonzero(flag["flag"].transpose("x", "y").values == 0)
+    x_values = flag["x"].values
+    y_values = flag["y"].values
+    return list(zip(x_values[stable_x], y_values[stable_y]))
+
+
+def _optimization_coordinates(cube, flag, optimization_method):
+    if optimization_method == "stable_ground":
+        coordinates = _stable_ground_coordinates(flag)
+        return coordinates, len(coordinates)
+    return itertools.product(cube.ds["x"].values, cube.ds["y"].values), cube.nx * cube.ny
 
 
 async def process_block(
@@ -29,22 +44,10 @@ async def process_block(
 ):
     """Optimize the coef on a given block"""
 
-    if optimization_method == "stable_ground":  # We only compute stable ground pixels
-        xy_values = list(
-            filter(
-                bool,
-                [
-                    (x, y) if flag.sel(x=x, y=y)["flag"].values == 0 else False
-                    for x in flag["x"].values
-                    for y in flag["y"].values
-                ],
-            )
-        )
-    else:
-        xy_values = list(itertools.product(cube.ds["x"].values, cube.ds["y"].values))
+    xy_values, n_xy_values = _optimization_coordinates(cube, flag, optimization_method)
 
     # Progression bar
-    xy_values_tqdm = tqdm(xy_values, total=len(xy_values))
+    xy_values_tqdm = tqdm(xy_values, total=n_xy_values)
 
     # Filter cube
     obs_filt, flag_block = block.filter_cube_before_inversion(**preData_kwargs, flag=flag)
@@ -139,12 +142,15 @@ async def process_blocks_main(
             preData_kwargs=preData_kwargs,
         )
 
-        for i in range(len(block_result)):
-            row = i % block.ny + blocks[n][2]
-            col = np.floor(i / block.ny) + blocks[n][0]
-            idx = int(col * cube.ny + row)
-
-            dataf_list[idx] = block_result[i]
+        _assign_block_results(
+            dataf_list,
+            block_result,
+            cube.ny,
+            blocks[n][0],
+            blocks[n][2],
+            block.nx,
+            block.ny,
+        )
 
         del block_result, block
 

@@ -46,6 +46,9 @@ dependencies = [
   "zarr"
 ]
 
+[project.scripts]
+ticoi = "ticoi.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/ticoi/ticoi.git"
 Issues = "https://github.com/ticoi/ticoi/issues"
