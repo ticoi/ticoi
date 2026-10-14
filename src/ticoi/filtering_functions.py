@@ -39,6 +39,22 @@ FiltMethod = Literal[
 ]
 
 
+def _jitter_duplicate_times(t_obs: np.ndarray, random_state: int | None = None) -> np.ndarray:
+    """Make repeated observation times unique, optionally reproducibly.
+
+    ``random_state=None`` intentionally retains the historical global NumPy
+    random stream. Supplying an integer uses an isolated generator so callers
+    can make repeated runs deterministic without changing the default API.
+    """
+    if random_state is None:
+        uniform = np.random.uniform
+    else:
+        uniform = np.random.default_rng(random_state).uniform
+    while np.unique(t_obs).size < t_obs.size:
+        t_obs += uniform(low=0.01, high=0.09, size=t_obs.shape)
+    return t_obs
+
+
 # %% ======================================================================== #
 #                             TEMPORAL SMOOTHING                              #
 # =========================================================================%% #
@@ -269,6 +285,7 @@ def dask_smooth_wrapper(
     sigma: int = 3,
     order: int = 3,
     axis: int = 2,
+    random_state: int | None = None,
 ):
     """
     A function that wraps a Dask array to apply a smoothing function.
@@ -281,6 +298,7 @@ def dask_smooth_wrapper(
     :param sigma: Standard deviation for Gaussian smoothing (default is 3)
     :param order: Order of the smoothing function (default is 3)
     :param axis: Axis along which smoothing is applied (default is 2)
+    :param random_state: Optional seed for reproducible duplicate-date jitter
 
     :return: Smoothed dask array with specified parameters.
     """
@@ -296,10 +314,7 @@ def dask_smooth_wrapper(
         t_out = t_out - t_out.min()
 
     # Some mid_date could be exactly the same, this will raise error latter, so we add very small values to it
-    while np.unique(t_obs).size < t_obs.size:
-        t_obs += np.random.uniform(
-            low=0.01, high=0.09, size=t_obs.shape
-        )  # Add a small value to make it unique, for non-monotonic time point
+    t_obs = _jitter_duplicate_times(t_obs, random_state)
     t_obs.sort()
 
     t_interp = np.arange(
@@ -331,6 +346,52 @@ def dask_smooth_wrapper(
     return da_smooth
 
 
+def numpy_smooth_wrapper(
+    array: np.ndarray,
+    dates: xr.DataArray,
+    t_out: np.ndarray,
+    smooth_method: SmoothMethod = "savgol",
+    t_win: int = 90,
+    sigma: int = 3,
+    order: int = 3,
+    axis: int = 2,
+    random_state: int | None = None,
+) -> np.ndarray:
+    """Apply the same smoothing kernel without Dask scheduling overhead.
+
+    This is intended for small arrays that are already safe to materialize in
+    memory. Date preparation deliberately mirrors :func:`dask_smooth_wrapper`
+    so the numerical operation and random-number consumption remain unchanged.
+    """
+    t_obs = (dates.data - dates.data.min()).astype("timedelta64[D]").astype("float64")
+    if t_out.dtype == "datetime64[ns]" or t_out.dtype == "<M8[s]":
+        t_out = (t_out - dates.data.min()).astype("timedelta64[D]").astype("int")
+    if t_out.min() < 0:
+        t_obs = t_obs - t_out.min()
+        t_out = t_out - t_out.min()
+    t_obs = _jitter_duplicate_times(t_obs, random_state)
+    t_obs.sort()
+    t_interp = np.arange(0, int(max(t_obs.max(), t_out.max()) + 1), 1)
+    filt_func = {
+        "gaussian": gaussian_smooth,
+        "median": median_smooth,
+        "savgol": savgol_smooth,
+        "ICA": ica_denoise,
+        "lowess": lowess_smooth,
+    }[smooth_method]
+    return np.apply_along_axis(
+        filt_func,
+        axis,
+        array,
+        t_obs=t_obs,
+        t_interp=t_interp,
+        t_out=t_out,
+        t_win=t_win,
+        sigma=sigma,
+        order=order,
+    )
+
+
 def df_smooth_wrapper(
     data_array: np.ndarray,
     t_out: np.ndarray,
@@ -339,6 +400,7 @@ def df_smooth_wrapper(
     sigma: int = 3,
     order: int = 3,
     axis: int = 0,
+    random_state: int | None = None,
 ) -> pd.DataFrame | dd.DataFrame:
     """
     Apply smoothing to a Pandas or Dask DataFrame along the specified axis using the same
@@ -367,8 +429,7 @@ def df_smooth_wrapper(
         t_obs = t_obs - t_out.min()  # Ensure the output time points are within the range of interpolated points
         t_out = t_out - t_out.min()
 
-    while np.unique(t_obs).size < t_obs.size:
-        t_obs += np.random.uniform(low=0.01, high=0.09, size=t_obs.shape)
+    t_obs = _jitter_duplicate_times(t_obs, random_state)
     t_obs.sort()
 
     t_interp = np.arange(0, int(max(t_obs.max(), t_out.max()) + 1), 1)
@@ -665,7 +726,7 @@ def flow_angle_filt(
 
 
 def dask_filt_warpper(
-    data: xr.DataArray,
+    data: xr.Dataset,
     filt_method: FiltMethod = "median_angle",
     vvc_thres: float = 0.3,
     angle_thres: int = 45,
@@ -700,88 +761,78 @@ def dask_filt_warpper(
     else:
         small_bas = None
 
+    def map_or_apply(array, func, **kwargs):
+        if isinstance(array, da.Array):
+            return array.map_blocks(func, dtype=bool, **kwargs)
+        return func(array, **kwargs)
+
     if (
         filt_method == "median_angle"
     ):  # delete observations according to a threshold in angle between observations and median vector
         obs_arr = data["vx"].data + 1j * data["vy"].data
-        inlier_mask = obs_arr.map_blocks(
-            median_angle_filt, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype, small_bas=small_bas
-        )
+        inlier_mask = map_or_apply(obs_arr, median_angle_filt, angle_thres=angle_thres, axis=axis, small_bas=small_bas)
 
-    elif filt_method == "z_score":  # threshold according to the zscore
-        inlier_mask_vx = data["vx"].data.map_blocks(
-            z_score_filt, z_thres=z_thres, axis=axis, dtype=data["vx"].data.dtype
-        )
-        inlier_mask_vy = data["vy"].data.map_blocks(
-            z_score_filt, z_thres=z_thres, axis=axis, dtype=data["vy"].data.dtype
-        )
-        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
-
-    elif filt_method == "mz_score":  # threshold according to the modified zscore
-        inlier_mask_vx = data["vx"].data.map_blocks(
-            mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=data["vx"].data.dtype
-        )
-        inlier_mask_vy = data["vy"].data.map_blocks(
-            mz_score_filt, mz_thres=mz_thres, axis=axis, dtype=data["vy"].data.dtype
-        )
-        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
-
-    elif filt_method == "iqr":  # threshold according to the modified zscore
-        inlier_mask_vx = data["vx"].data.map_blocks(
-            iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=data["vx"].data.dtype
-        )
-        inlier_mask_vy = data["vy"].data.map_blocks(
-            iqr_filt, iqr_thres=iqr_thres, axis=axis, dtype=data["vy"].data.dtype
-        )
-        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
-
-    elif filt_method == "magnitude":  # delete observations according to a threshold in magnitude
-        obs_arr = np.hypot(data["vx"].data, data["vy"].data)
-        inlier_mask = obs_arr.map_blocks(lambda x: x < magnitude_thres, dtype=obs_arr.dtype)
-
-    elif (
-        filt_method == "median_magnitude"
-    ):  # the threshold in magnitude is computed relatively to the median of the data
+    elif filt_method == "vvc_angle":
         obs_arr = data["vx"].data + 1j * data["vy"].data
-        inlier_mask = obs_arr.map_blocks(
-            median_magnitude_filt, median_magnitude_thres=median_magnitude_thres, axis=axis, dtype=obs_arr.dtype
-        )
+        inlier_mask = map_or_apply(obs_arr, NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis)
 
-    elif filt_method == "error":  # delete observations according to a threshold in error
-        inlier_mask_error_x = data["errorx"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
-        inlier_mask_error_y = data["errory"].data.map_blocks(lambda x: x < error_thres, dtype=bool)
-
-        inlier_mask = np.logical_and(inlier_mask_error_x, inlier_mask_error_y)
-
-    elif filt_method == "vvc_angle":  # based on the vvc
+    elif filt_method == "vvc_angle_mzscore":
         obs_arr = data["vx"].data + 1j * data["vy"].data
-        inlier_mask = obs_arr.map_blocks(
-            NVVC_angle_filt, vvc_thres=vvc_thres, angle_thres=angle_thres, axis=axis, dtype=obs_arr.dtype
-        )
-
-    elif filt_method == "vvc_angle_mzscore":  # combination between z_score and median_angle
-        obs_arr = data["vx"].data + 1j * data["vy"].data
-        inlier_mask = obs_arr.map_blocks(
+        inlier_mask = map_or_apply(
+            obs_arr,
             NVVC_angle_mzscore_filt,
             vvc_thres=vvc_thres,
             angle_thres=angle_thres,
             mz_thres=mz_thres,
             axis=axis,
-            dtype=obs_arr.dtype,
         )
 
-    elif filt_method == "flow_angle":
+    elif filt_method == "z_score":
+        inlier_mask_vx = map_or_apply(data["vx"].data, z_score_filt, z_thres=z_thres, axis=axis)
+        inlier_mask_vy = map_or_apply(data["vy"].data, z_score_filt, z_thres=z_thres, axis=axis)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "mz_score":
+        inlier_mask_vx = map_or_apply(data["vx"].data, mz_score_filt, mz_thres=mz_thres, axis=axis)
+        inlier_mask_vy = map_or_apply(data["vy"].data, mz_score_filt, mz_thres=mz_thres, axis=axis)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "iqr":
+        inlier_mask_vx = map_or_apply(data["vx"].data, iqr_filt, iqr_thres=iqr_thres, axis=axis)
+        inlier_mask_vy = map_or_apply(data["vy"].data, iqr_filt, iqr_thres=iqr_thres, axis=axis)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "magnitude":
+        obs_arr = np.hypot(data["vx"].data, data["vy"].data)
+        inlier_mask = map_or_apply(obs_arr, lambda x: x < magnitude_thres)
+
+    elif filt_method == "median_magnitude":
         obs_arr = data["vx"].data + 1j * data["vy"].data
-        _, direction_expanded = xr.broadcast(obs_arr, direction["direction"])
-        direction_expanded = direction_expanded.chunk(obs_arr.chunks)
-        inlier_mask = xr.map_blocks(
-            flow_angle_filt,
-            obs_arr,
-            args=(direction_expanded,),
-            template=obs_arr,
-            kwargs={"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis},
+        inlier_mask = map_or_apply(
+            obs_arr, median_magnitude_filt, median_magnitude_thres=median_magnitude_thres, axis=axis
         )
+
+    elif filt_method == "error":
+        inlier_mask_vx = map_or_apply(data["errorx"].data, lambda x: x < error_thres)
+        inlier_mask_vy = map_or_apply(data["errory"].data, lambda x: x < error_thres)
+        inlier_mask = np.logical_and(inlier_mask_vx, inlier_mask_vy)
+
+    elif filt_method == "flow_angle":
+        obs_arr = data["vx"] + 1j * data["vy"]
+        _, direction_expanded = xr.broadcast(obs_arr, direction["direction"])
+        kwargs = {"angle_thres": angle_thres, "z_thres": z_thres, "axis": axis}
+        if isinstance(obs_arr.data, da.Array):
+            direction_expanded = direction_expanded.chunk(obs_arr.chunksizes)
+            inlier_mask = xr.map_blocks(
+                flow_angle_filt,
+                obs_arr,
+                args=(direction_expanded,),
+                template=xr.zeros_like(obs_arr, dtype=bool),
+                kwargs=kwargs,
+            )
+        else:
+            inlier_mask = flow_angle_filt(obs_arr, direction_expanded, **kwargs)
     else:
         raise ValueError(f"Filtering method should be one of {get_args(FiltMethod)}.")
 
-    return inlier_mask.compute()
+    return inlier_mask.compute() if hasattr(inlier_mask, "compute") else np.asarray(inlier_mask)

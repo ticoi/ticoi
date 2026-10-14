@@ -1,13 +1,103 @@
 import os
 
+import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
+from dask import delayed
 
+import ticoi.cube_data_classxr as cube_data_module
 from ticoi.cube_data_classxr import (
     CubeDataClass,  # Assuming cube_data_class is defined in your_module
+    _unique_valid_dates,
 )
 from ticoi.example import get_path
+
+
+def test_unique_valid_dates_loads_each_lazy_array_once():
+    calls = []
+
+    def load_dates(name, values):
+        calls.append(name)
+        return values
+
+    date1_values = np.array(["2020-01-01", "NaT", "2020-01-03"], dtype="datetime64[ns]")
+    date2_values = np.array(["2020-01-02", "2020-01-03", "2020-01-04"], dtype="datetime64[ns]")
+    date1 = xr.DataArray(
+        da.from_delayed(delayed(load_dates)("date1", date1_values), shape=(3,), dtype="datetime64[ns]")
+    )
+    date2 = xr.DataArray(
+        da.from_delayed(delayed(load_dates)("date2", date2_values), shape=(3,), dtype="datetime64[ns]")
+    )
+
+    actual = _unique_valid_dates(date1, date2)
+
+    expected = np.arange("2020-01-01", "2020-01-05", dtype="datetime64[D]").astype("datetime64[ns]")
+    np.testing.assert_array_equal(actual, expected)
+    assert calls == ["date1", "date2"]
+
+
+def test_load_pixel_materializes_lazy_variables_in_one_compute(monkeypatch):
+    cube = CubeDataClass()
+    n = 4
+    dates = np.arange("2020-01-01", "2020-01-05", dtype="datetime64[D]")
+    shape = (n, 1, 1)
+    cube.ds = xr.Dataset(
+        {
+            "date1": ("mid_date", da.from_array(dates, chunks=n)),
+            "date2": ("mid_date", da.from_array(dates + 1, chunks=n)),
+            "vx": (("mid_date", "y", "x"), da.ones(shape, chunks=shape)),
+            "vy": (("mid_date", "y", "x"), da.ones(shape, chunks=shape)),
+            "errorx": (("mid_date", "y", "x"), da.ones(shape, chunks=shape)),
+            "errory": (("mid_date", "y", "x"), da.ones(shape, chunks=shape)),
+            "temporal_baseline": ("mid_date", da.ones(n, chunks=n)),
+        },
+        coords={"mid_date": dates, "x": [0], "y": [0]},
+        attrs={"proj4": "EPSG:3413"},
+    )
+    calls = 0
+    original = xr.Dataset.compute
+
+    def counted_compute(self, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(xr.Dataset, "compute", counted_compute)
+    data, _, _ = cube.load_pixel(0, 0, proj="EPSG:3413")
+
+    np.testing.assert_array_equal(data[0], np.column_stack((dates, dates + 1)))
+    assert calls == 1
+
+
+def test_filter_expands_baseline_selection_when_initial_threshold_has_no_observations(monkeypatch):
+    date1 = np.array(["2020-01-01"] * 3 + ["2020-01-02"] * 3 + ["2020-01-03"] * 3, dtype="datetime64[ns]")
+    date2 = np.array(["2020-01-02"] * 3 + ["2020-01-03"] * 3 + ["2020-01-01"] * 3, dtype="datetime64[ns]")
+    mid_date = date1 + (date2 - date1) // 2
+    cube = CubeDataClass()
+    cube.ds = xr.Dataset(
+        {
+            "date1": ("mid_date", date1),
+            "date2": ("mid_date", date2),
+            "vx": (("mid_date", "y", "x"), np.ones((9, 1, 1))),
+            "vy": (("mid_date", "y", "x"), np.ones((9, 1, 1))),
+            "temporal_baseline": ("mid_date", np.full(9, 200.0)),
+        },
+        coords={"mid_date": mid_date, "x": [0], "y": [0]},
+        attrs={"proj4": "EPSG:3413"},
+    )
+    selected_counts = []
+
+    def record_selected_observations(array, dates, t_out, **kwargs):
+        selected_counts.append(len(dates))
+        return np.zeros((len(t_out), array.shape[1], array.shape[2]), dtype=array.dtype)
+
+    monkeypatch.setattr(cube_data_module, "numpy_smooth_wrapper", record_selected_observations)
+
+    result, _ = cube.filter_cube_before_inversion(select_baseline=100, smooth_method="gaussian")
+
+    assert selected_counts == [9, 9]
+    assert result.sizes["mid_date"] == 2
 
 
 class Testclass_cube_data_xr:
@@ -75,3 +165,10 @@ class Testclass_cube_data_xr:
         assert data[1].shape[1] == 5
         actual = data[1][0, :]
         np.testing.assert_array_almost_equal(actual, expected, decimal=1)
+
+        cube_data_class_instance.ds.load()
+        loaded_data, loaded_mean, loaded_dates_range = cube_data_class_instance.load_pixel(x, y)
+        np.testing.assert_array_equal(loaded_data[0], data[0])
+        np.testing.assert_array_equal(loaded_data[1], data[1])
+        assert loaded_mean == mean
+        assert loaded_dates_range == dates_range

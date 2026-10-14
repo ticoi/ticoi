@@ -50,24 +50,24 @@ def reconstruct_common_ref(
         )
 
     # Common Reference
-    data = pd.DataFrame(
-        {
-            "Ref_date": result["date1"][0],
-            "Second_date": result["date2"],
-        }
-    )
-
-    for var in result.columns.difference(["date1", "date2"]):
-        if var in ["result_dx", "result_dy", "xcount_x", "xcount_y", "error_x", "error_y", "xcount_z"]:
-            data[var] = result[var].values.cumsum()
-    data = data.rename(columns={"result_dx": "dx", "result_dy": "dy"})
+    data_columns = {
+        "Ref_date": result["date1"][0],
+        "Second_date": result["date2"],
+    }
+    cumulative_columns = ("error_x", "error_y", "result_dx", "result_dy", "xcount_x", "xcount_y", "xcount_z")
+    for var in cumulative_columns:
+        if var in result.columns:
+            output_var = {"result_dx": "dx", "result_dy": "dy"}.get(var, var)
+            data_columns[output_var] = result[var].values.cumsum()
+    data = pd.DataFrame(data_columns)
 
     if second_date_list is not None:
+        reindexed_columns = ("dx", "dy", "error_x", "error_y", "xcount_x", "xcount_y", "xcount_z")
         tmp = pd.DataFrame(
             {
                 "Ref_date": pd.NaT,
                 "Second_date": second_date_list,
-                **{var: np.nan for var in data.columns.difference(["Ref_date", "Second_date"])},
+                **{var: np.nan for var in reindexed_columns if var in data.columns},
             }
         )
 

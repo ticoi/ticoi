@@ -42,12 +42,14 @@ from ticoi.interpolation_functions import (
 from ticoi.inversion_functions import (
     TukeyBiweight,
     class_linear_operator,
+    class_fast_linear_operator,
     construction_a_lf,
     construction_dates_range_np,
     find_date_obs,
     inversion_one_component,
     inversion_two_components,
     mu_regularisation,
+    mu_regularisation_sparse_first_order,
     weight_for_inversion,
 )
 from ticoi.pixel_class import PixelClass
@@ -83,6 +85,9 @@ def inversion_iteration(
     result_quality: list | str | None = None,
     ini: np.ndarray | None = None,
     verbose: bool = False,
+    F_regu_csc: sp.csc_matrix | None = None,
+    A_csc: sp.csc_matrix | None = None,
+    diagnostics: dict | None = None,
 ) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None):
     """
     Compute an iteration of the inversion : update the weights using the weights from the previous iteration and the studentized residual, update the results in consequence
@@ -110,7 +115,11 @@ def inversion_iteration(
     """
 
     def compute_residual(A: np.ndarray, v: np.ndarray, X: np.ndarray) -> np.ndarray:
-        Residu = v - A.dot(X)
+        if isinstance(linear_operator, class_fast_linear_operator):
+            predicted = linear_operator.matvec_direct(X)
+        else:
+            predicted = A.dot(X)
+        Residu = v - predicted
         return Residu
 
     def weightf(residu: np.ndarray, Weight: np.ndarray) -> np.ndarray:
@@ -153,15 +162,22 @@ def inversion_iteration(
                 dates_range,
                 0,
                 data,
-                solver,
                 np.concatenate([weightx, weighty]),
                 mu,
+                solver=solver,
                 coef=coef,
                 ini=np.concatenate([result_dx, result_dy]),
             )
         else:
             result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(
-                A, dates_range, 0, data, solver, np.concatenate([weightx, weighty]), mu, coef=coef
+                A,
+                dates_range,
+                0,
+                data,
+                np.concatenate([weightx, weighty]),
+                mu,
+                solver=solver,
+                coef=coef,
             )
 
     elif solver == "LSMR_ini":
@@ -180,6 +196,9 @@ def inversion_iteration(
                 regu=regu,
                 accel=accel,
                 linear_operator=linear_operator,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
             )
             result_dy, residu_normy = inversion_one_component(
                 A,
@@ -195,6 +214,9 @@ def inversion_iteration(
                 regu=regu,
                 accel=accel,
                 linear_operator=linear_operator,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
             )
         else:  # Initialization with the list ini, which can be a moving average
             result_dx, residu_normx = inversion_one_component(
@@ -211,6 +233,9 @@ def inversion_iteration(
                 regu=regu,
                 accel=accel,
                 linear_operator=linear_operator,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
             )
             result_dy, residu_normy = inversion_one_component(
                 A,
@@ -226,6 +251,9 @@ def inversion_iteration(
                 regu=regu,
                 accel=accel,
                 linear_operator=linear_operator,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
             )
 
     else:  # No initialization
@@ -242,6 +270,9 @@ def inversion_iteration(
             regu=regu,
             accel=accel,
             linear_operator=linear_operator,
+            F_regu_csc=F_regu_csc,
+            A_csc=A_csc,
+            diagnostics=diagnostics,
         )
         result_dy, residu_normy = inversion_one_component(
             A,
@@ -256,6 +287,9 @@ def inversion_iteration(
             regu=regu,
             accel=accel,
             linear_operator=linear_operator,
+            F_regu_csc=F_regu_csc,
+            A_csc=A_csc,
+            diagnostics=diagnostics,
         )
 
     return result_dx, result_dy, weightx, weighty, residu_normx, residu_normy
@@ -276,12 +310,16 @@ def inversion_core(
     conf: bool = False,
     mean: list | None = None,
     detect_temporal_decorrelation: bool = True,
-    linear_operator: bool = False,
+    linear_operator: bool | Literal["fast"] = False,
     result_quality: list | str | None = None,
     nb_max_iteration: int = 10,
     apriori_weight_in_second_iteration: bool = False,
     visual: bool = False,
     verbose: bool = False,
+    diagnostics: dict | None = None,
+    reuse_observation_csc: bool = True,
+    fast_fallback_on_limit: bool = True,
+    fast_lsmr_maxiter_factor: float = 2.0,
 ) -> (np.ndarray, pd.DataFrame, pd.DataFrame):  # type: ignore
     """
     Computes A in AX = Y and does the inversion using a given solver and regularization.
@@ -299,12 +337,14 @@ def inversion_core(
     :param conf: [bool] [default is False] --- If True means that the error corresponds to confidence intervals between 0 and 1, otherwise it corresponds to errors in m/y or m/d
     :param mean: [list | None] [default is None] --- Apriori on the average
     :param detect_temporal_decorrelation: [bool] [default is True] --- If True the first inversion is solved using only velocity observations with small temporal baselines, to detect temporal decorelation
-    :param linear_operator: [bool] [default is False] --- If linear operator, the inversion is performed using a linear operator (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html)
+    :param linear_operator: [bool | "fast"] [default is False] --- If True, use the legacy linear operator. If "fast", use the equivalent interval-prefix operator for LSMR or LSMR_ini with first-order, non-zero-acceleration first-order, or second-order regularization.
     :param result_quality: [list | str | None] [default is None] --- List which can contain 'Norm_residual' to determine the L2 norm of the residuals from the last inversion, 'X_contribution' to determine the number of Y observations which have contributed to estimate each value in X (it corresponds to A.dot(weight))
     :param nb_max_iteration: [int] [default is 10] --- Maximum number of iterations
     :param apriori_weight_in_second_iteration: [bool] [default is False] --- it True use the error to weight each of the iterations, if not use it only in the first iteration
     :param visual: [bool] [default is True] --- Keep the weights for future plots
     :param verbose: [bool] [default is False] --- Print information along the way
+    :param fast_fallback_on_limit: [bool] [default is True] --- If a fast LSMR solve reaches its iteration limit, recompute only that pixel with the historical explicit CSC path. This preserves numerical compatibility while keeping converged pixels on the fast operator.
+    :param fast_lsmr_maxiter_factor: [float] [default is 2.0] --- Multiply SciPy's default min(m, n) LSMR iteration budget on the fast operator. Normally converged calls stop at the same iteration; only calls that would hit the default limit continue before strict fallback.
 
     :return A: [np array | None] --- Design matrix in AX = Y
     :return result: [pd dataframe | None] --- DF with dates, computed displacements and number of observations used to compute each displacement
@@ -312,6 +352,33 @@ def inversion_core(
     """
 
     if data[0].size:  # If there are available data on this pixel
+        pixel_i, pixel_j = i, j
+        fast_requested = linear_operator == "fast"
+        fallback_data = None
+        if fast_requested and fast_fallback_on_limit:
+            # Later trimming only rebinds local arrays; inversion never mutates
+            # the caller's observation arrays.  Preserve shallow references so
+            # the common converged fast path adds no full-pixel copy.
+            fallback_data = list(data)
+            if diagnostics is None:
+                diagnostics = {}
+        fast_supported = solver in ("LSMR", "LSMR_ini") and regu in (
+            "1",
+            "1accelnotnull",
+            "2",
+        )
+        if linear_operator == "fast" and not fast_supported:
+            raise ValueError(
+                "linear_operator='fast' supports LSMR or LSMR_ini with regu='1', regu='1accelnotnull', or regu='2'"
+            )
+        if linear_operator is True and regu not in ("1", "1accelnotnull"):
+            raise ValueError(
+                "linear_operator=True is the legacy first-order operator and only "
+                "supports regu='1' or regu='1accelnotnull'; use "
+                "linear_operator='fast' for regu='2'"
+            )
+        if regu == "directionxy" and (mean is None or len(mean) != 2):
+            raise ValueError("regu='directionxy' requires mean=[mean_vx, mean_vy]")
         # Split the data, with one dtype per array
         if len(data) == 3:
             data_dates, data_values, data_str = data
@@ -327,10 +394,14 @@ def inversion_core(
             A = construction_a_lf(data_dates, dates_range)
             linear_operator = None
         else:  # use a linear operator to solve the inversion, it is sometimes faster
-            linear_operator = class_linear_operator()
+            linear_operator = class_fast_linear_operator() if linear_operator == "fast" else class_linear_operator()
             linear_operator.load(
                 find_date_obs(data_dates[:, :2], dates_range), dates_range, coef
             )  # load parameter of the linear operator
+            if isinstance(linear_operator, class_fast_linear_operator):
+                if fast_lsmr_maxiter_factor < 1:
+                    raise ValueError("fast_lsmr_maxiter_factor must be >= 1")
+                linear_operator.lsmr_maxiter_factor = float(fast_lsmr_maxiter_factor)
             A = sp.linalg.LinearOperator(
                 (data_values.shape[0], len(dates_range) - 1),
                 matvec=linear_operator.matvec,
@@ -371,11 +442,23 @@ def inversion_core(
                 )  # Delete quality indicator, which are not needed anymore
         # Compute regularisation matrix
         if not linear_operator:
-            if regu == "directionxy":
+            if solver in ("LSMR", "LSMR_ini") and regu in ("1", "1accelnotnull"):
+                mu = mu_regularisation_sparse_first_order(A.shape[1], dates_range)
+            elif regu == "directionxy":
                 # Constrain according to the vectorial product, the magnitude of the vector corresponds to mean2, the magnitude of a rolling mean
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
             else:
                 mu = mu_regularisation(regu, A, dates_range, ini=mean)
+
+        F_regu_csc = None
+        A_csc = None
+        if not linear_operator and solver in ("LSMR", "LSMR_ini") and regu != "directionxy":
+            F_regu_csc = sp.csc_matrix(mu * coef)
+            # A is shared by vx/vy and every robust reweighting round.  The
+            # old path rescanned the dense matrix to rebuild the same sparse
+            # structure before every LSMR call.
+            if reuse_observation_csc:
+                A_csc = sp.csc_matrix(A, dtype="float64")
 
         ##  Initialisation (depending on apriori and solver)
         # # Apriori on acceleration (following)
@@ -403,7 +486,15 @@ def inversion_core(
         ##  Inversion
         if regu == "directionxy":
             result_dx, result_dy, residu_normx, residu_normy = inversion_two_components(
-                A, dates_range, 0, data_values, solver, np.concatenate([Weightx, Weighty]), mu, coef=coef, ini=mean_ini
+                A,
+                dates_range,
+                0,
+                data_values,
+                np.concatenate([Weightx, Weighty]),
+                mu,
+                solver=solver,
+                coef=coef,
+                ini=mean_ini,
             )
         else:
             result_dx, residu_normx = inversion_one_component(
@@ -420,6 +511,9 @@ def inversion_core(
                 regu=regu,
                 linear_operator=linear_operator,
                 accel=accel,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
             )
             result_dy, residu_normy = inversion_one_component(
                 A,
@@ -435,9 +529,14 @@ def inversion_core(
                 regu=regu,
                 linear_operator=linear_operator,
                 accel=accel,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
             )
 
-        if not visual:
+        # Non-iterative runs still need the initial weights below for quality
+        # products such as X_contribution and Error_propagation.
+        if not visual and iteration:
             del Weighty, Weightx
 
         if regu == "directionxy":
@@ -472,6 +571,9 @@ def inversion_core(
                 linear_operator=linear_operator,
                 ini=None,
                 accel=accel,
+                F_regu_csc=F_regu_csc,
+                A_csc=A_csc,
+                diagnostics=diagnostics,
                 result_quality=result_quality,
             )
             # Continue to iterate until the difference between two results is lower than threshold_it or the number of iteration larger than 10
@@ -497,6 +599,9 @@ def inversion_core(
                     linear_operator=linear_operator,
                     ini=None,
                     accel=accel,
+                    F_regu_csc=F_regu_csc,
+                    A_csc=A_csc,
+                    diagnostics=diagnostics,
                     result_quality=result_quality,
                 )
 
@@ -516,6 +621,12 @@ def inversion_core(
                 print("[Inversion] End loop", i, np.mean(abs(result_dy_i - result_dy)))
                 print("[Inversion] Nb iteration", i)
 
+            if diagnostics is not None:
+                # ``i`` counts the initial solve plus each robust reweighting
+                # round, so it is also the number of LSMR solve rounds per
+                # velocity component for this pixel.
+                diagnostics["robust_solve_rounds"] = i
+
             if i == 2:
                 weight_iy = weight_2y
                 weight_ix = weight_2x
@@ -526,8 +637,58 @@ def inversion_core(
                     del data_values, data_dates
 
         else:  # If not iteration
+            if diagnostics is not None:
+                diagnostics["robust_solve_rounds"] = 1
             result_dy_i = result_dy
             result_dx_i = result_dx
+
+        if fast_requested and fast_fallback_on_limit and diagnostics.get("lsmr_limit_hits", 0) > 0:
+            fast_diagnostics = dict(diagnostics)
+            fallback_diagnostics = {}
+            fallback_result = inversion_core(
+                fallback_data,
+                pixel_i,
+                pixel_j,
+                dates_range=dates_range,
+                solver=solver,
+                regu=regu,
+                coef=coef,
+                apriori_weight=apriori_weight,
+                iteration=iteration,
+                threshold_it=threshold_it,
+                unit=unit,
+                conf=conf,
+                mean=mean,
+                detect_temporal_decorrelation=detect_temporal_decorrelation,
+                linear_operator=False,
+                result_quality=result_quality,
+                nb_max_iteration=nb_max_iteration,
+                apriori_weight_in_second_iteration=apriori_weight_in_second_iteration,
+                visual=visual,
+                verbose=verbose,
+                diagnostics=fallback_diagnostics,
+                reuse_observation_csc=reuse_observation_csc,
+                fast_fallback_on_limit=False,
+                fast_lsmr_maxiter_factor=fast_lsmr_maxiter_factor,
+            )
+            additive = (
+                "lsmr_calls",
+                "lsmr_iterations",
+                "lsmr_limit_hits",
+                "sparse_prep_seconds",
+                "lsmr_seconds",
+            )
+            diagnostics.clear()
+            diagnostics.update(fallback_diagnostics)
+            for name in additive:
+                diagnostics[name] = fallback_diagnostics.get(name, 0) + fast_diagnostics.get(name, 0)
+            diagnostics["lsmr_max_iterations"] = max(
+                fallback_diagnostics.get("lsmr_max_iterations", 0),
+                fast_diagnostics.get("lsmr_max_iterations", 0),
+            )
+            diagnostics["fast_operator_fallbacks"] = 1
+            diagnostics["discarded_fast_lsmr_calls"] = fast_diagnostics.get("lsmr_calls", 0)
+            return fallback_result
 
         if np.isnan(result_dx_i).all():  # no results
             return None, None, None
@@ -539,20 +700,38 @@ def inversion_core(
                 del Weighty, Weightx
         # compute the number of observations which have contributed to each estimated displacement
         if result_quality is not None and "X_contribution" in result_quality:
-            xcount_x = A.T.dot(weight_ix)
-            xcount_y = A.T.dot(weight_iy)
+            if isinstance(linear_operator, class_fast_linear_operator):
+                xcount_x = linear_operator.rmatvec_direct(weight_ix)
+                xcount_y = linear_operator.rmatvec_direct(weight_iy)
+            else:
+                xcount_x = A.T.dot(weight_ix)
+                xcount_y = A.T.dot(weight_iy)
 
         else:
             xcount_x = xcount_y = np.ones(result_dx_i.shape[0])
 
         # propagate the error
         if result_quality is not None and "Error_propagation" in result_quality:
+            # Error propagation forms and inverts the dense normal matrix.  A
+            # LinearOperator is sufficient for inversion and residuals, but it
+            # cannot be consumed by the existing element-wise propagation
+            # formula.  Materialize the original matrices only when this
+            # explicitly requested quality product is needed.
+            if linear_operator is not None:
+                quality_A = construction_a_lf(data_dates, dates_range)
+                quality_mu = mu_regularisation(regu, quality_A, dates_range)
+            else:
+                quality_A = A
+                quality_mu = mu
 
-            def Prop_weight(F, weight, Residu, error):
+            def Prop_weight(F, regularization, weight, Residu, error):
                 error = np.max([Residu, error], axis=0)  # take the maximum between residuals and errors
                 W = weight.astype("float32")
                 FTWF = np.multiply(F.T, W[np.newaxis, :]) @ F
-                N = np.linalg.inv(FTWF + coef * mu.T @ mu)
+                regularization_normal = regularization.T @ regularization
+                if sp.issparse(regularization_normal):
+                    regularization_normal = regularization_normal.toarray()
+                N = np.linalg.inv(np.asarray(FTWF) + coef * np.asarray(regularization_normal))
                 Prop_weight = np.multiply(np.multiply(N @ F.T, W[np.newaxis, :]) * error, W[np.newaxis, :]) @ F @ N
                 sigma0_weight = np.sum(Residu**2 * weight) / (F.shape[0] - F.shape[1])
                 prop_wieght_diag = np.diag(Prop_weight)
@@ -562,14 +741,22 @@ def inversion_core(
 
                 return prop_wieght_diag, sigma0_weight, t_value
 
-            Residux = data_values[:, 0] - A @ result_dx_i  # has a normal distribution
+            Residux = data_values[:, 0] - quality_A @ result_dx_i  # has a normal distribution
             prop_wieght_diagx, sigma0_weightx, t_valuex = Prop_weight(
-                A, weight_ix, Residux, (data_values[:, 2] * data_values[:, -1] / unit) ** 2
+                quality_A,
+                quality_mu,
+                weight_ix,
+                Residux,
+                (data_values[:, 2] * data_values[:, -1] / unit) ** 2,
             )
 
-            Residuy = data_values[:, 1] - A @ result_dy_i  # has a normal distribution
+            Residuy = data_values[:, 1] - quality_A @ result_dy_i  # has a normal distribution
             prop_wieght_diagy, sigma0_weighty, t_valuey = Prop_weight(
-                A, weight_iy, Residuy, (data_values[:, 3] * data_values[:, -1] / unit) ** 2
+                quality_A,
+                quality_mu,
+                weight_iy,
+                Residuy,
+                (data_values[:, 3] * data_values[:, -1] / unit) ** 2,
             )
 
         # If visual, save the velocity observation, the errors, the initial weights (weightini), the last weights (weightlast), the residuals from the last inversion, the sensors, and the authors
@@ -681,8 +868,8 @@ def interpolation_core(
     else:
         start_date = pd.to_datetime(first_date_interpol)
 
-    x = np.array(
-        (dataf["Second_date"] - np.datetime64(start_date)).dt.days
+    x = (
+        (dataf["Second_date"].to_numpy() - np.datetime64(start_date)).astype("timedelta64[D]").astype(np.int64)
     )  # Number of days according to the start_date
     if len(x) <= 1 or (
         np.isin("spline", option_interpol) and len(x) <= 3
@@ -707,6 +894,7 @@ def interpolation_core(
         option_interpol, x, dataf, result_quality
     )
 
+    output_step = interval_output if redundancy is None else redundancy
     if redundancy is None:  # No redundancy between two interpolated velocity
         x_regu = np.arange(np.min(x) + (interval_output - np.min(x) % interval_output), np.max(x), interval_output)
     else:  # The overlap between two velocities corresponds to redundancy
@@ -731,7 +919,7 @@ def interpolation_core(
         )
 
     ##  Reconstruct a time series with a given temporal sampling, and a given overlap
-    step = interval_output if redundancy is None else int(interval_output / redundancy)
+    step = 1 if redundancy is None else int(interval_output / redundancy)
     if step >= len(x_regu):
         return pd.DataFrame(
             {
@@ -772,45 +960,46 @@ def interpolation_core(
     )  # Equivalent to [start_date + pd.Timedelta(x_regu[i], 'D') for i in range(len(x_regu) - step)]
     Second_date = start_date + pd.to_timedelta(x_shifted, unit="D")
 
-    dataf_lp = pd.DataFrame({"date1": First_date, "date2": Second_date, "vx": vx, "vy": vy})
+    dataf_lp_columns = {"date1": First_date, "date2": Second_date, "vx": vx, "vy": vy}
     if result_quality is not None:
         if "X_contribution" in result_quality:
-            dataf_lp["xcount_x"] = xcount_x
-            dataf_lp["xcount_y"] = xcount_y
+            dataf_lp_columns["xcount_x"] = xcount_x
+            dataf_lp_columns["xcount_y"] = xcount_y
         if "Error_propagation" in result_quality:
-            dataf_lp["error_x"] = error_x * unit / interval_output
-            dataf_lp["error_y"] = error_y * unit / interval_output
-            dataf_lp["sigma0"] = np.concatenate([result["sigma0"][:4], np.full(dataf_lp.shape[0] - 4, np.nan)])
+            dataf_lp_columns["error_x"] = error_x * unit / interval_output
+            dataf_lp_columns["error_y"] = error_y * unit / interval_output
+            dataf_lp_columns["sigma0"] = np.concatenate([result["sigma0"][:4], np.full(len(First_date) - 4, np.nan)])
+    dataf_lp = pd.DataFrame(dataf_lp_columns)
     del x_regu, First_date, Second_date, vx, vy
+    output_frames = [dataf_lp]
 
     # Fill with nan values if the first date of the cube which will be interpolated is lower than the first date interpolated for this pixel
     if first_date_interpol is not None and dataf_lp["date1"].iloc[0] > pd.Timestamp(first_date_interpol):
-        first_date = np.arange(first_date_interpol, dataf_lp["date1"].iloc[0], np.timedelta64(redundancy, "D"))
+        first_date = np.arange(first_date_interpol, dataf_lp["date1"].iloc[0], np.timedelta64(output_step, "D"))
         # dataf_lp = full_with_nan(dataf_lp, first_date=first_date,
         #                          second_date=first_date + np.timedelta64(interval_output, 'D'))
-        nul_df = pd.DataFrame(
-            {
-                "date1": first_date,
-                "date2": first_date + np.timedelta64(interval_output, "D"),
-                "vx": np.full(len(first_date), np.nan),
-                "vy": np.full(len(first_date), np.nan),
-            }
-        )
+        nul_columns = {
+            "date1": first_date,
+            "date2": first_date + np.timedelta64(interval_output, "D"),
+            "vx": np.full(len(first_date), np.nan),
+            "vy": np.full(len(first_date), np.nan),
+        }
         if result_quality is not None:
             if "X_contribution" in result_quality:
-                nul_df["xcount_x"] = np.full(len(first_date), np.nan)
-                nul_df["xcount_y"] = np.full(len(first_date), np.nan)
+                nul_columns["xcount_x"] = np.full(len(first_date), np.nan)
+                nul_columns["xcount_y"] = np.full(len(first_date), np.nan)
             if "Error_propagation" in result_quality:
-                nul_df["error_x"] = np.full(len(first_date), np.nan)
-                nul_df["error_y"] = np.full(len(first_date), np.nan)
-        dataf_lp = pd.concat([nul_df, dataf_lp], ignore_index=True)
+                nul_columns["error_x"] = np.full(len(first_date), np.nan)
+                nul_columns["error_y"] = np.full(len(first_date), np.nan)
+        nul_df = pd.DataFrame(nul_columns)
+        output_frames.insert(0, nul_df)
 
     # Fill with nan values if the last date of the cube which will be interpolated is higher than the last date interpolated for this pixel
     if last_date_interpol is not None and dataf_lp["date2"].iloc[-1] < pd.Timestamp(last_date_interpol):
         first_date = np.arange(
-            dataf_lp["date2"].iloc[-1] + np.timedelta64(redundancy, "D"),
-            last_date_interpol + np.timedelta64(redundancy, "D"),
-            np.timedelta64(redundancy, "D"),
+            dataf_lp["date2"].iloc[-1] + np.timedelta64(output_step, "D"),
+            last_date_interpol + np.timedelta64(output_step, "D"),
+            np.timedelta64(output_step, "D"),
         )
         nul_df = pd.DataFrame(
             {
@@ -820,7 +1009,10 @@ def interpolation_core(
                 "vy": np.full(len(first_date), np.nan),
             }
         )
-        dataf_lp = pd.concat([dataf_lp, nul_df], ignore_index=True)
+        output_frames.append(nul_df)
+
+    if len(output_frames) > 1:
+        dataf_lp = pd.concat(output_frames, ignore_index=True)
 
     # print(dataf_lp.shape)
     # if dataf_lp.shape[0]!= 567:
@@ -849,8 +1041,8 @@ def interpolation_to_data(
     ##  Reconstruction of COMMON REF TIME SERIES, e.g. cumulative displacement time series
     dataf = reconstruct_common_ref(result)  # Build cumulative displacement time series
     start_date = dataf["Ref_date"][0]  # First date at the considered pixel
-    x = np.array(
-        (dataf["Second_date"] - np.datetime64(start_date)).dt.days
+    x = (
+        (dataf["Second_date"].to_numpy() - np.datetime64(start_date)).astype("timedelta64[D]").astype(np.int64)
     )  # Number of days according to the start_date
 
     # Interpolation must be caried out in between the min and max date of the original data
@@ -858,8 +1050,8 @@ def interpolation_to_data(
         data = data[(data["date1"] > result["date2"].min()) & (data["date2"] < result["date2"].max())]
 
     # Ground truth first and second dates
-    x_gt_date1 = np.array((data["date1"] - start_date).dt.days)
-    x_gt_date2 = np.array((data["date2"] - start_date).dt.days)
+    x_gt_date1 = (data["date1"].to_numpy() - np.datetime64(start_date)).astype("timedelta64[D]").astype(np.int64)
+    x_gt_date2 = (data["date2"].to_numpy() - np.datetime64(start_date)).astype("timedelta64[D]").astype(np.int64)
 
     ##  Interpolate the displacements and convert to velocities
     # Compute the functions used to interpolate
@@ -1066,36 +1258,49 @@ def chunk_to_block(cube: CubeDataClass, block_size: float = 1, verbose: bool = F
     GB = 1073741824
     blocks = []
     if cube.ds.nbytes > block_size * GB:
-        try:
-            num_elements = np.prod([cube.ds.chunks[dim][0] for dim in cube.ds.chunks.keys()])
-        except ValueError:
-            cube = cube.ds.unify_chunks()  # ValueError: Object has inconsistent chunks along dimension x. This can be fixed by calling unify_chunks().
+        ds = cube.ds.unify_chunks()
+        x_chunks = ds.chunks["x"]
+        y_chunks = ds.chunks["y"]
 
-        chunk_bytes = num_elements * cube.ds["vx"].dtype.itemsize
+        # A processing block keeps its complete temporal axis. Estimate one
+        # spatial tile with every variable, rather than one temporal chunk of
+        # vx only; the old estimate could undershoot memory by a large factor.
+        max_x_chunk = max(x_chunks)
+        max_y_chunk = max(y_chunks)
+        tile_bytes = ds.isel(x=slice(0, max_x_chunk), y=slice(0, max_y_chunk)).nbytes
+        nchunks_block = max(1, int(block_size * GB // tile_bytes))
 
-        nchunks_block = int(block_size * GB // chunk_bytes)
+        if verbose and tile_bytes > block_size * GB:
+            print(
+                f"[Block process] Warning: one full-time spatial tile is {tile_bytes / GB:.2f} GB, "
+                f"larger than block_size={block_size:.2f} GB; this is the minimum block footprint "
+                "with the current source chunks."
+            )
 
-        x_step = int(np.sqrt(nchunks_block))
-        y_step = nchunks_block // x_step
+        x_step = max(1, int(np.sqrt(nchunks_block)))
+        y_step = max(1, nchunks_block // x_step)
 
-        nblocks_x = int(np.ceil(len(cube.ds.chunks["x"]) / x_step))
-        nblocks_y = int(np.ceil(len(cube.ds.chunks["y"]) / y_step))
+        nblocks_x = int(np.ceil(len(x_chunks) / x_step))
+        nblocks_y = int(np.ceil(len(y_chunks) / y_step))
+        x_boundaries = list(itertools.accumulate(x_chunks, initial=0))
+        y_boundaries = list(itertools.accumulate(y_chunks, initial=0))
 
         nblocks = nblocks_x * nblocks_y
         if verbose:
             print(
-                f"[Block process] Divide into {nblocks} blocks\n   blocks size: {x_step * cube.ds.chunks['x'][0]} x {y_step * cube.ds.chunks['y'][0]}"
+                f"[Block process] Divide into {nblocks} blocks\n"
+                f"   maximum block shape: {x_step * max_x_chunk} x {y_step * max_y_chunk}"
             )
 
         for i in range(nblocks_y):
             for j in range(nblocks_x):
-                x_start = j * x_step * cube.ds.chunks["x"][0]
-                y_start = i * y_step * cube.ds.chunks["y"][0]
-                x_end = x_start + x_step * cube.ds.chunks["x"][0] if j != nblocks_x - 1 else cube.ds.dims["x"]
-                y_end = y_start + y_step * cube.ds.chunks["y"][0] if i != nblocks_y - 1 else cube.ds.dims["y"]
+                x_start = x_boundaries[j * x_step]
+                y_start = y_boundaries[i * y_step]
+                x_end = x_boundaries[min((j + 1) * x_step, len(x_chunks))]
+                y_end = y_boundaries[min((i + 1) * y_step, len(y_chunks))]
                 blocks.append([x_start, x_end, y_start, y_end])
     else:
-        blocks.append([0, cube.ds.dims["x"], 0, cube.ds.dims["y"]])
+        blocks.append([0, cube.ds.sizes["x"], 0, cube.ds.sizes["y"]])
         if verbose:
             print(f"[Block process] Cube size smaller than {block_size}GB, no need to divide")
 
@@ -1128,6 +1333,14 @@ def load_block(cube: CubeDataClass, x_start: int, x_end: int, y_start: int, y_en
     return block, block_flag, duration
 
 
+def _assign_block_results(dataf_list, block_result, cube_ny, x_start, y_start, block_nx, block_ny):
+    """Place x-major block results into the matching global x-major slices."""
+    for local_col in range(block_nx):
+        source_start = local_col * block_ny
+        target_start = (local_col + x_start) * cube_ny + y_start
+        dataf_list[target_start : target_start + block_ny] = block_result[source_start : source_start + block_ny]
+
+
 def process_blocks_refine(
     cube: CubeDataClass,
     nb_cpu: int = 8,
@@ -1136,6 +1349,7 @@ def process_blocks_refine(
     preData_kwargs: dict = None,
     inversion_kwargs: dict | None = None,
     verbose: bool = False,
+    prefetch_blocks: bool = True,
 ):
     """
     Separate the cube in several blocks computed synchronously one after the other by loading one block while the other is computed (with
@@ -1148,6 +1362,9 @@ def process_blocks_refine(
     :param preData_kwargs: [dict] [default is None] --- Pre-processing parameters (see cube_data_classxr.filter_cube)
     :param inversion_kwargs: [dict] [default is None] --- Inversion (and interpolation) parameters (see core.process)
     :param verbose: [bool] [default is False] --- Print information along the way
+    :param prefetch_blocks: [bool] [default is True] --- Load the next block while
+        processing the current one. Disable for very large cubes to keep only
+        one persisted block resident at a time.
 
     :return: [pd dataframe] Resulting estimated time series after inversion (and interpolation)
     """
@@ -1179,22 +1396,9 @@ def process_blocks_refine(
         if isinstance(inversion_kwargs, dict):
             inversion_kwargs.update({"flag": flag_block})
 
-        # There is no data on the whole block (masked data)
-        if obs_filt is None and "interp" in returned:
-            if inversion_kwargs["result_quality"] is not None and "Norm_residual" in inversion_kwargs["result_quality"]:
-                return [
-                    pd.DataFrame(
-                        {"date1": [], "date2": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": [], "NormR": []}
-                    )
-                ]
-            else:
-                return [
-                    pd.DataFrame(
-                        {"First_date": [], "Second_date": [], "vx": [], "vy": [], "xcount_x": [], "xcount_y": []}
-                    )
-                ]
-
-        xy_values_tqdm = tqdm(xy_values, total=(obs_filt["x"].shape[0] * obs_filt["y"].shape[0]))
+        # A missing prior is valid for solvers that do not need initialization.
+        # Let process() handle empty pixels individually, preserving block shape.
+        xy_values_tqdm = tqdm(xy_values, total=block.nx * block.ny)
         result_block = Parallel(n_jobs=nb_cpu, verbose=0)(
             delayed(process)(block, i, j, obs_filt=obs_filt, returned=returned, **inversion_kwargs)
             for i, j in xy_values_tqdm
@@ -1218,15 +1422,20 @@ def process_blocks_refine(
         for n in range(len(blocks)):
             print(f"[Block process] Processing block {n + 1}/{len(blocks)}")
 
-            # Load the first block and start the loop
-            if n == 0:
-                x_start, x_end, y_start, y_end = blocks[0]
-                future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
-
-            block, block_flag, duration = await future
+            if not prefetch_blocks:
+                # Strict single-block mode: synchronous loading guarantees no
+                # next block can become resident before this iteration ends.
+                x_start, x_end, y_start, y_end = blocks[n]
+                block, block_flag, duration = load_block(cube, x_start, x_end, y_start, y_end, flag)
+            else:
+                # Load the first block and start the overlapped pipeline.
+                if n == 0:
+                    x_start, x_end, y_start, y_end = blocks[0]
+                    future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
+                block, block_flag, duration = await future
             print(f"Block {n + 1} loaded in {duration:.2f} s")
 
-            if n < len(blocks) - 1:
+            if prefetch_blocks and n < len(blocks) - 1:
                 # Load the next block while processing the current block
                 x_start, x_end, y_start, y_end = blocks[n + 1]
                 future = loop.run_in_executor(None, load_block, cube, x_start, x_end, y_start, y_end, flag)
@@ -1239,13 +1448,15 @@ def process_blocks_refine(
                 block, returned=returned, nb_cpu=nb_cpu, verbose=verbose
             )  # Process TICOI
 
-            # Transform to list
-            for i in range(len(block_result)):
-                row = i % block.ny + blocks[n][2]
-                col = np.floor(i / block.ny) + blocks[n][0]
-                idx = int(col * cube.ny + row)
-
-                dataf_list[idx] = block_result[i]
+            _assign_block_results(
+                dataf_list,
+                block_result,
+                cube.ny,
+                blocks[n][0],
+                blocks[n][2],
+                block.nx,
+                block.ny,
+            )
 
             del block_result, block
 

@@ -12,6 +12,7 @@ The package is based on the methodological developments published in:
 """
 
 import math as m
+import time
 
 import numpy as np
 import scipy.linalg as la
@@ -49,54 +50,73 @@ def mu_regularisation(regu: Regu, A: np.ndarray, dates_range: np.ndarray, ini: n
     """
 
     # First order Tikhonov regularisation
-    if regu == "1":
-        mu = np.diag(np.full(A.shape[1], -1, dtype="float32"))
-        mu[np.arange(A.shape[1] - 1), np.arange(A.shape[1] - 1) + 1] = 1
-        mu /= np.diff(dates_range) / np.timedelta64(1, "D")
-        mu = np.delete(mu, -1, axis=0)
-
-    # First order Tikhonov regularisation, with an apriori on the acceleration
-    elif regu == "1accelnotnull":
-        mu = np.diag(np.full(A.shape[1], -1, dtype="float32"))
-        mu[np.arange(A.shape[1] - 1), np.arange(A.shape[1] - 1) + 1] = 1
-        mu /= np.diff(dates_range) / np.timedelta64(1, "D")
-        mu = np.delete(mu, -1, axis=0)
+    if regu in ("1", "1accelnotnull"):
+        n_columns = A.shape[1]
+        rows = np.arange(n_columns - 1)
+        mu = np.zeros((n_columns - 1, n_columns), dtype="float32")
+        delta = np.diff(dates_range) / np.timedelta64(1, "D")
+        mu[rows, rows] = -1 / delta[rows]
+        mu[rows, rows + 1] = 1 / delta[rows + 1]
 
     # Second order Tikhonov regularisation
     elif regu == "2":
         delta = np.diff(dates_range) / np.timedelta64(1, "D")
-        mu = np.zeros((A.shape[1], A.shape[1]), dtype="float64")
-        mu[range(1, A.shape[1] - 1), range(0, A.shape[1] - 2)] = 1 / delta[:-2]
-        mu[range(1, A.shape[1] - 1), range(1, A.shape[1] - 1)] = -2 / delta[1:-1]
-        mu[range(1, A.shape[1] - 1), range(2, A.shape[1])] = 1 / delta[2:]
+        n_columns = A.shape[1]
+        rows = np.arange(1, n_columns - 1)
+        mu = np.zeros((n_columns, n_columns), dtype="float64")
+        mu[rows, rows - 1] = 1 / delta[:-2]
+        mu[rows, rows] = -2 / delta[1:-1]
+        mu[rows, rows + 1] = 1 / delta[2:]
         mu[0, 0] = 0
         mu[-1, -1] = 0
 
     # Regularisation on the direction when vx and vy are inverted together
     elif regu == "directionxy":
         mu = np.zeros((A.shape[1], 2 * A.shape[1]), dtype="float64")
-        delta = [(dates_range[k + 1] - dates_range[k]) / np.timedelta64(1, "D") for k in range(len(dates_range) - 1)]
+        delta = np.diff(dates_range) / np.timedelta64(1, "D")
+        delta_int = delta.astype(int)
+        rows = np.arange(len(dates_range) - 1)
 
         if len(ini) == 2:
             vv = np.array(ini[0]) ** 2 + np.array(ini[1]) ** 2
-            for k in range(
-                len(dates_range) - 1
-            ):  # Force estimated vector to be colinear to the averaged vector : vector product equal to 1
-                mu[k, k] = ini[0][k] / int(delta[k]) / vv[k]  # vx * meanvx
-                mu[k, k + len(dates_range) - 1] = ini[1][k] / int(delta[k]) / vv[k]  # vy * meanvy
+            with np.errstate(divide="ignore", invalid="ignore"):
+                # Preserve the historical operation order bit-for-bit for all
+                # defined rows; only sanitize direction-undefined zero speeds.
+                coef_x = np.asarray(ini[0]) / delta_int / vv
+                coef_y = np.asarray(ini[1]) / delta_int / vv
+            coef_x = np.where(np.isfinite(coef_x), coef_x, 0.0)
+            coef_y = np.where(np.isfinite(coef_y), coef_y, 0.0)
+            mu[rows, rows] = coef_x
+            mu[rows, rows + len(dates_range) - 1] = coef_y
 
         elif len(ini) == 4:
             vv = np.sqrt(ini[0] ** 2 + ini[1] ** 2) / 365 * np.sqrt(ini[2] ** 2 + ini[3] ** 2) / delta
-            for k in range(
-                len(dates_range) - 1
-            ):  # Force estimated vector to be colinear to the averaged vector : vector product equal to 1
-                mu[k, k] = ini[0][k] / 365 / int(delta[k]) / vv[k]  # vx * meanvx
-                mu[k, k + len(dates_range) - 1] = ini[1][k] / 365 / int(delta[k]) / vv[k]  # vy * meanvy
+            with np.errstate(divide="ignore", invalid="ignore"):
+                coef_x = np.asarray(ini[0]) / 365 / delta_int / vv
+                coef_y = np.asarray(ini[1]) / 365 / delta_int / vv
+            coef_x = np.where(np.isfinite(coef_x), coef_x, 0.0)
+            coef_y = np.where(np.isfinite(coef_y), coef_y, 0.0)
+            mu[rows, rows] = coef_x
+            mu[rows, rows + len(dates_range) - 1] = coef_y
 
     else:
         raise ValueError("Enter '1', '2','1accelnotnull', 'directionxy")
 
     return mu
+
+
+def mu_regularisation_sparse_first_order(n_columns: int, dates_range: np.ndarray) -> sp.csc_matrix:
+    """Build the first-order regularisation directly in its sparse form.
+
+    This is numerically identical to ``mu_regularisation`` for ``"1"`` and
+    ``"1accelnotnull"`` but avoids allocating an almost entirely zero dense
+    square matrix for the LSMR solvers.
+    """
+    delta = np.diff(dates_range) / np.timedelta64(1, "D")
+    rows = np.repeat(np.arange(n_columns - 1), 2)
+    columns = np.column_stack((np.arange(n_columns - 1), np.arange(1, n_columns))).ravel()
+    values = np.column_stack((-1 / delta[:-1], 1 / delta[1:])).astype("float32", copy=False).ravel()
+    return sp.csc_matrix((values, (rows, columns)), shape=(n_columns - 1, n_columns))
 
 
 def construction_dates_range_np(data: np.ndarray) -> np.ndarray:
@@ -108,11 +128,10 @@ def construction_dates_range_np(data: np.ndarray) -> np.ndarray:
 
     dates = np.concatenate([data[:, 0], data[:, 1]])  # concatante date1 and date2
     dates = np.unique(dates)  # remove duplicates
-    dates = np.sort(dates)  # Sort the dates
     return dates
 
 
-@jit(nopython=True)  # use numba
+@jit(nopython=True, cache=True)  # use numba; persist compiled kernels across runs
 def construction_a_lf(dates: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
     """
     Construction of the design matrix A in the formulation AX = Y.
@@ -127,7 +146,9 @@ def construction_a_lf(dates: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
     date1_indices = np.searchsorted(dates_range, dates[:, 0])
     date2_indices = np.searchsorted(dates_range, dates[:, 1]) - 1
 
-    A = np.zeros((dates.shape[0], dates_range[1:].shape[0]), dtype="int32")
+    # A contains only zeroes and ones.  int8 preserves every value exactly and
+    # cuts the dense matrix footprint by 75% before its sparse LSMR conversion.
+    A = np.zeros((dates.shape[0], dates_range[1:].shape[0]), dtype="int8")
     for y in range(dates.shape[0]):
         A[y, date1_indices[y] : date2_indices[y] + 1] = 1
 
@@ -163,12 +184,23 @@ def weight_for_inversion(
     # compute the weight to put inside Tukey's biweight, if the errors are not all equal to 1
     if weight_origine and not inside_Tukey and not (data[:, pos] == 1).all():
         # Based on data quality given in confidence indicator, i.e. between 0 and 1 (1 is highest quality)
+        values = np.asarray(data[:, pos], dtype=float)
+        finite = np.isfinite(values)
         if conf:
-            Weight = data[:, pos]
+            Weight = np.where(finite, values, 0.0)
         # The data quality corresponds to errors in m/y or m/d
         # Normalization of the errors
         else:
-            Weight = 1 - (data[:, pos] - np.min(data[:, pos])) / (np.max(data[:, pos]) - np.min(data[:, pos]))
+            if not finite.any():
+                Weight = np.ones(values.shape[0], dtype=float)
+            else:
+                lower = np.min(values[finite])
+                upper = np.max(values[finite])
+                if upper == lower:
+                    Weight = np.where(finite, 1.0, 0.0)
+                else:
+                    Weight = np.zeros(values.shape[0], dtype=float)
+                    Weight[finite] = 1 - (values[finite] - lower) / (upper - lower)
 
         if temporal_decorrelation is not None:
             Weight = np.multiply(temporal_decorrelation, Weight)
@@ -275,13 +307,13 @@ def externally_studentized_residual(
     # =========================================================================%% #
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def average_absolute_deviation(data: np.ndarray) -> float:
     """Computes the Average Absolute Deviation (AAD). Used when the Median Absolute Deviation (MAD) is equal to 0."""
     return np.mean(np.absolute(data - np.mean(data)))
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def find_date_obs(data: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
     """
     Finds the index in dates_range corresponding to each first and last date in data
@@ -294,7 +326,108 @@ def find_date_obs(data: np.ndarray, dates_range: np.ndarray) -> np.ndarray:
     return np.column_stack((date1_indices, date2_indices))
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
+def fast_matvecregu1_numba(
+    X: np.ndarray, Y: np.ndarray, identification_obs: np.ndarray, delta: np.ndarray, coef: int, weight: np.ndarray
+):
+    prefix = np.empty(len(X) + 1, dtype=np.float64)
+    prefix[0] = 0.0
+    for j in range(len(X)):
+        prefix[j + 1] = prefix[j] + X[j]
+    for j in range(len(identification_obs)):
+        Y[j] = (prefix[identification_obs[j][1] + 1] - prefix[identification_obs[j][0]]) * weight[j]
+    for j in range(len(X) - 1):
+        left = np.float32(-1.0 / delta[j]) * np.float32(coef)
+        right = np.float32(1.0 / delta[j + 1]) * np.float32(coef)
+        Y[len(identification_obs) + j] = left * X[j] + right * X[j + 1]
+    return Y
+
+
+@jit(nopython=True, cache=True)
+def fast_matvec_numba(X: np.ndarray, Y: np.ndarray, identification_obs: np.ndarray):
+    prefix = np.empty(len(X) + 1, dtype=np.float64)
+    prefix[0] = 0.0
+    for j in range(len(X)):
+        prefix[j + 1] = prefix[j] + X[j]
+    for j in range(len(identification_obs)):
+        Y[j] = prefix[identification_obs[j][1] + 1] - prefix[identification_obs[j][0]]
+    return Y
+
+
+@jit(nopython=True, cache=True)
+def fast_rmatvecregu1_numba(X, Y, identification_obs, coef, delta, weight):
+    difference = np.zeros(len(X) + 1, dtype=np.float64)
+    for j in range(len(identification_obs)):
+        value = Y[j] * weight[j]
+        difference[identification_obs[j][0]] += value
+        difference[identification_obs[j][1] + 1] -= value
+    running = 0.0
+    for j in range(len(X)):
+        running += difference[j]
+        X[j] = running
+    n_obs = len(identification_obs)
+    if len(X) > 1:
+        X[0] += (np.float32(-1.0 / delta[0]) * np.float32(coef)) * Y[n_obs]
+        for j in range(1, len(X) - 1):
+            upper = np.float32(1.0 / delta[j]) * np.float32(coef)
+            diagonal = np.float32(-1.0 / delta[j]) * np.float32(coef)
+            X[j] += upper * Y[n_obs + j - 1] + diagonal * Y[n_obs + j]
+        X[len(X) - 1] += (np.float32(1.0 / delta[len(X) - 1]) * np.float32(coef)) * Y[n_obs + len(X) - 2]
+    return X
+
+
+@jit(nopython=True, cache=True)
+def fast_matvecregu2_numba(
+    X: np.ndarray, Y: np.ndarray, identification_obs: np.ndarray, delta: np.ndarray, coef: int, weight: np.ndarray
+):
+    prefix = np.empty(len(X) + 1, dtype=np.float64)
+    prefix[0] = 0.0
+    for j in range(len(X)):
+        prefix[j + 1] = prefix[j] + X[j]
+    for j in range(len(identification_obs)):
+        Y[j] = (prefix[identification_obs[j][1] + 1] - prefix[identification_obs[j][0]]) * weight[j]
+    offset = len(identification_obs)
+    for j in range(1, len(X) - 1):
+        Y[offset + j] = coef * (X[j - 1] / delta[j - 1] - 2.0 * X[j] / delta[j] + X[j + 1] / delta[j + 1])
+    return Y
+
+
+@jit(nopython=True, cache=True)
+def fast_rmatvecregu2_numba(X, Y, identification_obs, coef, delta, weight):
+    difference = np.zeros(len(X) + 1, dtype=np.float64)
+    for j in range(len(identification_obs)):
+        value = Y[j] * weight[j]
+        difference[identification_obs[j][0]] += value
+        difference[identification_obs[j][1] + 1] -= value
+    running = 0.0
+    for j in range(len(X)):
+        running += difference[j]
+        X[j] = running
+    offset = len(identification_obs)
+    for j in range(1, len(X) - 1):
+        value = Y[offset + j] * coef
+        X[j - 1] += value / delta[j - 1]
+        X[j] -= 2.0 * value / delta[j]
+        X[j + 1] += value / delta[j + 1]
+    return X
+
+
+@jit(nopython=True, cache=True)
+def fast_rmatvecA_numba(X, Y, identification_obs):
+    difference = np.zeros(len(X) + 1, dtype=np.float64)
+    for j in range(len(identification_obs)):
+        difference[identification_obs[j][0]] += Y[j]
+        difference[identification_obs[j][1] + 1] -= Y[j]
+    running = 0.0
+    for j in range(len(X)):
+        running += difference[j]
+        X[j] = running
+    return X
+
+
+# Keep the original interval-loop kernels for full backward compatibility with
+# callers that explicitly request ``linear_operator=True``.
+@jit(nopython=True, cache=True)
 def matvecregu1_numba(
     X: np.ndarray, Y: np.ndarray, identification_obs: np.ndarray, delta: np.ndarray, coef: int, weight: np.ndarray
 ):
@@ -304,25 +437,28 @@ def matvecregu1_numba(
     return Y
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def matvec_numba(X: np.ndarray, Y: np.ndarray, identification_obs: np.ndarray):
     for j in range(len(identification_obs)):
         Y[j] = np.sum(X[identification_obs[j][0] : identification_obs[j][1] + 1])
     return Y
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def rmatvecregu1_numba(X, Y, identification_obs, coef, delta, weight):
     for j in range(len(identification_obs)):
         X[identification_obs[j][0] : identification_obs[j][1] + 1] += Y[j] * weight[j]
     X[0] -= Y[len(identification_obs)] / delta[0] * coef
-    for j in range(len(identification_obs) + 1, len(identification_obs) + len(X) - 1):
+    for j in range(
+        len(identification_obs) + 1,
+        len(identification_obs) + len(X) - 1,
+    ):
         X[j - len(identification_obs)] += (Y[j - 1] - Y[j]) / delta[j - len(identification_obs)] * coef
     X[len(X) - 1] += Y[len(identification_obs) + len(X) - 2] / delta[len(X) - 1] * coef
     return X
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def rmatvecA_numba(X, Y, identification_obs):
     for j in range(len(identification_obs)):
         X[identification_obs[j][0] : identification_obs[j][1] + 1] += Y[j]
@@ -332,8 +468,8 @@ def rmatvecA_numba(X, Y, identification_obs):
 class class_linear_operator:
     def __init__(self):
         self.X_length = []  # length of the estimated velocity time-series
-        self.delta = np.array()  # temporal baseline of the estimated velocity time-series
-        self.identification_obs = np.array()
+        self.delta = np.empty(0)  # temporal baseline of the estimated velocity time-series
+        self.identification_obs = np.empty((0, 2), dtype=np.int64)
         self.coef = 50  # coefficient of the regularization
 
     def load(self, identification_obs, dates_range, coef):
@@ -405,6 +541,84 @@ class class_linear_operator:
         X = rmatvecA_numba(X, Y, self.identification_obs_original)
         return X
 
+
+class class_fast_linear_operator(class_linear_operator):
+    """Equivalent interval operator with O(n_obs + n_dates) callbacks.
+
+    The public state and method signatures intentionally match
+    ``class_linear_operator``.  Keeping this as a separate opt-in class leaves
+    the legacy operator's floating-point evaluation order untouched.
+    """
+
+    lsmr_maxiter_factor = 2.0
+
+    def matvecregu1(self, X):
+        Y = np.zeros(len(self.identification_obs) + len(X) - 1)
+        return fast_matvecregu1_numba(
+            X,
+            Y,
+            self.identification_obs,
+            self.delta,
+            self.coef,
+            self.Weight,
+        )
+
+    def rmatvecregu1(self, Y):
+        X = np.zeros(self.X_length)
+        return fast_rmatvecregu1_numba(
+            X,
+            Y,
+            self.identification_obs,
+            self.coef,
+            self.delta,
+            self.Weight,
+        )
+
+    def matvecregu2(self, X):
+        Y = np.zeros(len(self.identification_obs) + len(X))
+        return fast_matvecregu2_numba(
+            X,
+            Y,
+            self.identification_obs,
+            self.delta,
+            self.coef,
+            self.Weight,
+        )
+
+    def rmatvecregu2(self, Y):
+        X = np.zeros(self.X_length)
+        return fast_rmatvecregu2_numba(
+            X,
+            Y,
+            self.identification_obs,
+            self.coef,
+            self.delta,
+            self.Weight,
+        )
+
+    def matvec(self, X):
+        Y = np.zeros(len(self.identification_obs_original))
+        return fast_matvec_numba(X, Y, self.identification_obs_original)
+
+    def rmatvec(self, Y):
+        X = np.zeros(self.X_length)
+        return fast_rmatvecA_numba(X, Y, self.identification_obs_original)
+
+    def matvec_direct(self, X):
+        """Evaluate observation intervals in the legacy summation order.
+
+        Robust reweighting calls this only once per component and round.  The
+        direct O(nnz) evaluation prevents tiny prefix-subtraction differences
+        from being amplified when residuals lie near Tukey weight boundaries,
+        while iterative solver callbacks remain on the fast O(n_obs+n_dates)
+        implementation.
+        """
+        return super().matvec(X)
+
+    def rmatvec_direct(self, Y):
+        """Compute final contribution counts in the legacy summation order."""
+        return super().rmatvec(Y)
+
     # %% ======================================================================== #
     #                             PROPERTY OF THE SYSTEM                             #
     # =========================================================================%% #
@@ -457,6 +671,9 @@ def inversion_one_component(
     accel: None | np.ndarray = None,
     linear_operator: "class_linear_operator" = None,
     verbose: bool = False,
+    F_regu_csc: sp.csc_matrix | None = None,
+    A_csc: sp.csc_matrix | None = None,
+    diagnostics: dict | None = None,
 ) -> (np.ndarray, np.ndarray | None):
     """
     Invert the system AX = Y for one component of the velocity, using a given solver
@@ -493,42 +710,86 @@ def inversion_one_component(
 
     if regu == "1accelnotnull":  # Apriori on the acceleration
         D_regu = np.multiply(accel[v_pos - 2], coef)
+    elif linear_operator is not None:
+        n_regu_rows = len(dates_range) - 1 if regu == "2" else len(dates_range) - 2
+        D_regu = np.zeros(n_regu_rows)
     else:
         D_regu = np.zeros(mu.shape[0])
 
+    sparse_prep_t0 = time.perf_counter() if solver in ("LSMR", "LSMR_ini") else None
+
     if linear_operator is None:
-        F_regu = np.multiply(coef, mu)
+        F_regu = None if F_regu_csc is not None and solver in ("LSMR", "LSMR_ini") else np.multiply(coef, mu)
+        condi = Weight != 0
+        W = Weight[condi]
+        if solver in ("LSMR", "LSMR_ini"):
+            if A_csc is None:
+                weighted_A = sp.csc_matrix(A[condi], dtype="float64")
+            else:
+                # The observation design matrix is identical for vx/vy and
+                # every robust round.  Reuse its one-time CSC conversion and
+                # slice only the rows whose current weights are non-zero.
+                weighted_A = A_csc[condi].tocsc(copy=True)
+            weighted_A.data *= W[weighted_A.indices]
+        else:
+            weighted_A = np.multiply(W[:, np.newaxis], A[condi])
+        weighted_v = np.multiply(W, v[condi])
     else:
         v = linear_operator.update_from_weight(v, Weight)  # Update v, Weight,
+        if regu == "2" and hasattr(linear_operator, "matvecregu2"):
+            matvec_regu = linear_operator.matvecregu2
+            rmatvec_regu = linear_operator.rmatvecregu2
+        else:
+            matvec_regu = linear_operator.matvecregu1
+            rmatvec_regu = linear_operator.rmatvecregu1
         A_l = sp.linalg.LinearOperator(
-            (v.shape[0] + len(dates_range) - 2, len(dates_range) - 1),
-            matvec=linear_operator.matvecregu1,
-            rmatvec=linear_operator.rmatvecregu1,
+            (v.shape[0] + D_regu.shape[0], len(dates_range) - 1),
+            matvec=matvec_regu,
+            rmatvec=rmatvec_regu,
         )
 
     if solver == "LSMR":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float64")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float64")
-        F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
-        X = sp.linalg.lsmr(
-            F, D
-        )[
-            0
-        ]  # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
+        if linear_operator is None:
+            regularization = F_regu_csc if F_regu_csc is not None else sp.csc_matrix(F_regu)
+            F = sp.vstack([weighted_A, regularization], format="csc")
+            D = np.hstack([weighted_v, D_regu]).astype("float64")
+            del weighted_A, weighted_v, condi, W
+        else:
+            F = A_l
+            D = np.concatenate([linear_operator.Weight * v, D_regu])
+        if diagnostics is not None:
+            diagnostics["sparse_prep_seconds"] = diagnostics.get("sparse_prep_seconds", 0.0) + (
+                time.perf_counter() - sparse_prep_t0
+            )
+        solve_t0 = time.perf_counter()
+        lsmr_kwargs = {}
+        if isinstance(linear_operator, class_fast_linear_operator):
+            lsmr_kwargs["maxiter"] = int(np.ceil(linear_operator.lsmr_maxiter_factor * min(F.shape)))
+        lsmr_result = sp.linalg.lsmr(F, D, **lsmr_kwargs)
+        if diagnostics is not None:
+            diagnostics["lsmr_seconds"] = diagnostics.get("lsmr_seconds", 0.0) + (time.perf_counter() - solve_t0)
+        X = lsmr_result[0]
+        if diagnostics is not None:
+            diagnostics["lsmr_calls"] = diagnostics.get("lsmr_calls", 0) + 1
+            diagnostics["lsmr_iterations"] = diagnostics.get("lsmr_iterations", 0) + int(lsmr_result[2])
+            diagnostics["lsmr_max_iterations"] = max(diagnostics.get("lsmr_max_iterations", 0), int(lsmr_result[2]))
+            istop = int(lsmr_result[1])
+            stop_counts = diagnostics.setdefault("lsmr_stop_counts", {})
+            stop_counts[istop] = stop_counts.get(istop, 0) + 1
+            if istop == 7:
+                diagnostics["lsmr_limit_hits"] = diagnostics.get("lsmr_limit_hits", 0) + 1
 
     elif solver == "LSMR_ini":  # 50ms
         if ini is None:
             raise ValueError("Please provide an initialization for the solver LSMR_ini")
         # 16.7 ms ± 141 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
         if not linear_operator:
-            condi = Weight != 0
-            W = Weight[condi]
-            F = sp.csc_matrix(
-                np.vstack([np.multiply(W[:, np.newaxis], A[condi]), F_regu])
-            )  # stack ax and regu, and remove rows with only 0
+            regularization = F_regu_csc if F_regu_csc is not None else sp.csc_matrix(F_regu)
+            F = sp.vstack([weighted_A, regularization], format="csc")
             if verbose:
                 print("Is F convex?", is_convex(F.toarray()))
-            D = np.hstack([np.multiply(W, v[condi]), D_regu])  # stack ax and regu, and remove rows with only
+            D = np.hstack([weighted_v, D_regu])  # stack ax and regu, and remove rows with only
+            del weighted_A, weighted_v, condi, W
         if isinstance(ini, list):  # if rolling mean
             x0 = ini[v_pos - 2]
         elif ini.shape[0] == 2:  # if only the average of the entire time series
@@ -538,23 +799,60 @@ def inversion_one_component(
 
         # 24 ms ± 419 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
         if not linear_operator:
-            X = sp.linalg.lsmr(F, D, x0=x0)[0]
+            if diagnostics is not None:
+                diagnostics["sparse_prep_seconds"] = diagnostics.get("sparse_prep_seconds", 0.0) + (
+                    time.perf_counter() - sparse_prep_t0
+                )
+            solve_t0 = time.perf_counter()
+            lsmr_result = sp.linalg.lsmr(F, D, x0=x0)
         else:
-            X = sp.linalg.lsmr(A_l, np.concatenate([linear_operator.Weight * v, D_regu]), x0=x0)[0]
+            solve_t0 = time.perf_counter()
+            F = A_l
+            D = np.concatenate([linear_operator.Weight * v, D_regu])
+            maxiter = (
+                int(np.ceil(linear_operator.lsmr_maxiter_factor * min(F.shape)))
+                if isinstance(linear_operator, class_fast_linear_operator)
+                else None
+            )
+            lsmr_result = sp.linalg.lsmr(F, D, x0=x0, maxiter=maxiter)
+        if diagnostics is not None:
+            diagnostics["lsmr_seconds"] = diagnostics.get("lsmr_seconds", 0.0) + (time.perf_counter() - solve_t0)
+        X = lsmr_result[0]
+        if diagnostics is not None:
+            diagnostics["lsmr_calls"] = diagnostics.get("lsmr_calls", 0) + 1
+            diagnostics["lsmr_iterations"] = diagnostics.get("lsmr_iterations", 0) + int(lsmr_result[2])
+            diagnostics["lsmr_max_iterations"] = max(diagnostics.get("lsmr_max_iterations", 0), int(lsmr_result[2]))
+            istop = int(lsmr_result[1])
+            stop_counts = diagnostics.setdefault("lsmr_stop_counts", {})
+            stop_counts[istop] = stop_counts.get(istop, 0) + 1
+            if istop == 7:
+                diagnostics["lsmr_limit_hits"] = diagnostics.get("lsmr_limit_hits", 0) + 1
 
     elif solver == "LS":  # 136 ms ± 6.48 ms per loop (mean ± std. dev. of 7 runs, 10 loops each) #time consuming
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float32")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float32")
+        F = np.vstack([weighted_A, F_regu]).astype("float32")
+        D = np.hstack([weighted_v, D_regu]).astype("float32")
+        del weighted_A, weighted_v, condi, W
         X = np.linalg.lstsq(F, D, rcond=None)[0]
 
     elif solver == "L1":  # solving using L1-norm, time consuming !
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float32")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float32")
-        X = opt.minimize(lambda x: la.norm(D - F @ x, ord=1), np.zeros(F.shape[1]))
+        F = np.vstack([weighted_A, F_regu]).astype("float32")
+        D = np.hstack([weighted_v, D_regu]).astype("float32")
+        del weighted_A, weighted_v, condi, W
+        optimization = opt.minimize(lambda x: la.norm(D - F @ x, ord=1), np.zeros(F.shape[1]))
+        # Quasi-Newton commonly reports precision loss for this non-smooth L1
+        # objective even though it returns a finite, useful minimizer.  The old
+        # code accidentally returned the OptimizeResult object itself.
+        X = optimization.x
 
     elif solver == "LSQR":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float32")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float32")
+        if linear_operator is not None:
+            raise ValueError(
+                "LSQR requires the explicit float32 matrix path; its numerical "
+                "behavior is not equivalent through the linear operator"
+            )
+        F = np.vstack([weighted_A, F_regu]).astype("float32")
+        D = np.hstack([weighted_v, D_regu]).astype("float32")
+        del weighted_A, weighted_v, condi, W
         F = sp.csc_matrix(F)
         X, istop, itn, r1norm = sp.linalg.lsqr(F, D)[:4]
 
@@ -563,9 +861,10 @@ def inversion_one_component(
 
     if result_quality is not None and "Norm_residual" in result_quality:  # to show the L_curve
         R_lcurve = F.dot(X) - D  # 50.7 µs ± 327 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+        n_observations = D.shape[0] - D_regu.shape[0]
         residu_norm = [
-            np.linalg.norm(R_lcurve[: np.multiply(Weight[Weight != 0], v[Weight != 0]).shape[0]], ord=2),
-            np.linalg.norm(R_lcurve[np.multiply(Weight[Weight != 0], v[Weight != 0]).shape[0] :] / coef, ord=2),
+            np.linalg.norm(R_lcurve[:n_observations], ord=2),
+            np.linalg.norm(R_lcurve[n_observations:] / coef, ord=2),
         ]
     else:
         residu_norm = None
@@ -613,76 +912,88 @@ def inversion_two_components(
             print("ill conditioned")
             print("rank A", np.linalg.matrix_rank(A))
 
-    c = np.concatenate([A, np.zeros(A.shape)], axis=0)
-    A = np.concatenate([c, np.concatenate([np.zeros(A.shape), A], axis=0)], axis=1)
-    dates_range = np.concatenate([dates_range, dates_range])
-    del c
+    n_rows, n_columns = A.shape
+    sparse_solver = solver in ("LSMR", "LSMR_ini", "LSQR", "LSQR_ini")
+    if sparse_solver:
+        source_A = sp.csr_matrix(A)
+        block_A = sp.block_diag((source_A, source_A), format="csr")
+    else:
+        block_A = np.zeros((2 * n_rows, 2 * n_columns), dtype=A.dtype)
+        block_A[:n_rows, :n_columns] = A
+        block_A[n_rows:, n_columns:] = A
+    A = block_A
     F_regu = np.multiply(coef, mu)
     # D_regu = np.zeros(mu.shape[0])
     D_regu = np.ones(mu.shape[0]) * coef
 
-    v = np.concatenate([data[:, 2].T, data[:, 3].T])  # Concatenate vx and vy observations
+    v = np.concatenate([data[:, v_pos].T, data[:, v_pos + 1].T])  # Concatenate vx and vy observations
+    condi = Weight != 0
+    W = Weight[condi]
+    if sparse_solver:
+        weighted_A = A[condi].multiply(W[:, np.newaxis])
+    else:
+        weighted_A = np.multiply(W[:, np.newaxis], A[condi])
+    weighted_v = np.multiply(W, v[condi])
 
     # del delta, mean
 
     if solver == "LSMR":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype("float64")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype("float64")
-        F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
+        F = sp.vstack([weighted_A, sp.csc_matrix(F_regu)], format="csc")
+        D = np.hstack([weighted_v, D_regu]).astype("float64")
         # If atol or btol is None, a default value of 1.0e-6 will be used. Ideally, they should be estimates of the relative error in the entries of A and b respectively.
         X = sp.linalg.lsmr(F, D)[0]
 
     elif solver == "LSMR_ini":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), F_regu]).astype(
-            "float64"
-        )  # stack ax and regu, and remove rows with only 0
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), D_regu]).astype(
-            "float64"
-        )  # stack ax and regu, and remove rows with only
+        F = sp.vstack([weighted_A, sp.csc_matrix(F_regu)], format="csc")
+        D = np.hstack([weighted_v, D_regu]).astype("float64")
 
-        if type(ini) is not list:
+        if isinstance(ini, (list, tuple)):
             x0 = np.concatenate(ini)
-        elif ini.shape[0] == 2:
-            x0 = np.full(F.shape[1], ini[v_pos - 2], dtype="float64")
+        elif np.asarray(ini).shape[0] == 2:
+            x0 = np.repeat(np.asarray(ini), n_columns)
         else:
-            x0 = ini
+            x0 = np.asarray(ini)
         # del ini
 
-        F = sp.csc_matrix(F)
         X = sp.linalg.lsmr(F, D, x0=x0)[0]
 
     elif solver == "LS":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), coef * mu]).astype("float64")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), np.zeros(mu.shape[0])]).astype("float64")
+        F = np.vstack([weighted_A, F_regu]).astype("float64")
+        D = np.hstack([weighted_v, D_regu]).astype("float64")
         X = np.linalg.lstsq(F, D, rcond=None)[0]
 
+    elif solver == "L1":
+        F = np.vstack([weighted_A, F_regu]).astype("float64")
+        D = np.hstack([weighted_v, D_regu]).astype("float64")
+        X = opt.minimize(lambda x: la.norm(D - F @ x, ord=1), np.zeros(F.shape[1])).x
+
     elif solver == "LSQR" or solver == "LSQR_ini":
-        F = np.vstack([np.multiply(Weight[Weight != 0][:, np.newaxis], A[Weight != 0]), coef * mu]).astype("float64")
-        D = np.hstack([np.multiply(Weight[Weight != 0], v[Weight != 0]), np.zeros(mu.shape[0])]).astype("float64")
-        F = sp.csc_matrix(F)  # column-scaling so that each column have the same euclidean norme (i.e. 1)
+        F = sp.vstack([weighted_A, sp.csc_matrix(F_regu)], format="csc")
+        D = np.hstack([weighted_v, D_regu]).astype("float64")
         X, istop, itn, r1norm = sp.linalg.lsqr(F, D)[:4]
 
     else:
-        raise ValueError("Enter LS, LSMR, LSMR_ini, LSQR or LSQR_ini")
+        raise ValueError("Enter LS, L1, LSMR, LSMR_ini, LSQR or LSQR_ini")
 
     if show_L_curve:
         R_lcurve = F.dot(X) - D
+        n_observations = D.shape[0] - mu.shape[0]
         residu_norm = [
-            np.linalg.norm(R_lcurve[: np.multiply(Weight[Weight != 0], v[Weight != 0]).shape[0]], ord=2),
-            np.linalg.norm(R_lcurve[np.multiply(Weight[Weight != 0], v[Weight != 0]).shape[0] :] / coef, ord=2),
+            np.linalg.norm(R_lcurve[:n_observations], ord=2),
+            np.linalg.norm(R_lcurve[n_observations:] / coef, ord=2),
         ]
     else:
         residu_norm = None
 
-    if residu_norm is not None:
-        return X[: X.shape[0] // 2], X[X.shape[0] // 2 :], None, None
-    else:
-        return (
-            X[: X.shape[0] // 2],
-            X[X.shape[0] // 2 :],
-            residu_norm[: X.shape[0] // 2],
-            residu_norm[X.shape[0] // 2 :],
-        )
+    # Direction regularisation couples vx and vy in one system.  Its optional
+    # L-curve norm therefore describes the joint solve, not two independent
+    # component norms.
+    return (
+        X[: X.shape[0] // 2],
+        X[X.shape[0] // 2 :],
+        residu_norm,
+        residu_norm,
+    )
 
     # %% ======================================================================== #
     #                             OLD FUNCTION USED TO COMPUTE FRACTIONS OF DISPLACEMENT AS IN CHARRIER ET AL 2022 GRSL    #

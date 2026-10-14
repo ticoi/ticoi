@@ -71,6 +71,64 @@ pip install -e . #to use the package everywhere locally
 * [How to process one cube](examples/basic/python_script/cube_ticoi_demo.py)
 * [How to process one pixel](examples/basic/python_script/pixel_ticoi_demo.py)
 
+#### Command-line configuration
+
+The `ticoi` command (also available as `python -m ticoi`) runs block-based
+inversion and interpolation from a JSON file. From a source checkout, install
+with `pip install -e .`, then try the small, offline example:
+
+```bash
+python examples/basic/config/create_demo_cube.py
+ticoi show-config examples/basic/config/config.json > resolved-config.json
+ticoi run resolved-config.json
+```
+
+The [complete configuration](examples/basic/config/config.json) explicitly lists
+every supported option in all four sections. It processes a 2×2
+synthetic cube and writes `examples/results/config_demo/demo_velocity.nc`.
+Its interior velocities are `vx=[[120, 130], [140, 150]]`, `vy=-35` m/year;
+unsupported boundary intervals remain NaN, not extrapolated velocities.
+The generator requires no external data or autoRIFT installation.
+For your own data, edit this JSON's input/output paths, projection and processing
+settings; the synthetic-data generator is only needed for the offline demo.
+The example disables iteration, prior weighting and temporal decorrelation to
+keep the synthetic calculation simple; these are not universal recommendations
+for scientific data. `inversion.path_save: null` inherits the top-level `output`.
+
+Required keys are `input` (NetCDF/Zarr path, or a list of cubes) and `output`
+(local directory). Optional `filename` is the output stem. Four dictionaries
+use the existing Python API keyword names:
+
+| Section | API |
+| --- | --- |
+| `load` | `CubeDataClass.load` |
+| `preprocess` | `CubeDataClass.filter_cube_before_inversion` |
+| `inversion` | `core.process` inversion/interpolation options |
+| `processing` | `core.process_blocks_refine` CPU, block and prefetch options |
+
+`show-config` validates keys and prints resolved paths and explicit defaults
+without opening the cube. Its JSON can be saved anywhere and reloaded to
+reconstruct the same settings. Relative paths are anchored to the configuration
+file, not the working directory; remote input URLs remain unchanged.
+Shared `proj`, `regu`, `solver`, `unit`, `conf`, and `delete_outliers` values are
+propagated to the relevant APIs; contradictory settings are rejected.
+`output` also owns `inversion.path_save` in the resolved configuration.
+
+JSON `false` and `null` retain their API meanings. `linear_operator` defaults
+to `false`; use `"fast"` to opt into the accelerated interval operator, or
+`true` for the legacy operator. `redundancy: null` selects non-overlapping
+output intervals. Outlier filters use the upstream dictionary form, for
+example `"delete_outliers": {"median_angle": 45}`. The command does not
+substitute solvers, regularization names, or interpolation methods.
+Only interpolated NetCDF output is supported by this CLI; use the Python API
+for raw/inversion-only results. Existing output files are rejected rather
+than overwritten or silently renamed; select a different filename/directory
+for another run.
+
+For autoRIFT products, keep the GeoTIFF-to-cube conversion in autoRIFT and pass
+the resulting compatible NetCDF as `input`; the TICOI CLI does not depend on
+the autoRIFT workflow package.
+
 ### Advanced examples
 
 #### TICOI processing
